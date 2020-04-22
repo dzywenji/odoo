@@ -19,3 +19,7 @@ git pull origin master
 然后再进行：
 
 git push origin master
+
+
+# 查看分支名
+git rev-parse --abbrev-ref HEAD
