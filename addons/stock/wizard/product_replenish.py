@@ -2,7 +2,8 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import datetime
-from odoo import api, fields, models, _
+
+from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 from odoo.tools.misc import clean_context
 
@@ -76,7 +77,7 @@ class ProductReplenish(models.TransientModel):
 
     def _prepare_run_values(self):
         replenishment = self.env['procurement.group'].create({
-            'partner_id': self.product_id.with_context(force_company=self.company_id.id).responsible_id.partner_id.id,
+            'partner_id': self.product_id.with_company(self.company_id).responsible_id.partner_id.id,
         })
 
         values = {

@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
-from odoo import api, fields, models, _
-from odoo.exceptions import ValidationError
+from odoo import api, fields, models
 
 
 class ProductTemplate(models.Model):
@@ -15,6 +14,7 @@ class ProductTemplate(models.Model):
     ], string="Service Invoicing Policy", compute='_compute_service_policy', inverse='_inverse_service_policy')
     service_type = fields.Selection(selection_add=[
         ('timesheet', 'Timesheets on project (one fare per SO/Project)'),
+<<<<<<< HEAD
     ])
     service_tracking = fields.Selection([
         ('no', 'Don\'t create task'),
@@ -32,6 +32,17 @@ class ProductTemplate(models.Model):
     project_template_id = fields.Many2one(
         'project.project', 'Project Template', company_dependent=True, domain=[('billable_type', '=', 'no')], copy=True,
         help='Select a non billable project to be the skeleton of the new created project when selling the current product. Its stages and tasks will be duplicated.')
+=======
+    ], ondelete={'timesheet': 'set default'})
+    # override domain
+    project_id = fields.Many2one(domain="[('billable_type', '=', 'no'), ('allow_timesheets', 'in', [service_policy == 'delivered_timesheet' or '', True])]")
+    project_template_id = fields.Many2one(domain="[('billable_type', '=', 'no'), ('allow_timesheets', 'in', [service_policy == 'delivered_timesheet' or '', True])]")
+
+    def _default_visible_expense_policy(self):
+        visibility = self.user_has_groups('project.group_project_user')
+        return visibility or super(ProductTemplate, self)._default_visible_expense_policy()
+
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     def _default_visible_expense_policy(self):
         visibility = self.user_has_groups('project.group_project_user')
@@ -69,30 +80,6 @@ class ProductTemplate(models.Model):
                 product.invoice_policy = 'delivery'
                 product.service_type = 'manual' if policy == 'delivered_manual' else 'timesheet'
 
-    @api.constrains('project_id', 'project_template_id')
-    def _check_project_and_template(self):
-        """ NOTE 'service_tracking' should be in decorator parameters but since ORM check constraints twice (one after setting
-            stored fields, one after setting non stored field), the error is raised when company-dependent fields are not set.
-            So, this constraints does cover all cases and inconsistent can still be recorded until the ORM change its behavior.
-        """
-        for product in self:
-            if product.service_tracking == 'no' and (product.project_id or product.project_template_id):
-                raise ValidationError(_('The product %s should not have a project nor a project template since it will not generate project.') % (product.name,))
-            elif product.service_tracking == 'task_global_project' and product.project_template_id:
-                raise ValidationError(_('The product %s should not have a project template since it will generate a task in a global project.') % (product.name,))
-            elif product.service_tracking in ['task_in_project', 'project_only'] and product.project_id:
-                raise ValidationError(_('The product %s should not have a global project since it will generate a project.') % (product.name,))
-
-    @api.onchange('service_tracking')
-    def _onchange_service_tracking(self):
-        if self.service_tracking == 'no':
-            self.project_id = False
-            self.project_template_id = False
-        elif self.service_tracking == 'task_global_project':
-            self.project_template_id = False
-        elif self.service_tracking in ['task_in_project', 'project_only']:
-            self.project_id = False
-
     @api.onchange('type')
     def _onchange_type(self):
         res = super(ProductTemplate, self)._onchange_type()
@@ -109,12 +96,7 @@ class ProductTemplate(models.Model):
 class ProductProduct(models.Model):
     _inherit = 'product.product'
 
-    @api.onchange('service_tracking')
-    def _onchange_service_tracking(self):
-        if self.service_tracking == 'no':
-            self.project_id = False
-            self.project_template_id = False
-        elif self.service_tracking == 'task_global_project':
-            self.project_template_id = False
-        elif self.service_tracking in ['task_in_project', 'project_only']:
-            self.project_id = False
+    def _is_delivered_timesheet(self):
+        """ Check if the product is a delivered timesheet """
+        self.ensure_one()
+        return self.type == 'service' and self.service_policy == 'delivered_timesheet'

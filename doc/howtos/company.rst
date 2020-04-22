@@ -50,22 +50,38 @@ For the field of a same record to support several values, it must be defined wit
        company_info = fields.Text(company_dependent=True)
        display_info = fields.Text(string='Infos', compute='_compute_display_info')
 
+<<<<<<< HEAD
        @api.depends_context('force_company')
+=======
+       @api.depends_context('company')
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
        def _compute_display_info(self):
            for record in self:
                record.display_info = record.info + record.company_info
 
+<<<<<<< HEAD
 .. note:: The `_compute_display_info` method is decorated with `depends_context('force_company')`
           (see :attr:`~odoo.api.depends_context`) to ensure that the computed field is recomputed
           depending on the forced/current company (`force_company` context key set, or
           `self.env.company`).
+=======
+.. note:: The `_compute_display_info` method is decorated with `depends_context('company')`
+          (see :attr:`~odoo.api.depends_context`) to ensure that the computed field is recomputed
+          depending on the current company (`self.env.company`).
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 When a company-dependent field is read, the current company is used to retrieve its value. In other
 words, if a user is logged in companies A and B with A as main company and creates a record for
 company B, the values of company-dependent fields will be that of company A.
 
+<<<<<<< HEAD
 To read the values of company-dependent fields set from another company than the current one, the
 context key `force_company` must be set to the ID of the desired company.
+=======
+To read the values of company-dependent fields set from another company than the current one, we need
+to ensure the company we are using is the correct one.  This can be done with :meth:`~odoo.models.Model.with_company`,
+which updates the current company.
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 .. code-block:: python
 
@@ -73,8 +89,33 @@ context key `force_company` must be set to the ID of the desired company.
    val = record.company_dependent_field
 
    # Accessed as desired company (company_B)
+<<<<<<< HEAD
    val = record.with_context(force_company=company_B.id).company_dependent_field
 
+=======
+   val = record.with_company(company_B).company_dependent_field
+   # record.with_company(company_B).env.company == company_B
+
+.. warning::
+
+    Whenever you are computing/creating/... things that may behave differently
+    in different companies, you should make sure whatever you are doing is done
+    in the right company. It doesn't cost much to always use `with_company` to
+    avoid problems later on.
+
+    .. code-block:: python
+
+       @api.onchange('field_name')
+       def _onchange_field_name(self):
+        self = self.with_company(self.company_id)
+        ...
+
+       @api.depends('field_2')
+       def _compute_field_3(self):
+        for record in self:
+          record = record.with_company(record.company_id)
+          ...
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 .. _howto/company/check_company:
 

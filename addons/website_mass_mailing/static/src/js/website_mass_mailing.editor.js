@@ -65,18 +65,28 @@ options.registry.newsletter_popup = options.registry.mailing_list_subscribe.exte
      * @override
      */
     start: function () {
-        var self = this;
-        this.$target.on('click.newsletter_popup_option', '.o_edit_popup', function (ev) {
-            // So that the snippet is not enabled again by the editor
-            ev.stopPropagation();
-            self.$target.data('quick-open', true);
-            self._refreshPublicWidgets();
+        this.$target.on('hidden.bs.modal.newsletter_popup_option', () => {
+            this.trigger_up('snippet_option_visibility_update', {show: false});
         });
-        this.$target.on('shown.bs.modal.newsletter_popup_option hide.bs.modal.newsletter_popup_option', function () {
-            self.$target.closest('.o_editable').trigger('content_changed');
-            self.trigger_up('deactivate_snippet');
-        });
-        return this._super.apply(this, arguments);
+        return this._super(...arguments);
+    },
+    /**
+     * @override
+     */
+    onTargetShow: function () {
+        // Open the modal
+        this.$target.data('quick-open', true);
+        return this._refreshPublicWidgets();
+    },
+    /**
+     * @override
+     */
+    onTargetHide: function () {
+        // Close the modal
+        const $modal = this.$('.modal');
+        if ($modal.length && $modal.is('.modal_shown')) {
+            $modal.modal('hide');
+        }
     },
     /**
      * @override
@@ -114,7 +124,7 @@ options.registry.newsletter_popup = options.registry.mailing_list_subscribe.exte
         return this._super.apply(this, arguments).then(function () {
             self.$target.data('quick-open', true);
             self.$target.removeData('content');
-            self._refreshPublicWidgets();
+            return self._refreshPublicWidgets();
         });
     },
 });

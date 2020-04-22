@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
+<<<<<<< HEAD
 from datetime import date, datetime
+=======
+from datetime import datetime, date
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 from dateutil.relativedelta import relativedelta
 from pytz import timezone, UTC
 
@@ -10,10 +14,18 @@ from odoo.exceptions import ValidationError
 from odoo.tools import mute_logger
 from odoo.tests.common import Form
 from odoo.tests import tagged
+<<<<<<< HEAD
 from odoo.addons.hr_holidays.tests.common import TestHrHolidaysBase
 
 @tagged('leave_requests')
 class TestLeaveRequests(TestHrHolidaysBase):
+=======
+
+from odoo.addons.hr_holidays.tests.common import TestHrHolidaysCommon
+
+@tagged('leave_requests')
+class TestLeaveRequests(TestHrHolidaysCommon):
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     def _check_holidays_status(self, holiday_status, ml, lt, rl, vrl):
             self.assertEqual(holiday_status.max_leaves, ml,
@@ -34,19 +46,19 @@ class TestLeaveRequests(TestHrHolidaysBase):
         self.holidays_type_1 = LeaveType.create({
             'name': 'NotLimitedHR',
             'allocation_type': 'no',
-            'validation_type': 'hr',
+            'leave_validation_type': 'hr',
             'validity_start': False,
         })
         self.holidays_type_2 = LeaveType.create({
             'name': 'Limited',
-            'allocation_type': 'fixed',
-            'validation_type': 'hr',
+            'allocation_type': 'fixed_allocation',
+            'leave_validation_type': 'hr',
             'validity_start': False,
         })
         self.holidays_type_3 = LeaveType.create({
             'name': 'TimeNotLimited',
             'allocation_type': 'no',
-            'validation_type': 'manager',
+            'leave_validation_type': 'manager',
             'validity_start': fields.Datetime.from_string('2017-01-01 00:00:00'),
             'validity_stop': fields.Datetime.from_string('2017-06-01 00:00:00'),
         })
@@ -177,8 +189,8 @@ class TestLeaveRequests(TestHrHolidaysBase):
         """ Create an allocation request """
         # employee should be set to current user
         allocation_form = Form(self.env['hr.leave.allocation'].with_user(self.user_employee))
-        allocation_form.holiday_status_id = self.holidays_type_1
         allocation_form.name = 'New Allocation Request'
+        allocation_form.holiday_status_id = self.holidays_type_2
         allocation = allocation_form.save()
 
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
@@ -196,6 +208,64 @@ class TestLeaveRequests(TestHrHolidaysBase):
         self.assertTrue(self.employee_emp.is_absent, "He should be considered absent")
         self.assertFalse(self.employee_hrmanager.is_absent, "He should not be considered absent")
 
+<<<<<<< HEAD
+=======
+    @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
+    def test_timezone_employee_leave_request(self):
+        """ Create a leave request for an employee in another timezone """
+        self.employee_emp.tz = 'NZ'  # GMT+12
+        leave = self.env['hr.leave'].new({
+            'employee_id': self.employee_emp.id,
+            'holiday_status_id': self.holidays_type_1.id,
+            'request_unit_hours': True,
+            'request_date_from': date(2019, 5, 6),
+            'request_date_to': date(2019, 5, 6),
+            'request_hour_from': '8',  # 8:00 AM in the employee's timezone
+            'request_hour_to': '17',  # 5:00 PM in the employee's timezone
+        })
+        self.assertEqual(leave.date_from, datetime(2019, 5, 5, 20, 0, 0), "It should have been localized before saving in UTC")
+        self.assertEqual(leave.date_to, datetime(2019, 5, 6, 5, 0, 0), "It should have been localized before saving in UTC")
+
+    @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
+    def test_timezone_company_leave_request(self):
+        """ Create a leave request for a company in another timezone """
+        company = self.env['res.company'].create({'name': "Hergé"})
+        company.resource_calendar_id.tz = 'NZ'  # GMT+12
+        leave = self.env['hr.leave'].new({
+            'employee_id': self.employee_emp.id,
+            'holiday_status_id': self.holidays_type_1.id,
+            'request_unit_hours': True,
+            'holiday_type': 'company',
+            'mode_company_id': company.id,
+            'request_date_from': date(2019, 5, 6),
+            'request_date_to': date(2019, 5, 6),
+            'request_hour_from': '8',  # 8:00 AM in the company's timezone
+            'request_hour_to': '17',  # 5:00 PM in the company's timezone
+        })
+        self.assertEqual(leave.date_from, datetime(2019, 5, 5, 20, 0, 0), "It should have been localized before saving in UTC")
+        self.assertEqual(leave.date_to, datetime(2019, 5, 6, 5, 0, 0), "It should have been localized before saving in UTC")
+
+    @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
+    def test_timezone_department_leave_request(self):
+        """ Create a leave request for a department in another timezone """
+        company = self.env['res.company'].create({'name': "Hergé"})
+        company.resource_calendar_id.tz = 'NZ'  # GMT+12
+        department = self.env['hr.department'].create({'name': "Museum", 'company_id': company.id})
+        leave = self.env['hr.leave'].new({
+            'employee_id': self.employee_emp.id,
+            'holiday_status_id': self.holidays_type_1.id,
+            'request_unit_hours': True,
+            'holiday_type': 'department',
+            'department_id': department.id,
+            'request_date_from': date(2019, 5, 6),
+            'request_date_to': date(2019, 5, 6),
+            'request_hour_from': '8',  # 8:00 AM in the department's timezone
+            'request_hour_to': '17',  # 5:00 PM in the department's timezone
+        })
+        self.assertEqual(leave.date_from, datetime(2019, 5, 5, 20, 0, 0), "It should have been localized before saving in UTC")
+        self.assertEqual(leave.date_to, datetime(2019, 5, 6, 5, 0, 0), "It should have been localized before saving in UTC")
+
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     def test_number_of_hours_display(self):
         # Test that the field number_of_hours_dispay doesn't change
         # after time off validation, as it takes the attendances
@@ -221,7 +291,11 @@ class TestLeaveRequests(TestHrHolidaysBase):
         leave_type = self.env['hr.leave.type'].create({
             'name': 'Paid Time Off',
             'request_unit': 'hour',
+<<<<<<< HEAD
             'validation_type': 'both',
+=======
+            'leave_validation_type': 'both',
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         })
         allocation = self.env['hr.leave.allocation'].create({
             'name': '20 days allocation',
@@ -294,7 +368,11 @@ class TestLeaveRequests(TestHrHolidaysBase):
         leave_type = self.env['hr.leave.type'].create({
             'name': 'Sick',
             'request_unit': 'hour',
+<<<<<<< HEAD
             'validation_type': 'both',
+=======
+            'leave_validation_type': 'both',
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'allocation_type': 'no',
         })
         leave1 = self.env['hr.leave'].create({
@@ -335,7 +413,10 @@ class TestLeaveRequests(TestHrHolidaysBase):
             'holiday_status_id': self.holidays_type_1.id,
         })
         leave = self.env['hr.leave'].with_user(self.user_employee_id).new(values)
+<<<<<<< HEAD
         leave._onchange_request_parameters()
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         self.assertEqual(leave.number_of_days, number_of_days)
 
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')

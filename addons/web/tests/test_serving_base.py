@@ -148,7 +148,7 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
                     <!-- Modified by anonymous_template_2 from module_2 -->
                     <div>And I learned how to get along</div>
                 </t>
-                <form t-name="template_2_1" random-attr="gloria" t-inherit="module_1.template_1_1">
+                <form t-name="template_2_1" random-attr="gloria">
                     <div>At first I was afraid</div>
                     <div>I was petrified</div>
                     <div>But then I spent so many nights thinking how you did me wrong</div>
@@ -157,6 +157,86 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
                 <div t-name="template_2_2">
                     <div>And I learned how to get along</div>
                 </div>
+            </templates>
+        """
+
+        self.assertXMLEqual(contents, expected)
+
+    def test_static_inheritance_02(self):
+        self.template_files = {
+            'module_1_file_1': b'''
+                <templates id="template" xml:space="preserve">
+                    <form t-name="template_1_1" random-attr="gloria">
+                        <div>At first I was afraid</div>
+                        <div>Kept thinking I could never live without you by my side</div>
+                    </form>
+                    <form t-name="template_1_2" t-inherit="template_1_1" added="true">
+                        <xpath expr="//div[1]" position="after">
+                            <div>I was petrified</div>
+                        </xpath>
+                    </form>
+                </templates>
+            '''
+        }
+        self.modules = [
+            ('module_1_file_1', None, 'module_1'),
+        ]
+        contents = HomeStaticTemplateHelpers.get_qweb_templates(addons=self._get_module_names(), debug=True)
+        expected = b"""
+            <templates>
+                <form t-name="template_1_1" random-attr="gloria">
+                    <div>At first I was afraid</div>
+                    <div>Kept thinking I could never live without you by my side</div>
+                </form>
+                <form t-name="template_1_2" random-attr="gloria" added="true">
+                    <div>At first I was afraid</div>
+                    <div>I was petrified</div>
+                    <div>Kept thinking I could never live without you by my side</div>
+                </form>
+            </templates>
+        """
+
+        self.assertXMLEqual(contents, expected)
+
+    def test_static_inheritance_03(self):
+        self.maxDiff = None
+        self.template_files = {
+            'module_1_file_1': b'''
+                <templates id="template" xml:space="preserve">
+                    <form t-name="template_1_1">
+                        <div>At first I was afraid</div>
+                        <div>Kept thinking I could never live without you by my side</div>
+                    </form>
+                    <form t-name="template_1_2" t-inherit="template_1_1" added="true">
+                        <xpath expr="//div[1]" position="after">
+                            <div>I was petrified</div>
+                        </xpath>
+                    </form>
+                    <form t-name="template_1_3" t-inherit="template_1_2" added="false" other="here">
+                        <xpath expr="//div[2]" position="replace"/>
+                    </form>
+                </templates>
+            '''
+        }
+        self.modules = [
+            ('module_1_file_1', None, 'module_1'),
+        ]
+        contents = HomeStaticTemplateHelpers.get_qweb_templates(addons=self._get_module_names(), debug=True)
+        expected = b"""
+            <templates>
+                <form t-name="template_1_1">
+                    <div>At first I was afraid</div>
+                    <div>Kept thinking I could never live without you by my side</div>
+                </form>
+                <form t-name="template_1_2" added="true">
+                    <div>At first I was afraid</div>
+                    <div>I was petrified</div>
+                    <div>Kept thinking I could never live without you by my side</div>
+                </form>
+                <form t-name="template_1_3" added="false" other="here">
+                    <div>At first I was afraid</div>
+                    <div>Kept thinking I could never live without you by my side</div>
+                </form>
             </templates>
         """
 
@@ -195,7 +275,7 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
                     <div>At first I was afraid</div>
                     <div>Kept thinking I could never live without you by my side</div>
                 </form>
-                <form t-name="template_1_2" t-inherit="template_1_1">
+                <form t-name="template_1_2">
                     <div>At first I was afraid</div>
                     <div>I was petrified</div>
                     <div>Kept thinking I could never live without you by my side</div>
@@ -232,7 +312,7 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
                     <div>At first I was afraid</div>
                     <div>Kept thinking I could never live without you by my side</div>
                 </form>
-                <form t-name="template_1_2" t-inherit="template_1_1">
+                <form t-name="template_1_2">
                     <div>At first I was afraid</div>
                     <div>I was petrified</div>
                     <div>Kept thinking I could never live without you by my side</div>
@@ -275,7 +355,7 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
                     <div>I was petrified</div>
                     <div>Kept thinking I could never live without you by my side</div>
                 </form>
-                <form t-name="template_1_3" t-inherit="template_1_1">
+                <form t-name="template_1_3">
                     <div>At first I was afraid</div>
                     <div>I was petrified</div>
                     <div>Kept thinking I could never live without you by my side</div>
@@ -395,9 +475,15 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
         contents = HomeStaticTemplateHelpers.get_qweb_templates(addons=self._get_module_names(), debug=True)
         expected = b"""
             <templates>
+<<<<<<< HEAD
                 <form overriden-attr="overriden">
                     <!-- Modified by template_1_2 from module_1 -->And I grew strong
                 </form>
+=======
+                <div overriden-attr="overriden" t-name="template_1_1">
+                    <!-- Modified by template_1_2 from module_1 -->And I grew strong
+                </div>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             </templates>
         """
 
@@ -429,11 +515,20 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
         contents = HomeStaticTemplateHelpers.get_qweb_templates(addons=self._get_module_names(), debug=True)
         expected = b"""
             <templates>
+<<<<<<< HEAD
                 <form>
                     <!-- Modified by template_1_2 from module_1 -->And I grew strong
                     <p>And I learned how to get along</p>
                     And so you're back
                 </form>
+=======
+                <div t-name="template_1_1">
+                    <!-- Modified by template_1_2 from module_1 -->
+                    And I grew strong
+                    <p>And I learned how to get along</p>
+                    And so you're back
+                </div>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             </templates>
         """
 
@@ -469,11 +564,19 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
         contents = HomeStaticTemplateHelpers.get_qweb_templates(addons=self._get_module_names(), debug=True)
         expected = b"""
             <templates>
+<<<<<<< HEAD
                 <form>
                     <!-- Modified by template_1_2 from module_1 -->
                     And I grew strong
                     <p>And I learned how to get along</p>
                 </form>
+=======
+                <div t-name="template_1_1">
+                    <!-- Modified by template_1_2 from module_1 -->
+                    And I grew strong
+                    <p>And I learned how to get along</p>
+                </div>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 And so you're back
             </templates>
         """
@@ -482,7 +585,11 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
 
     def test_replace_root_node_tag(self):
         """
+<<<<<<< HEAD
         Root node is not targeted by //NODE_TAG in xpath
+=======
+        Root node IS targeted by //NODE_TAG in xpath
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         """
         self.modules = [
             ('module_1_file_1', None, 'module_1'),
@@ -508,11 +615,18 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
         contents = HomeStaticTemplateHelpers.get_qweb_templates(addons=self._get_module_names(), debug=True)
         expected = b"""
             <templates>
+<<<<<<< HEAD
                 <form t-name="template_1_1" random-attr="gloria">
                     <div>At first I was afraid</div>
                     <!-- Modified by template_1_2 from module_1 -->
                     <div>Form replacer</div>
                 </form>
+=======
+                <div t-name="template_1_1">
+                    <!-- Modified by template_1_2 from module_1 -->
+                    Form replacer
+                </div>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             </templates>
         """
 
@@ -520,7 +634,11 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
 
     def test_replace_root_node_tag_in_primary(self):
         """
+<<<<<<< HEAD
         Root node is not targeted by //NODE_TAG in xpath
+=======
+        Root node IS targeted by //NODE_TAG in xpath
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         """
         self.maxDiff = None
         self.modules = [
@@ -533,11 +651,19 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
                         <div>At first I was afraid</div>
                         <form>Inner Form</form>
                     </form>
+<<<<<<< HEAD
                     <t t-name="template_1_2" t-inherit="template_1_1" t-inherit-mode="primary">
                         <xpath expr="//form" position="replace">
                             <div>Form replacer</div>
                         </xpath>
                     </t>
+=======
+                    <form t-name="template_1_2" t-inherit="template_1_1" t-inherit-mode="primary">
+                        <xpath expr="//form" position="replace">
+                            <div>Form replacer</div>
+                        </xpath>
+                    </form>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 </templates>
                 """,
         }
@@ -549,10 +675,16 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
                     <div>At first I was afraid</div>
                     <form>Inner Form</form>
                 </form>
+<<<<<<< HEAD
                 <form t-name="template_1_2" random-attr="gloria" t-inherit="template_1_1">
                     <div>At first I was afraid</div>
                     <div>Form replacer</div>
                 </form>
+=======
+                <div t-name="template_1_2">
+                    Form replacer
+                </div>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             </templates>
         """
 
@@ -590,10 +722,17 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
                 <form t-name="template_1_1" random-attr="gloria">
                     <div>At first I was afraid</div>
                  </form>
+<<<<<<< HEAD
                  <form overriden-attr="overriden" t-name="template_1_2" t-inherit="template_1_1">
                     And I grew strong
                     <p>And I learned how to get along</p>
                  </form>
+=======
+                 <div overriden-attr="overriden" t-name="template_1_2">
+                    And I grew strong
+                    <p>And I learned how to get along</p>
+                 </div>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             </templates>
         """
 
@@ -627,11 +766,210 @@ class TestStaticInheritance(TestStaticInheritanceCommon):
         contents = HomeStaticTemplateHelpers.get_qweb_templates(addons=self._get_module_names(), debug=False)
         expected = b"""
             <templates>
+<<<<<<< HEAD
                 <form>
                     And I grew strong
                     <p>And I learned how to get along</p>
                     And so you're back
                 </form>
+=======
+                <div t-name="template_1_1">
+                    And I grew strong
+                    <p>And I learned how to get along</p>
+                    And so you're back
+                </div>
+            </templates>
+        """
+
+        self.assertXMLEqual(contents, expected)
+
+    def test_inherit_from_dotted_tname_1(self):
+        self.modules = [
+            ('module_1_file_1', None, 'module_1'),
+        ]
+        self.template_files = {
+            'module_1_file_1': b"""
+                <templates id="template" xml:space="preserve">
+                    <form t-name="module_1.template_1_1.dot" random-attr="gloria">
+                        <div>At first I was afraid</div>
+                    </form>
+                    <t t-name="template_1_2" t-inherit="template_1_1.dot" t-inherit-mode="primary">
+                        <xpath expr="." position="replace">
+                            <div overriden-attr="overriden">
+                                And I grew strong
+                                <p>And I learned how to get along</p>
+                            </div>
+                        </xpath>
+                    </t>
+                </templates>
+                """,
+        }
+
+        contents = HomeStaticTemplateHelpers.get_qweb_templates(addons=self._get_module_names(), debug=True)
+        expected = b"""
+            <templates>
+                <form t-name="module_1.template_1_1.dot" random-attr="gloria">
+                    <div>At first I was afraid</div>
+                 </form>
+                 <div overriden-attr="overriden" t-name="template_1_2">
+                    And I grew strong
+                    <p>And I learned how to get along</p>
+                 </div>
+            </templates>
+        """
+
+        self.assertXMLEqual(contents, expected)
+
+    def test_inherit_from_dotted_tname_2(self):
+        self.modules = [
+            ('module_1_file_1', None, 'module_1'),
+        ]
+        self.template_files = {
+            'module_1_file_1': b"""
+                <templates id="template" xml:space="preserve">
+                    <form t-name="template_1_1.dot" random-attr="gloria">
+                        <div>At first I was afraid</div>
+                    </form>
+                    <t t-name="template_1_2" t-inherit="template_1_1.dot" t-inherit-mode="primary">
+                        <xpath expr="." position="replace">
+                            <div overriden-attr="overriden">
+                                And I grew strong
+                                <p>And I learned how to get along</p>
+                            </div>
+                        </xpath>
+                    </t>
+                </templates>
+                """,
+        }
+
+        contents = HomeStaticTemplateHelpers.get_qweb_templates(addons=self._get_module_names(), debug=True)
+        expected = b"""
+            <templates>
+                <form t-name="template_1_1.dot" random-attr="gloria">
+                    <div>At first I was afraid</div>
+                 </form>
+                 <div overriden-attr="overriden" t-name="template_1_2">
+                    And I grew strong
+                    <p>And I learned how to get along</p>
+                 </div>
+            </templates>
+        """
+
+        self.assertXMLEqual(contents, expected)
+
+    def test_inherit_from_dotted_tname_2bis(self):
+        self.modules = [
+            ('module_1_file_1', None, 'module_1'),
+        ]
+        self.template_files = {
+            'module_1_file_1': b"""
+                <templates id="template" xml:space="preserve">
+                    <form t-name="template_1_1.dot" random-attr="gloria">
+                        <div>At first I was afraid</div>
+                    </form>
+                    <t t-name="template_1_2" t-inherit="module_1.template_1_1.dot" t-inherit-mode="primary">
+                        <xpath expr="." position="replace">
+                            <div overriden-attr="overriden">
+                                And I grew strong
+                                <p>And I learned how to get along</p>
+                            </div>
+                        </xpath>
+                    </t>
+                </templates>
+                """,
+        }
+
+        contents = HomeStaticTemplateHelpers.get_qweb_templates(addons=self._get_module_names(), debug=True)
+        expected = b"""
+            <templates>
+                <form t-name="template_1_1.dot" random-attr="gloria">
+                    <div>At first I was afraid</div>
+                 </form>
+                 <div overriden-attr="overriden" t-name="template_1_2">
+                    And I grew strong
+                    <p>And I learned how to get along</p>
+                 </div>
+            </templates>
+        """
+
+        self.assertXMLEqual(contents, expected)
+
+    def test_inherit_from_dotted_tname_2ter(self):
+        self.modules = [
+            ('module_1_file_1', None, 'module_1'),
+        ]
+        self.template_files = {
+            'module_1_file_1': b"""
+                <templates id="template" xml:space="preserve">
+                    <form t-name="module_1" random-attr="gloria">
+                        <div>At first I was afraid</div>
+                    </form>
+                    <t t-name="template_1_2" t-inherit="module_1" t-inherit-mode="primary">
+                        <xpath expr="." position="replace">
+                            <div overriden-attr="overriden">
+                                And I grew strong
+                                <p>And I learned how to get along</p>
+                            </div>
+                        </xpath>
+                    </t>
+                </templates>
+                """,
+        }
+
+        contents = HomeStaticTemplateHelpers.get_qweb_templates(addons=self._get_module_names(), debug=True)
+        expected = b"""
+            <templates>
+                <form t-name="module_1" random-attr="gloria">
+                    <div>At first I was afraid</div>
+                 </form>
+                 <div overriden-attr="overriden" t-name="template_1_2">
+                    And I grew strong
+                    <p>And I learned how to get along</p>
+                 </div>
+            </templates>
+        """
+
+        self.assertXMLEqual(contents, expected)
+
+    def test_inherit_from_dotted_tname_3(self):
+        self.modules = [
+            ('module_1_file_1', None, 'module_1'),
+            ('module_2_file_1', None, 'module_2'),
+        ]
+        self.template_files = {
+            'module_1_file_1': b"""
+                <templates id="template" xml:space="preserve">
+                    <form t-name="module_1.template_1_1.dot" random-attr="gloria">
+                        <div>At first I was afraid</div>
+                    </form>
+                </templates>
+                """,
+
+            'module_2_file_1': b"""
+                <templates id="template" xml:space="preserve">
+                    <t t-name="template_2_1" t-inherit="module_1.template_1_1.dot" t-inherit-mode="primary">
+                        <xpath expr="." position="replace">
+                            <div overriden-attr="overriden">
+                                And I grew strong
+                                <p>And I learned how to get along</p>
+                            </div>
+                        </xpath>
+                    </t>
+                </templates>
+            """
+        }
+
+        contents = HomeStaticTemplateHelpers.get_qweb_templates(addons=self._get_module_names(), debug=True)
+        expected = b"""
+            <templates>
+                <form t-name="module_1.template_1_1.dot" random-attr="gloria">
+                    <div>At first I was afraid</div>
+                 </form>
+                 <div overriden-attr="overriden" t-name="template_2_1">
+                    And I grew strong
+                    <p>And I learned how to get along</p>
+                 </div>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             </templates>
         """
 
@@ -671,7 +1009,7 @@ class TestStaticInheritancePerformance(TestStaticInheritanceCommon):
                             <div t-name="template_%(t_number)s_mod_%(m_number)s"
                                 t-inherit="template_%(t_inherit)s_mod_%(m_number)s"
                                 t-inherit-mode="primary">
-                                <xpath expr="//div[1]" position="before">
+                                <xpath expr="/div/div[1]" position="before">
                                     <div>Sick XPath</div>
                                 </xpath>
                             </div>
@@ -682,7 +1020,7 @@ class TestStaticInheritancePerformance(TestStaticInheritanceCommon):
                             <div t-name="template_%(t_number)s_mod_%(m_number)s"
                                 t-inherit="mod_%(m_module_inherit)s.template_%(t_module_inherit)s_mod_%(m_module_inherit)s"
                                 t-inherit-mode="primary">
-                                <xpath expr="//div[1]" position="inside">
+                                <xpath expr="/div/div[1]" position="inside">
                                     <div>Mental XPath</div>
                                 </xpath>
                             </div>
@@ -712,7 +1050,11 @@ class TestStaticInheritancePerformance(TestStaticInheritanceCommon):
         contents = HomeStaticTemplateHelpers.get_qweb_templates(addons=self._get_module_names(), debug=True)
         after = datetime.now()
         delta2500 = after - before
+<<<<<<< HEAD
         _logger.log(25, 'Static Templates Inheritance: 2500 templates treated in %s seconds' % delta2500.total_seconds())
+=======
+        _logger.runbot('Static Templates Inheritance: 2500 templates treated in %s seconds' % delta2500.total_seconds())
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         whole_tree = etree.fromstring(contents)
         self.assertEqual(len(whole_tree), nMod * nFilePerMod * nTemplatePerFile)
@@ -727,6 +1069,11 @@ class TestStaticInheritancePerformance(TestStaticInheritanceCommon):
         delta25000 = after - before
 
         time_ratio = delta25000.total_seconds() / delta2500.total_seconds()
+<<<<<<< HEAD
         _logger.log(25, 'Static Templates Inheritance: 25000 templates treated in %s seconds' % delta25000.total_seconds())
         _logger.log(25, 'Static Templates Inheritance: Computed linearity ratio: %s' % time_ratio)
+=======
+        _logger.runbot('Static Templates Inheritance: 25000 templates treated in %s seconds' % delta25000.total_seconds())
+        _logger.runbot('Static Templates Inheritance: Computed linearity ratio: %s' % time_ratio)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         self.assertLessEqual(time_ratio, 10)

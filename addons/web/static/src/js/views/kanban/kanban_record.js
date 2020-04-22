@@ -10,6 +10,7 @@ var core = require('web.core');
 var Domain = require('web.Domain');
 var Dialog = require('web.Dialog');
 var field_utils = require('web.field_utils');
+const FieldWrapper = require('web.FieldWrapper');
 var utils = require('web.utils');
 var Widget = require('web.Widget');
 var widgetRegistry = require('web.widget_registry');
@@ -184,14 +185,13 @@ var KanbanRecord = Widget.extend({
      * @returns {string} the url of the image
      */
     _getImageURL: function (model, field, id, placeholder) {
-        id = (_.isArray(id) ? id[0] : id) || false;
-        placeholder = placeholder || "/web/static/src/img/placeholder.png";
+        id = (_.isArray(id) ? id[0] : id) || null;
         var isCurrentRecord = this.modelName === model && this.recordData.id === id;
         var url;
         if (isCurrentRecord && this.record[field] && this.record[field].raw_value && !utils.is_bin_size(this.record[field].raw_value)) {
             // Use magic-word technique for detecting image type
             url = 'data:image/' + this.file_type_magic_word[this.record[field].raw_value[0]] + ';base64,' + this.record[field].raw_value;
-        } else if (!model || !field || !id || (isCurrentRecord && this.record[field] && !this.record[field].raw_value)) {
+        } else if (placeholder && (!model || !field || !id || (isCurrentRecord && this.record[field] && !this.record[field].raw_value))) {
             url = placeholder;
         } else {
             var session = this.getSession();
@@ -317,8 +317,22 @@ var KanbanRecord = Widget.extend({
             attrs[key] = value;
         });
         var options = _.extend({}, this.options, { attrs: attrs });
-        var widget = new Widget(this, field_name, this.state, options);
-        var def = widget.replace($field);
+        let widget;
+        let def;
+        if (utils.isComponent(Widget)) {
+            widget = new FieldWrapper(this, Widget, {
+                fieldName: field_name,
+                record: this.state,
+                options: options,
+            });
+            def = widget.mount(document.createDocumentFragment())
+                .then(() => {
+                    $field.replaceWith(widget.$el);
+                });
+        } else {
+            widget = new Widget(this, field_name, this.state, options);
+            def = widget.replace($field);
+        }
         this.defs.push(def);
         def.then(function () {
             self._setFieldDisplay(widget.$el, field_name);
@@ -381,8 +395,9 @@ var KanbanRecord = Widget.extend({
      *
      * @private
      * @param {string} fieldName field used to set cover image
+     * @param {boolean} autoOpen automatically open the file choser if there are no attachments
      */
-    _setCoverImage: function (fieldName) {
+    _setCoverImage: function (fieldName, autoOpen) {
         var self = this;
         this._rpc({
             model: 'ir.attachment',
@@ -395,7 +410,8 @@ var KanbanRecord = Widget.extend({
             fields: ['id', 'name'],
         }).then(function (attachmentIds) {
             self.imageUploadID = _.uniqueId('o_cover_image_upload');
-            self.image_only = true;  // prevent uploading of other file types
+            self.accepted_file_extensions = 'image/*';  // prevent uploading of other file types
+            self.attachment_count = attachmentIds.length;
             var coverId = self.record[fieldName] && self.record[fieldName].raw_value;
             var $content = $(QWeb.render('KanbanView.SetCoverModal', {
                 coverId: coverId,
@@ -443,6 +459,10 @@ var KanbanRecord = Widget.extend({
             });
             dialog.opened().then(function () {
                 var $selectBtn = dialog.$footer.find('.btn-primary');
+                if (autoOpen && !self.attachment_count) {
+                    $selectBtn.click();
+                }
+
                 $content.on('click', '.o_kanban_cover_image', function (ev) {
                     $imgs.not(ev.currentTarget).removeClass('o_selected');
                     $selectBtn.prop('disabled', !$(ev.currentTarget).toggleClass('o_selected').hasClass('o_selected'));
@@ -688,10 +708,11 @@ var KanbanRecord = Widget.extend({
                 break;
             case 'set_cover':
                 var fieldName = $action.data('field');
+                var autoOpen = $action.data('auto-open');
                 if (this.fields[fieldName].type === 'many2one' &&
                     this.fields[fieldName].relation === 'ir.attachment' &&
                     this.fieldsInfo[fieldName].widget === 'attachment_image') {
-                    this._setCoverImage(fieldName);
+                    this._setCoverImage(fieldName, autoOpen);
                 } else {
                     var warning = _.str.sprintf(_t('Could not set the cover image: incorrect field ("%s") is provided in the view.'), fieldName);
                     this.do_warn(warning);

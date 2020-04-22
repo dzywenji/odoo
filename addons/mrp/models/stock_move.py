@@ -12,10 +12,30 @@ class StockMoveLine(models.Model):
     workorder_id = fields.Many2one('mrp.workorder', 'Work Order', check_company=True)
     production_id = fields.Many2one('mrp.production', 'Production Order', check_company=True)
     lot_produced_ids = fields.Many2many('stock.production.lot', string='Finished Lot/Serial Number', check_company=True)
+<<<<<<< HEAD
     lot_produced_qty = fields.Float(
         'Quantity Finished Product', digits='Product Unit of Measure',
         help="Informative, not used in matching")
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     done_move = fields.Boolean('Move Done', related='move_id.is_done', readonly=False, store=True)  # TDE FIXME: naming
+
+    @api.model_create_multi
+    def create(self, values):
+        res = super(StockMoveLine, self).create(values)
+        for line in res:
+            # If the line is added in a done production, we need to map it
+            # manually to the produced move lines in order to see them in the
+            # traceability report
+            if line.move_id.raw_material_production_id and line.state == 'done':
+                mo = line.move_id.raw_material_production_id
+                if line.lot_produced_ids:
+                    produced_move_lines = mo.move_finished_ids.move_line_ids.filtered(lambda sml: sml.lot_id in line.lot_produced_ids)
+                    line.produce_line_ids = [(6, 0, produced_move_lines.ids)]
+                else:
+                    produced_move_lines = mo.move_finished_ids.move_line_ids
+                    line.produce_line_ids = [(6, 0, produced_move_lines.ids)]
+        return res
 
     def _get_similar_move_lines(self):
         lines = super(StockMoveLine, self)._get_similar_move_lines()
@@ -63,7 +83,9 @@ class StockMove(models.Model):
     consume_unbuild_id = fields.Many2one(
         'mrp.unbuild', 'Consumed Disassembly Order', check_company=True)
     operation_id = fields.Many2one(
-        'mrp.routing.workcenter', 'Operation To Consume', check_company=True)  # TDE FIXME: naming
+        'mrp.routing.workcenter', 'Operation To Consume', check_company=True,
+        domain="[('routing_id', '=', routing_id), '|', ('company_id', '=', company_id), ('company_id', '=', False)]")
+    routing_id = fields.Many2one(related='raw_material_production_id.routing_id')
     workorder_id = fields.Many2one(
         'mrp.workorder', 'Work Order To Consume', check_company=True)
     # Quantities to process, in normalized UoMs
@@ -71,7 +93,7 @@ class StockMove(models.Model):
     byproduct_id = fields.Many2one(
         'mrp.bom.byproduct', 'By-products', check_company=True,
         help="By-product line that generated the move in a manufacturing order")
-    unit_factor = fields.Float('Unit Factor', default=1)
+    unit_factor = fields.Float('Unit Factor', compute='_compute_unit_factor', store=True)
     is_done = fields.Boolean(
         'Done', compute='_compute_is_done',
         store=True,
@@ -119,13 +141,25 @@ class StockMove(models.Model):
         for move in self:
             move.is_done = (move.state in ('done', 'cancel'))
 
+    @api.depends('product_uom_qty')
+    def _compute_unit_factor(self):
+        for move in self:
+            mo = move.raw_material_production_id or move.production_id
+            if mo:
+                move.unit_factor = (move.product_uom_qty - move.quantity_done) / ((mo.product_qty - mo.qty_produced) or 1)
+            else:
+                move.unit_factor = 1.0
+
     @api.model
     def default_get(self, fields_list):
         defaults = super(StockMove, self).default_get(fields_list)
         if self.env.context.get('default_raw_material_production_id'):
             production_id = self.env['mrp.production'].browse(self.env.context['default_raw_material_production_id'])
-            if production_id.state == 'done':
-                defaults['state'] = 'done'
+            if production_id.state in ('confirmed', 'done'):
+                if production_id.state == 'confirmed':
+                    defaults['state'] = 'draft'
+                else:
+                    defaults['state'] = 'done'
                 defaults['product_uom_qty'] = 0.0
                 defaults['additional'] = True
         return defaults
@@ -151,6 +185,7 @@ class StockMove(models.Model):
         moves_to_return = self.env['stock.move']
         moves_to_unlink = self.env['stock.move']
         phantom_moves_vals_list = []
+<<<<<<< HEAD
         for move in self:
             if not move.picking_type_id:
                 moves_to_return |= move
@@ -197,13 +232,43 @@ class StockMove(models.Model):
             for move_line in move.move_line_ids:
                 if move_line.product_uom_qty > reserved_quantity:
                     move_line.product_uom_qty = reserved_quantity
+=======
+        for move in self:
+            if not move.picking_type_id:
+                moves_to_return |= move
+                continue
+            bom = self.env['mrp.bom'].sudo()._bom_find(product=move.product_id, company_id=move.company_id.id, bom_type='phantom')
+            if not bom:
+                moves_to_return |= move
+                continue
+            if move.picking_id.immediate_transfer:
+                factor = move.product_uom._compute_quantity(move.quantity_done, bom.product_uom_id) / bom.product_qty
+            else:
+                factor = move.product_uom._compute_quantity(move.product_uom_qty, bom.product_uom_id) / bom.product_qty
+            boms, lines = bom.sudo().explode(move.product_id, factor, picking_type=bom.picking_type_id)
+            for bom_line, line_data in lines:
+                if move.picking_id.immediate_transfer:
+                    phantom_moves_vals_list += move._generate_move_phantom(bom_line, 0, line_data['qty'])
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 else:
-                    move_line.product_uom_qty = 0
-                    reserved_quantity -= move_line.product_uom_qty
-                if not move_line.product_uom_qty and not move_line.qty_done:
-                    move_line_to_unlink |= move_line
-        move_line_to_unlink.unlink()
-        return True
+                    phantom_moves_vals_list += move._generate_move_phantom(bom_line, line_data['qty'], 0)
+            # delete the move with original product which is not relevant anymore
+            moves_to_unlink |= move
+
+        moves_to_unlink.sudo().unlink()
+        if phantom_moves_vals_list:
+            phantom_moves = self.env['stock.move'].create(phantom_moves_vals_list)
+            phantom_moves._adjust_procure_method()
+            moves_to_return |= phantom_moves.action_explode()
+        return moves_to_return
+
+    def _action_cancel(self):
+        res = super(StockMove, self)._action_cancel()
+        for production in self.mapped('raw_material_production_id'):
+            if production.state != 'cancel':
+                continue
+            production._action_cancel()
+        return res
 
     def _do_unreserve(self):
         production_moves = self.filtered(lambda m: m.raw_material_production_id or m.production_id)
@@ -238,17 +303,32 @@ class StockMove(models.Model):
 
     def _delay_alert_get_documents(self):
         res = super(StockMove, self)._delay_alert_get_documents()
-        productions = self.mapped('raw_material_production_id')
+        productions = self.raw_material_production_id | self.production_id
         return res + list(productions)
 
     def _should_be_assigned(self):
         res = super(StockMove, self)._should_be_assigned()
         return bool(res and not (self.production_id or self.raw_material_production_id))
 
+    def _should_bypass_reservation(self):
+        res = super(StockMove, self)._should_bypass_reservation()
+        return bool(res and not self.production_id)
+
     def _key_assign_picking(self):
         keys = super(StockMove, self)._key_assign_picking()
         return keys + (self.created_production_id,)
 
+    @api.model
+    def _prepare_merge_moves_distinct_fields(self):
+        distinct_fields = super()._prepare_merge_moves_distinct_fields()
+        distinct_fields.append('created_production_id')
+        return distinct_fields
+
+    @api.model
+    def _prepare_merge_move_sort_method(self, move):
+        keys_sorted = super()._prepare_merge_move_sort_method(move)
+        keys_sorted.append(move.created_production_id.id)
+        return keys_sorted
 
     def _compute_kit_quantities(self, product_id, kit_qty, kit_bom, filters):
         """ Computes the quantity delivered or received when a kit is sold or purchased.

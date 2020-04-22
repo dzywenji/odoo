@@ -94,7 +94,6 @@
                             </group>
                             <group>
                                 <field name="department_id"/>
-                                <field name="job_id"/>
                                 <field name="parent_id"/>
                             </group>
                         </group>
@@ -113,6 +112,7 @@
                                         <group name="departure" string="Departure" attrs="{'invisible': [('active', '=', True)]}">
                                             <field name="departure_reason"/>
                                             <field name="departure_description"/>
+                                            <field name="departure_date"/>
                                         </group>
                                         <group string="Schedule" groups="base.group_no_one">
                                             <field name="resource_calendar_id" required="1"/>
@@ -171,7 +171,8 @@
                             <page name="hr_settings" string="HR Settings" groups="hr.group_hr_user">
                                 <group>
                                     <group string='Status' name="active_group">
-                                        <field name="user_id" string="Related User"/>
+                                        <field name="user_id" string="Related User" domain="[('share', '=', False)]"/>
+                                        <field name="job_id"/>
                                     </group>
                                     <group string="Attendance" name="identification_group">
                                         <field name="pin" string="PIN Code"/>
@@ -200,14 +201,21 @@
             <field name="name">hr.employee.tree</field>
             <field name="model">hr.employee</field>
             <field name="arch" type="xml">
+<<<<<<< HEAD
                 <tree string="Employees">
                     <field name="name"/>
                     <field name="work_phone" class="o_force_ltr"/>
+=======
+                <tree string="Employees" multi_edit="1">
+                    <field name="name" readonly="1"/>
+                    <field name="work_phone" class="o_force_ltr" readonly="1"/>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                     <field name="work_email"/>
-                    <field name="company_id" groups="base.group_multi_company"/>
+                    <field name="company_id" groups="base.group_multi_company" readonly="1"/>
                     <field name="department_id"/>
                     <field name="job_id"/>
                     <field name="parent_id"/>
+                    <field name="work_location" optional="hide"/>
                     <field name="coach_id" invisible="1"/>
                 </tree>
             </field>

@@ -19,7 +19,11 @@
     'license': 'LGPL-3',
     'author': "Focusate",
     'website': "http://www.focusate.eu",
+<<<<<<< HEAD
     'category': 'Localization',
+=======
+    'category': 'Accounting/Localizations',
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     'depends': [
         'l10n_multilang',
     ],
@@ -36,6 +40,12 @@
         'data/account_chart_template_load.xml',
         'data/menuitem_data.xml',
     ],
+<<<<<<< HEAD
+=======
+    'demo': [
+        'demo/demo_company.xml',
+    ],
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     'post_init_hook': 'load_translations',
     'installable': True,
 }

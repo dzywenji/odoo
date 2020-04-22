@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from odoo import tests
+<<<<<<< HEAD
 from odoo.addons.account.tests.account_test_classes import AccountingTestCase
 from odoo.tools import mute_logger
 
@@ -17,14 +18,41 @@ class TestSaleTransaction(AccountingTestCase):
             'order_line': [
                 (0, False, {
                     'product_id': self.product.id,
+=======
+from odoo.addons.account.tests.common import AccountTestCommon
+from odoo.tools import mute_logger
+
+@tests.tagged('post_install', '-at_install')
+class TestSaleTransaction(AccountTestCommon):
+    @classmethod
+    def setUpClass(cls):
+        super(TestSaleTransaction, cls).setUpClass()
+        cls.product = cls.env['product.product'].create({
+            'invoice_policy': 'order',
+            'name': 'Product A',
+        })
+        cls.order = cls.env['sale.order'].create({
+            'partner_id': cls.env['res.partner'].create({'name': 'A partner'}).id,
+            'order_line': [
+                (0, False, {
+                    'product_id': cls.product.id,
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                     'name': '1 Product',
                     'price_unit': 100.0,
                 }),
             ],
         })
+        cls.env.ref('payment.payment_acquirer_transfer').journal_id = cls.cash_journal
+        if not cls.env.user.company_id.country_id:
+            cls.env.user.company_id.country_id = cls.env.ref('base.us')
 
+<<<<<<< HEAD
         self.transaction = self.order._create_payment_transaction({
             'acquirer_id': self.env.ref('payment.payment_acquirer_transfer').id,
+=======
+        cls.transaction = cls.order._create_payment_transaction({
+            'acquirer_id': cls.env.ref('payment.payment_acquirer_transfer').id,
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         })
 
     def test_sale_invoicing_from_transaction(self):
@@ -45,7 +73,11 @@ class TestSaleTransaction(AccountingTestCase):
         invoice = self.order._create_invoices()
         invoice.post()
 
+<<<<<<< HEAD
         self.assertEqual(invoice.invoice_payment_state, 'paid')
+=======
+        self.assertTrue(invoice.payment_state in ('in_payment', 'paid'), "Invoice should be paid")
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     def test_sale_transaction_mismatch(self):
         """Test that a transaction for the incorrect amount does not validate the SO."""

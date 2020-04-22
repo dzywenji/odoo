@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
+import json
+import logging
 from datetime import datetime, timedelta
 from collections import defaultdict
 
@@ -8,15 +10,17 @@ from odoo import api, fields, models, _
 from odoo.tools import DEFAULT_SERVER_DATETIME_FORMAT, float_compare
 from odoo.exceptions import UserError
 
+_logger = logging.getLogger(__name__)
+
 
 class SaleOrder(models.Model):
     _inherit = "sale.order"
 
     @api.model
     def _default_warehouse_id(self):
-        company = self.env.company.id
-        warehouse_ids = self.env['stock.warehouse'].search([('company_id', '=', company)], limit=1)
-        return warehouse_ids
+        # !!! Any change to the default value may have to be repercuted
+        # on _init_column() below.
+        return self.env.user._get_default_warehouse_id()
 
     incoterm = fields.Many2one(
         'account.incoterms', 'Incoterm',
@@ -40,6 +44,29 @@ class SaleOrder(models.Model):
                                           "the order lines in case of Service products. In case of shipping, the shipping policy of "
                                           "the order will be taken into account to either use the minimum or maximum lead time of "
                                           "the order lines.")
+    json_popover = fields.Char('JSON data for the popover widget', compute='_compute_json_popover')
+    show_json_popover = fields.Boolean('Has late picking', compute='_compute_json_popover')
+
+    def _init_column(self, column_name):
+        """ Ensure the default warehouse_id is correctly assigned
+
+        At column initialization, the ir.model.fields for res.users.property_warehouse_id isn't created,
+        which means trying to read the property field to get the default value will crash.
+        We therefore enforce the default here, without going through
+        the default function on the warehouse_id field.
+        """
+        if column_name != "warehouse_id":
+            return super(SaleOrder, self)._init_column(column_name)
+        field = self._fields[column_name]
+        default = self.env['stock.warehouse'].search([('company_id', '=', self.env.company.id)], limit=1)
+        value = field.convert_to_write(default, self)
+        value = field.convert_to_column(value, self)
+        if value is not None:
+            _logger.debug("Table '%s': setting default value of new column %s to %r",
+                self._table, column_name, value)
+            query = 'UPDATE "%s" SET "%s"=%s WHERE "%s" IS NULL' % (
+                self._table, column_name, field.column_format, column_name)
+            self._cr.execute(query, (value,))
 
     @api.depends('picking_ids.date_done')
     def _compute_effective_date(self):
@@ -63,9 +90,16 @@ class SaleOrder(models.Model):
 
     @api.model
     def create(self, vals):
+<<<<<<< HEAD
         if 'warehouse_id' not in vals and 'company_id' in vals and vals.get('company_id') != self.env.company.id:
             vals['warehouse_id'] = self.env['stock.warehouse'].search([('company_id', '=', vals.get('company_id'))], limit=1).id
         return super(SaleOrder, self).create(vals)
+=======
+        if 'warehouse_id' not in vals and 'company_id' in vals:
+            user = self.env['res.users'].browse(vals.get('user_id', False))
+            vals['warehouse_id'] = user.with_company(vals.get('company_id'))._get_default_warehouse_id().id
+        return super().create(vals)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     def write(self, values):
         if values.get('order_line') and self.state == 'sale':
@@ -95,6 +129,20 @@ class SaleOrder(models.Model):
                     order._log_decrease_ordered_quantity(documents)
         return res
 
+    def _compute_json_popover(self):
+        for order in self:
+            late_stock_picking = order.picking_ids.filtered(lambda p: p.delay_alert_date)
+            order.json_popover = json.dumps({
+                'popoverTemplate': 'sale_stock.DelayAlertWidget',
+                'late_elements': [{
+                        'id': late_move.id,
+                        'name': late_move.display_name,
+                        'model': 'stock.picking',
+                    } for late_move in late_stock_picking
+                ]
+            })
+            order.show_json_popover = bool(late_stock_picking)
+
     def _action_confirm(self):
         self.order_line._action_launch_stock_rule()
         return super(SaleOrder, self)._action_confirm()
@@ -107,7 +155,12 @@ class SaleOrder(models.Model):
     @api.onchange('company_id')
     def _onchange_company_id(self):
         if self.company_id:
-            self.warehouse_id = self.env['stock.warehouse'].search([('company_id', '=', self.company_id.id)], limit=1)
+            self.warehouse_id = self.user_id.with_company(self.company_id.id)._get_default_warehouse_id().id
+
+    @api.onchange('user_id')
+    def onchange_user_id(self):
+        super().onchange_user_id()
+        self.warehouse_id = self.user_id.with_company(self.company_id.id)._get_default_warehouse_id().id
 
     @api.onchange('partner_shipping_id')
     def _onchange_partner_shipping_id(self):
@@ -157,7 +210,7 @@ class SaleOrder(models.Model):
             if sale_order.state == 'sale' and sale_order.order_line:
                 sale_order_lines_quantities = {order_line: (order_line.product_uom_qty, 0) for order_line in sale_order.order_line}
                 documents = self.env['stock.picking']._log_activity_get_documents(sale_order_lines_quantities, 'move_ids', 'UP')
-        self.mapped('picking_ids').action_cancel()
+        self.picking_ids.filtered(lambda p: p.state != 'done').action_cancel()
         if documents:
             filtered_documents = {}
             for (parent, responsible), rendering_context in documents.items():
@@ -197,6 +250,12 @@ class SaleOrder(models.Model):
 
         self.env['stock.picking']._log_activity(_render_note_exception_quantity_so, documents)
 
+    def _show_cancel_wizard(self):
+        res = super(SaleOrder, self)._show_cancel_wizard()
+        for order in self:
+            if any(picking.state == 'done' for picking in order.picking_ids) and not order._context.get('disable_cancel_warning'):
+                return True
+        return res
 
 class SaleOrderLine(models.Model):
     _inherit = 'sale.order.line'
@@ -423,6 +482,7 @@ class SaleOrderLine(models.Model):
             'route_ids': self.route_id,
             'warehouse_id': self.order_id.warehouse_id or False,
             'partner_id': self.order_id.partner_shipping_id.id,
+            'product_description_variants': self._get_sale_order_line_multiline_description_variants(),
             'company_id': self.order_id.company_id,
         })
         for line in self.filtered("order_id.commitment_date"):
@@ -475,6 +535,7 @@ class SaleOrderLine(models.Model):
         precision = self.env['decimal.precision'].precision_get('Product Unit of Measure')
         procurements = []
         for line in self:
+            line = line.with_company(line.company_id)
             if line.state != 'sale' or not line.product_id.type in ('consu','product'):
                 continue
             qty = line._get_qty_procurement(previous_product_uom_qty)

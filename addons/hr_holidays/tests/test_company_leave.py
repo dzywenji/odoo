@@ -24,7 +24,11 @@ class TestCompanyLeave(SavepointCase):
         cls.paid_time_off = cls.env['hr.leave.type'].create({
             'name': 'Paid Time Off',
             'request_unit': 'day',
+<<<<<<< HEAD
             'validation_type': 'both',
+=======
+            'leave_validation_type': 'both',
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'company_id': cls.company.id,
         })
 
@@ -48,7 +52,11 @@ class TestCompanyLeave(SavepointCase):
             'date_to': date(2020, 1, 9),
             'number_of_days': 3,
         })
+<<<<<<< HEAD
         leave._onchange_request_parameters()
+=======
+        leave._compute_date_from_to()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         company_leave = self.env['hr.leave'].create({
             'name': 'Bank Holiday',
@@ -61,7 +69,11 @@ class TestCompanyLeave(SavepointCase):
             'request_date_to': date(2020, 1, 8),
             'number_of_days': 1,
         })
+<<<<<<< HEAD
         company_leave._onchange_request_parameters()
+=======
+        company_leave._compute_date_from_to()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         company_leave.action_validate()
 
@@ -102,7 +114,11 @@ class TestCompanyLeave(SavepointCase):
             'date_to': date(2020, 1, 9),
             'number_of_days': 3,
         })
+<<<<<<< HEAD
         leave._onchange_request_parameters()
+=======
+        leave._compute_date_from_to()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         company_leave = self.env['hr.leave'].create({
             'name': 'Bank Holiday',
@@ -115,7 +131,11 @@ class TestCompanyLeave(SavepointCase):
             'request_date_to': date(2020, 1, 8),
             'number_of_days': 1,
         })
+<<<<<<< HEAD
         company_leave._onchange_request_parameters()
+=======
+        company_leave._compute_date_from_to()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         company_leave.action_validate()
 
@@ -156,7 +176,11 @@ class TestCompanyLeave(SavepointCase):
             'request_date_from_period': 'am',
 
         })
+<<<<<<< HEAD
         leave._onchange_request_parameters()
+=======
+        leave._compute_date_from_to()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         company_leave = self.env['hr.leave'].create({
             'name': 'Bank Holiday',
@@ -169,7 +193,11 @@ class TestCompanyLeave(SavepointCase):
             'request_date_to': date(2020, 1, 7),
             'number_of_days': 1,
         })
+<<<<<<< HEAD
         company_leave._onchange_request_parameters()
+=======
+        company_leave._compute_date_from_to()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         company_leave.action_validate()
 
@@ -198,7 +226,11 @@ class TestCompanyLeave(SavepointCase):
             'number_of_days': 1,
 
         })
+<<<<<<< HEAD
         leave._onchange_request_parameters()
+=======
+        leave._compute_date_from_to()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         company_leave = self.env['hr.leave'].create({
             'name': 'Bank Holiday',
@@ -211,7 +243,11 @@ class TestCompanyLeave(SavepointCase):
             'request_date_to': date(2020, 1, 9),
             'number_of_days': 1,
         })
+<<<<<<< HEAD
         company_leave._onchange_request_parameters()
+=======
+        company_leave._compute_date_from_to()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         company_leave.action_validate()
 
@@ -248,7 +284,11 @@ class TestCompanyLeave(SavepointCase):
             'request_date_to': date(2020, 1, 10),
             'number_of_days': 3,
         })
+<<<<<<< HEAD
         leave._onchange_request_parameters()
+=======
+        leave._compute_date_from_to()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         company_leave = self.env['hr.leave'].create({
             'name': 'Bank Holiday',
@@ -261,7 +301,11 @@ class TestCompanyLeave(SavepointCase):
             'request_date_to': date(2020, 1, 10),
             'number_of_days': 1,
         })
+<<<<<<< HEAD
         company_leave._onchange_request_parameters()
+=======
+        company_leave._compute_date_from_to()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         company_leave.action_validate()
 
         all_leaves = self.env['hr.leave'].search([('employee_id', '=', self.employee.id)], order='id')

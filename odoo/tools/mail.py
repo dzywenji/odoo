@@ -11,9 +11,13 @@ import socket
 import threading
 import time
 
+<<<<<<< HEAD
 from email.header import decode_header, Header
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 from email.utils import getaddresses
 from lxml import etree
+from werkzeug import urls
 
 import odoo
 from odoo.loglevels import ustr
@@ -166,7 +170,7 @@ class _Cleaner(clean.Cleaner):
         return super(_Cleaner, self).allow_element(el)
 
 
-def html_sanitize(src, silent=True, sanitize_tags=True, sanitize_attributes=False, sanitize_style=False, strip_style=False, strip_classes=False):
+def html_sanitize(src, silent=True, sanitize_tags=True, sanitize_attributes=False, sanitize_style=False, sanitize_form=True, strip_style=False, strip_classes=False):
     if not src:
         return src
     src = ustr(src, errors='replace')
@@ -184,7 +188,7 @@ def html_sanitize(src, silent=True, sanitize_tags=True, sanitize_attributes=Fals
         'page_structure': True,
         'style': strip_style,              # True = remove style tags/attrs
         'sanitize_style': sanitize_style,  # True = sanitize styling
-        'forms': True,                     # True = remove form tags
+        'forms': sanitize_form,            # True = remove form tags
         'remove_unknown_tags': False,
         'comments': False,
         'processing_instructions': False
@@ -251,9 +255,34 @@ def html_sanitize(src, silent=True, sanitize_tags=True, sanitize_attributes=Fals
 
     return cleaned
 
-#----------------------------------------------------------
+# ----------------------------------------------------------
 # HTML/Text management
-#----------------------------------------------------------
+# ----------------------------------------------------------
+
+URL_REGEX = r'(\bhref=[\'"](?!mailto:|tel:|sms:)([^\'"]+)[\'"])'
+TEXT_URL_REGEX = r'https?://[a-zA-Z0-9@:%._\+~#=/-]+(?:\?\S+)?'
+
+
+def validate_url(url):
+    if urls.url_parse(url).scheme not in ('http', 'https', 'ftp', 'ftps'):
+        return 'http://' + url
+
+    return url
+
+
+def is_html_empty(html_content):
+    """Check if a html content is empty. If there are only formatting tags or
+    a void content return True. Famous use case if a '<p><br></p>' added by
+    some web editor.
+
+    :param str html_content: html content, coming from example from an HTML field
+    :returns: bool, True if no content found or if containing only void formatting tags
+    """
+    if not html_content:
+        return True
+    tag_re = re.compile(r'\<\s*\/?(?:p|div|span|br|b|i)\s*\>')
+    return not bool(re.sub(tag_re, '', html_content).strip())
+
 
 def html_keep_url(text):
     """ Transform the url into clickable link with <a/> tag """
@@ -266,6 +295,7 @@ def html_keep_url(text):
         idx = item.end()
     final += text[idx:]
     return final
+
 
 def html2plaintext(html, body_id=None, encoding='utf-8'):
     """ From an HTML text, convert the HTML to plain text.
@@ -513,22 +543,13 @@ def email_escape_char(email_address):
     """ Escape problematic characters in the given email address string"""
     return email_address.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
 
-# was mail_message.decode()
-def decode_smtp_header(smtp_header):
-    """Returns unicode() string conversion of the given encoded smtp header
-    text. email.header decode_header method return a decoded string and its
-    charset for each decoded par of the header. This method unicodes the
-    decoded header and join them in a complete string. """
-    if isinstance(smtp_header, Header):
-        smtp_header = ustr(smtp_header)
-    if smtp_header:
-        text = decode_header(smtp_header.replace('\r', ''))
-        return ''.join([ustr(x[0], x[1]) for x in text])
-    return u''
-
 # was mail_thread.decode_header()
 def decode_message_header(message, header, separator=' '):
+<<<<<<< HEAD
     return separator.join(decode_smtp_header(h) for h in message.get_all(header, []) if h)
+=======
+    return separator.join(h for h in message.get_all(header, []) if h)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 def formataddr(pair, charset='utf-8'):
     """Pretty format a 2-tuple of the form (realname, email_address).

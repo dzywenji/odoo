@@ -26,7 +26,11 @@ class Http(models.AbstractModel):
         version_info = odoo.service.common.exp_version()
 
         user_context = request.session.get_context() if request.session.uid else {}
+<<<<<<< HEAD
 
+=======
+        IrConfigSudo = self.env['ir.config_parameter'].sudo()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         session_info = {
             "uid": request.session.uid,
             "is_system": user._is_system() if request.session.uid else False,
@@ -40,7 +44,12 @@ class Http(models.AbstractModel):
             "partner_display_name": user.partner_id.display_name,
             "company_id": user.company_id.id if request.session.uid else None,  # YTI TODO: Remove this from the user context
             "partner_id": user.partner_id.id if request.session.uid and user.partner_id else None,
+<<<<<<< HEAD
             "web.base.url": self.env['ir.config_parameter'].sudo().get_param('web.base.url', default=''),
+=======
+            "web.base.url": IrConfigSudo.get_param('web.base.url', default=''),
+            "active_ids_limit": int(IrConfigSudo.get_param('web.active_ids_limit', default='20000')),
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         }
         if self.env.user.has_group('base.group_user'):
             # the following is only useful in the context of a webclient bootstrapping
@@ -53,7 +62,11 @@ class Http(models.AbstractModel):
             translation_hash = request.env['ir.translation'].get_web_translations_hash(mods, lang)
             menu_json_utf8 = json.dumps(request.env['ir.ui.menu'].load_menus(request.session.debug), default=ustr, sort_keys=True).encode()
             cache_hashes = {
+<<<<<<< HEAD
                 "load_menus": hashlib.sha1(menu_json_utf8).hexdigest(),
+=======
+                "load_menus": hashlib.sha512(menu_json_utf8).hexdigest()[:64], # sha512/256
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 "qweb": qweb_checksum,
                 "translations": translation_hash,
             }
@@ -69,13 +82,20 @@ class Http(models.AbstractModel):
 
     @api.model
     def get_frontend_session_info(self):
-        return {
+        session_info = {
             'is_admin': request.session.uid and self.env.user._is_admin() or False,
             'is_system': request.session.uid and self.env.user._is_system() or False,
             'is_website_user': request.session.uid and self.env.user._is_public() or False,
             'user_id': request.session.uid and self.env.user.id or False,
             'is_frontend': True,
         }
+        if request.session.uid:
+            version_info = odoo.service.common.exp_version()
+            session_info.update({
+                'server_version': version_info.get('server_version'),
+                'server_version_info': version_info.get('server_version_info')
+            })
+        return session_info
 
     def get_currencies(self):
         Currency = request.env['res.currency']

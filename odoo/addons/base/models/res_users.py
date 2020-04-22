@@ -2,6 +2,7 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 import contextlib
 
+import base64
 import pytz
 import datetime
 import ipaddress
@@ -17,11 +18,13 @@ from lxml.builder import E
 import passlib.context
 
 from odoo import api, fields, models, tools, SUPERUSER_ID, _
+from odoo.addons.base.models.ir_model import MODULE_UNINSTALL_FLAG
 from odoo.exceptions import AccessDenied, AccessError, UserError, ValidationError
 from odoo.http import request
 from odoo.osv import expression
 from odoo.service.db import check_super
-from odoo.tools import partition, collections, lazy_property
+from odoo.tools import partition, collections, frozendict, lazy_property, image_process
+from odoo.modules.module import get_module_resource
 
 _logger = logging.getLogger(__name__)
 
@@ -211,8 +214,16 @@ class Users(models.Model):
         default_user = self.env.ref('base.default_user', raise_if_not_found=False)
         return (default_user or self.env['res.users']).sudo().groups_id
 
-    def _companies_count(self):
-        return self.env['res.company'].sudo().search_count([])
+    @api.model
+    def _get_default_image(self):
+        """ Get a default image when the user is created without image
+
+            Inspired to _get_default_image method in
+            https://github.com/odoo/odoo/blob/11.0/odoo/addons/base/res/res_partner.py
+        """
+        image_path = get_module_resource('base', 'static/img', 'avatar.png')
+        image = base64.b64encode(open(image_path, 'rb').read())
+        return image_process(image, colorize=True)
 
     partner_id = fields.Many2one('res.partner', required=True, ondelete='restrict', auto_join=True,
         string='Related Partner', help='Partner-related data of the user')
@@ -236,7 +247,7 @@ class Users(models.Model):
     login_date = fields.Datetime(related='log_ids.create_date', string='Latest authentication', readonly=False)
     share = fields.Boolean(compute='_compute_share', compute_sudo=True, string='Share User', store=True,
          help="External user with limited access, created only for the purpose of sharing data.")
-    companies_count = fields.Integer(compute='_compute_companies_count', string="Number of Companies", default=_companies_count)
+    companies_count = fields.Integer(compute='_compute_companies_count', string="Number of Companies")
     tz_offset = fields.Char(compute='_compute_tz_offset', string='Timezone offset', invisible=True)
 
     # Special behavior for this field: res.company.search() will only return the companies
@@ -258,6 +269,10 @@ class Users(models.Model):
                                  compute='_compute_accesses_count', compute_sudo=True)
     groups_count = fields.Integer('# Groups', help='Number of groups that apply to the current user',
                                   compute='_compute_accesses_count', compute_sudo=True)
+<<<<<<< HEAD
+=======
+    image_1920 = fields.Image(related='partner_id.image_1920', inherited=True, readonly=False, default=_get_default_image)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     _sql_constraints = [
         ('login_key', 'UNIQUE (login)',  'You can not have two users with the same login !')
@@ -282,8 +297,9 @@ class Users(models.Model):
 
     def _set_password(self):
         ctx = self._crypt_context()
+        hash_password = ctx.hash if hasattr(ctx, 'hash') else ctx.encrypt
         for user in self:
-            self._set_encrypted_password(user.id, ctx.encrypt(user.password))
+            self._set_encrypted_password(user.id, hash_password(user.password))
 
     def _set_encrypted_password(self, uid, pw):
         assert self._crypt_context().identify(pw) != 'plaintext'
@@ -348,9 +364,7 @@ class Users(models.Model):
             user.share = not user.has_group('base.group_user')
 
     def _compute_companies_count(self):
-        companies_count = self._companies_count()
-        for user in self:
-            user.companies_count = companies_count
+        self.companies_count = self.env['res.company'].sudo().search_count([])
 
     @api.depends('tz')
     def _compute_tz_offset(self):
@@ -579,10 +593,10 @@ class Users(models.Model):
         # use read() to not read other fields: this must work while modifying
         # the schema of models res.users or res.partner
         values = user.read(list(name_to_key), load=False)[0]
-        return {
+        return frozendict({
             key: values[name]
             for name, key in name_to_key.items()
-        }
+        })
 
     @api.model
     def action_get(self):
@@ -862,7 +876,7 @@ class Users(models.Model):
         source = request.httprequest.remote_addr
         (failures, previous) = failures_map[source]
         if self._on_login_cooldown(failures, previous):
-            _logger.warn(
+            _logger.warning(
                 "Login attempt ignored for %s on %s: "
                 "%d failures since last success, last failure at %s. "
                 "You can configure the number of login failures before a "
@@ -871,7 +885,7 @@ class Users(models.Model):
                 "\"base.login_cooldown_after\" to 0.",
                 source, self.env.cr.dbname, failures, previous)
             if ipaddress.ip_address(source).is_private:
-                _logger.warn(
+                _logger.warning(
                     "The rate-limited IP address %s is classified as private "
                     "and *might* be a proxy. If your Odoo is behind a proxy, "
                     "it may be mis-configured. Check that you are running "
@@ -918,7 +932,14 @@ class Users(models.Model):
 
     def _register_hook(self):
         if hasattr(self, 'check_credentials'):
-            _logger.warn("The check_credentials method of res.users has been renamed _check_credentials. One of your installed modules defines one, but it will not be called anymore.")
+            _logger.warning("The check_credentials method of res.users has been renamed _check_credentials. One of your installed modules defines one, but it will not be called anymore.")
+
+    def _get_placeholder_filename(self, field=None):
+        image_fields = ['image_%s' % size for size in [1920, 1024, 512, 256, 128]]
+        if field in image_fields and not self:
+            return 'base/static/img/user-slash.png'
+        return super()._get_placeholder_filename(field=field)
+
 #
 # Implied groups
 #
@@ -1045,8 +1066,14 @@ class GroupsView(models.Model):
         return user
 
     def write(self, values):
+        # determine which values the "user groups view" depends on
+        VIEW_DEPS = ('category_id', 'implied_ids')
+        view_values0 = [g[name] for name in VIEW_DEPS if name in values for g in self]
         res = super(GroupsView, self).write(values)
-        self._update_user_groups_view()
+        # update the "user groups view" only if necessary
+        view_values1 = [g[name] for name in VIEW_DEPS if name in values for g in self]
+        if view_values0 != view_values1:
+            self._update_user_groups_view()
         # actions.get_bindings() depends on action records
         self.env['ir.actions.actions'].clear_caches()
         return res
@@ -1066,14 +1093,20 @@ class GroupsView(models.Model):
         """ Modify the view with xmlid ``base.user_groups_view``, which inherits
             the user form view, and introduces the reified group fields.
         """
-
         # remove the language to avoid translations, it will be handled at the view level
         self = self.with_context(lang=None)
 
         # We have to try-catch this, because at first init the view does not
         # exist but we are already creating some basic groups.
         view = self.env.ref('base.user_groups_view', raise_if_not_found=False)
-        if view and view.exists() and view._name == 'ir.ui.view':
+        if not (view and view.exists() and view._name == 'ir.ui.view'):
+            return
+
+        if self._context.get('install_filename') or self._context.get(MODULE_UNINSTALL_FLAG):
+            # use a dummy view during install/upgrade/uninstall
+            xml = E.field(name="groups_id", position="after")
+
+        else:
             group_no_one = view.env.ref('base.group_no_one')
             group_employee = view.env.ref('base.group_user')
             xml1, xml2, xml3 = [], [], []
@@ -1141,8 +1174,10 @@ class GroupsView(models.Model):
                 E.group(*(xml2), col="2", attrs=str(user_type_attrs)),
                 E.group(*(xml3), col="4", attrs=str(user_type_attrs)), name="groups_id", position="replace")
             xml.addprevious(etree.Comment("GENERATED AUTOMATICALLY BY GROUPS"))
-            xml_content = etree.tostring(xml, pretty_print=True, encoding="unicode")
 
+        # serialize and update the view
+        xml_content = etree.tostring(xml, pretty_print=True, encoding="unicode")
+        if xml_content != view.arch:  # avoid useless xml validation if no change
             new_context = dict(view._context)
             new_context.pop('install_filename', None)  # don't set arch_fs for this computed view
             new_context['lang'] = None
@@ -1169,6 +1204,11 @@ class GroupsView(models.Model):
                 return (app, 'selection', gs.sorted('id'), category_name)
             # determine sequence order: a group appears after its implied groups
             order = {g: len(g.trans_implied_ids & gs) for g in gs}
+            # We want a selection for Accounting too. Auditor and Invoice are both
+            # children of Accountant, but the two of them make a full accountant
+            # so it makes no sense to have checkboxes.
+            if app.xml_id == 'base.module_category_accounting_accounting':
+                return (app, 'selection', gs.sorted(key=order.get), category_name)
             # check whether order is total, i.e., sequence orders are distinct
             if len(set(order.values())) == len(gs):
                 return (app, 'selection', gs.sorted(key=order.get), category_name)

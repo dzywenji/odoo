@@ -4,11 +4,11 @@
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from collections import defaultdict
-from math import floor
+import json
 
 from odoo import api, fields, models, _, SUPERUSER_ID
 from odoo.exceptions import UserError
-from odoo.tools import float_compare, float_round
+from odoo.tools import float_compare, float_round, format_datetime
 
 
 class MrpWorkorder(models.Model):
@@ -34,14 +34,14 @@ class MrpWorkorder(models.Model):
         states={'done': [('readonly', True)], 'cancel': [('readonly', True)]},
         group_expand='_read_group_workcenter_id', check_company=True)
     working_state = fields.Selection(
-        'Workcenter Status', related='workcenter_id.working_state', readonly=False,
+        string='Workcenter Status', related='workcenter_id.working_state', readonly=False,
         help='Technical: used in views only')
     production_availability = fields.Selection(
-        'Stock Availability', readonly=True,
+        string='Stock Availability', readonly=True,
         related='production_id.reservation_state', store=True,
         help='Technical: used in views and domains only.')
     production_state = fields.Selection(
-        'Production State', readonly=True,
+        string='Production State', readonly=True,
         related='production_id.state',
         help='Technical: used in views only.')
     qty_production = fields.Float('Original Production Quantity', readonly=True, related='production_id.product_qty')
@@ -107,7 +107,7 @@ class MrpWorkorder(models.Model):
     worksheet = fields.Binary(
         'Worksheet', related='operation_id.worksheet', readonly=True)
     worksheet_type = fields.Selection(
-        'Worksheet Type', related='operation_id.worksheet_type', readonly=True)
+        string='Worksheet Type', related='operation_id.worksheet_type', readonly=True)
     worksheet_google_slide = fields.Char(
         'Worksheet URL', related='operation_id.worksheet_google_slide', readonly=True)
     move_raw_ids = fields.One2many(
@@ -134,15 +134,64 @@ class MrpWorkorder(models.Model):
     scrap_ids = fields.One2many('stock.scrap', 'workorder_id')
     scrap_count = fields.Integer(compute='_compute_scrap_move_count', string='Scrap Move')
     production_date = fields.Datetime('Production Date', related='production_id.date_planned_start', store=True, readonly=False)
-    color = fields.Integer('Color', compute='_compute_color')
-    capacity = fields.Float(
-        'Capacity', default=1.0,
-        help="Number of pieces that can be produced in parallel.")
     raw_workorder_line_ids = fields.One2many('mrp.workorder.line',
         'raw_workorder_id', string='Components')
     finished_workorder_line_ids = fields.One2many('mrp.workorder.line',
         'finished_workorder_id', string='By-products')
     allowed_lots_domain = fields.One2many(comodel_name='stock.production.lot', compute="_compute_allowed_lots_domain")
+    is_finished_lines_editable = fields.Boolean(compute='_compute_is_finished_lines_editable')
+    json_popover = fields.Char('Popover Data JSON', compute='_compute_json_popover')
+    show_json_popover = fields.Boolean('Show Popover?', compute='_compute_json_popover')
+
+    def _compute_json_popover(self):
+        previous_wo_data = self.env['mrp.workorder'].read_group(
+            [('next_work_order_id', 'in', self.ids)],
+            ['ids:array_agg(id)', 'date_planned_start:max', 'date_planned_finished:max'],
+            ['next_work_order_id'])
+        previous_wo_dict = dict([(x['next_work_order_id'][0], {
+            'id': x['ids'][0],
+            'date_planned_start': x['date_planned_start'],
+            'date_planned_finished': x['date_planned_finished']})
+            for x in previous_wo_data])
+        conflicted_dict = self._get_conflicted_workorder_ids()
+        for wo in self:
+            infos = []
+            if wo.state in ['pending', 'ready']:
+                previous_wo = previous_wo_dict.get(wo.id)
+                prev_start = previous_wo and previous_wo['date_planned_start'] or False
+                prev_finished = previous_wo and previous_wo['date_planned_finished'] or False
+                if wo.state == 'pending' and prev_start and not (prev_start > wo.date_planned_start):
+                    infos.append({
+                        'color': 'text-primary',
+                        'msg': _("Waiting the previous work order, planned from %s to %s") % (
+                            format_datetime(self.env, prev_start, dt_format=False),
+                            format_datetime(self.env, prev_finished, dt_format=False))
+                    })
+                if wo.date_planned_finished < fields.Datetime.now():
+                    infos.append({
+                        'color': 'text-warning',
+                        'msg': _("The work order should have already been processed.")
+                    })
+                if prev_start and prev_start > wo.date_planned_start:
+                    infos.append({
+                        'color': 'text-danger',
+                        'msg': _("Scheduled before the previous work order, planned from %s to %s") % (
+                            format_datetime(self.env, prev_start, dt_format=False),
+                            format_datetime(self.env, prev_finished, dt_format=False))
+                    })
+                if conflicted_dict.get(wo.id):
+                    infos.append({
+                        'color': 'text-danger',
+                        'msg': _("Planned at the same time than other workorder(s) at %s" % wo.workcenter_id.display_name)
+                    })
+            color_icon = infos and infos[-1]['color'] or False
+            wo.show_json_popover = bool(color_icon)
+            wo.json_popover = json.dumps({
+                'infos': infos,
+                'color': color_icon,
+                'icon': 'fa-exclamation-triangle' if color_icon in ['text-warning', 'text-danger'] else 'fa-info-circle',
+                'replan': color_icon not in [False, 'text-primary']
+            })
 
     # Both `date_planned_start` and `date_planned_finished` are related fields on `leave_id`. Let's say
     # we slide a workorder on a gantt view, a single call to write is made with both
@@ -163,6 +212,14 @@ class MrpWorkorder(models.Model):
             'date_from': date_from,
             'date_to': date_to,
         })
+
+    @api.depends('state')
+    def _compute_is_finished_lines_editable(self):
+        for workorder in self:
+            if self.user_has_groups('mrp.group_mrp_byproducts') and workorder.state not in ('cancel', 'done'):
+                workorder.is_finished_lines_editable = True
+            else:
+                workorder.is_finished_lines_editable = False
 
     @api.onchange('finished_lot_id')
     def _onchange_finished_lot_id(self):
@@ -227,7 +284,13 @@ class MrpWorkorder(models.Model):
         (self - treated).allowed_lots_domain = False
 
     def name_get(self):
-        return [(wo.id, "%s - %s - %s" % (wo.production_id.name, wo.product_id.name, wo.name)) for wo in self]
+        res = []
+        for wo in self:
+            if len(wo.production_id.workorder_ids) == 1:
+                res.append((wo.id, "%s - %s - %s" % (wo.production_id.name, wo.product_id.name, wo.name)))
+            else:
+                res.append((wo.id, "%s - %s - %s - %s" % (wo.production_id.workorder_ids.ids.index(wo.id) + 1, wo.production_id.name, wo.product_id.name, wo.name)))
+        return res
 
     def unlink(self):
         # Removes references to workorder to avoid Validation Error
@@ -282,16 +345,6 @@ class MrpWorkorder(models.Model):
         count_data = dict((item['workorder_id'][0], item['workorder_id_count']) for item in data)
         for workorder in self:
             workorder.scrap_count = count_data.get(workorder.id, 0)
-
-    @api.depends('date_planned_finished', 'production_id.date_planned_finished')
-    def _compute_color(self):
-        late_orders = self.filtered(lambda x: x.production_id.date_planned_finished
-                                              and x.date_planned_finished
-                                              and x.date_planned_finished > x.production_id.date_planned_finished)
-        for order in late_orders:
-            order.color = 4
-        for order in (self - late_orders):
-            order.color = 2
 
     @api.onchange('date_planned_start', 'duration_expected')
     def _onchange_date_planned_start(self):
@@ -403,10 +456,15 @@ class MrpWorkorder(models.Model):
             return True
 
         self.ensure_one()
+        self._check_sn_uniqueness()
         self._check_company()
         if float_compare(self.qty_producing, 0, precision_rounding=self.product_uom_id.rounding) <= 0:
             raise UserError(_('Please set the quantity you are currently producing. It should be different from zero.'))
-
+        if self.production_id.product_id.tracking != 'none' and not self.finished_lot_id and self.move_raw_ids:
+            raise UserError(_('You should provide a lot for the final product'))
+        if 'check_ids' not in self:
+            for line in self.raw_workorder_line_ids | self.finished_workorder_line_ids:
+                line._check_line_sn_uniqueness()
         # If last work order, then post lots used
         if not self.next_work_order_id:
             self._update_finished_move()
@@ -512,6 +570,44 @@ class MrpWorkorder(models.Model):
                  float_compare(self.operation_id.batch_size, self.qty_produced, precision_rounding=rounding) <= 0)):
             self.next_work_order_id.state = 'ready'
 
+    @api.model
+    def gantt_unavailability(self, start_date, end_date, scale, group_bys=None, rows=None):
+        """Get unavailabilities data to display in the Gantt view."""
+        workcenter_ids = set()
+
+        def traverse_inplace(func, row, **kargs):
+            res = func(row, **kargs)
+            if res:
+                kargs.update(res)
+            for row in row.get('rows'):
+                traverse_inplace(func, row, **kargs)
+
+        def search_workcenter_ids(row):
+            if row.get('groupedBy') and row.get('groupedBy')[0] == 'workcenter_id' and row.get('resId'):
+                workcenter_ids.add(row.get('resId'))
+
+        for row in rows:
+            traverse_inplace(search_workcenter_ids, row)
+        start_datetime = fields.Datetime.to_datetime(start_date)
+        end_datetime = fields.Datetime.to_datetime(end_date)
+        workcenters = self.env['mrp.workcenter'].browse(workcenter_ids)
+        unavailability_mapping = workcenters._get_unavailability_intervals(start_datetime, end_datetime)
+
+        # Only notable interval (more than one case) is send to the front-end (avoid sending useless information)
+        cell_dt = (scale in ['day', 'week'] and timedelta(hours=1)) or (scale == 'month' and timedelta(days=1)) or timedelta(days=28)
+
+        def add_unavailability(row, workcenter_id=None):
+            if row.get('groupedBy') and row.get('groupedBy')[0] == 'workcenter_id' and row.get('resId'):
+                workcenter_id = row.get('resId')
+            if workcenter_id:
+                notable_intervals = filter(lambda interval: interval[1] - interval[0] >= cell_dt, unavailability_mapping[workcenter_id])
+                row['unavailabilities'] = [{'start': interval[0], 'stop': interval[1]} for interval in notable_intervals]
+                return {'workcenter_id': workcenter_id}
+
+        for row in rows:
+            traverse_inplace(add_unavailability, row)
+        return rows
+
     def button_start(self):
         self.ensure_one()
         # As button_start is automatically called in the new view
@@ -612,6 +708,16 @@ class MrpWorkorder(models.Model):
         self.leave_id.unlink()
         return self.write({'state': 'cancel'})
 
+    def action_replan(self):
+        """Replan a work order.
+
+        It actually replans every  "ready" or "pending"
+        work orders of the linked manufacturing orders.
+        """
+        for production in self.production_id:
+            production._plan_workorders(replan=True)
+        return True
+
     def button_done(self):
         if any([x.state in ('done', 'cancel') for x in self]):
             raise UserError(_('A Manufacturing Order is already done or cancelled.'))
@@ -649,6 +755,32 @@ class MrpWorkorder(models.Model):
         for wo in self:
             wo.qty_remaining = float_round(wo.qty_production - wo.qty_produced, precision_rounding=wo.production_id.product_uom_id.rounding)
 
+    def _get_conflicted_workorder_ids(self):
+        """Get conlicted workorder(s) with self.
+
+        Conflict means having two workorders in the same time in the same workcenter.
+
+        :return: defaultdict with key as workorder id of self and value as related conflicted workorder
+        """
+        self.flush(['state', 'date_planned_start', 'date_planned_finished', 'workcenter_id'])
+        sql = """
+            SELECT wo1.id, wo2.id
+            FROM mrp_workorder wo1, mrp_workorder wo2
+            WHERE
+                wo1.id IN %s
+                AND wo1.state IN ('pending','ready')
+                AND wo2.state IN ('pending','ready')
+                AND wo1.id != wo2.id
+                AND wo1.workcenter_id = wo2.workcenter_id
+                AND (DATE_TRUNC('second', wo2.date_planned_start), DATE_TRUNC('second', wo2.date_planned_finished))
+                    OVERLAPS (DATE_TRUNC('second', wo1.date_planned_start), DATE_TRUNC('second', wo1.date_planned_finished))
+        """
+        self.env.cr.execute(sql, [tuple(self.ids)])
+        res = defaultdict(list)
+        for wo1, wo2 in self.env.cr.fetchall():
+            res[wo1].append(wo2)
+        return res
+
 
 class MrpWorkorderLine(models.Model):
     _name = 'mrp.workorder.line'
@@ -659,6 +791,25 @@ class MrpWorkorderLine(models.Model):
         ondelete='cascade')
     finished_workorder_id = fields.Many2one('mrp.workorder', 'Finished Product for Workorder',
         ondelete='cascade')
+
+    @api.onchange('qty_to_consume')
+    def _onchange_qty_to_consume(self):
+        # Update qty_done for products added in ready state
+        wo = self.raw_workorder_id or self.finished_workorder_id
+        if wo.state == 'ready':
+            self.qty_done = self.qty_to_consume
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        res = super().create(vals_list)
+        for line in res:
+            wo = line.raw_workorder_id
+            if wo and\
+                    wo.consumption == 'strict' and\
+                    wo.state == 'progress' and\
+                    line.product_id.id not in wo.production_id.bom_id.bom_line_ids.product_id.ids:
+                raise UserError(_('You cannot consume additional component as the consumption defined on the Bill of Material is set to "strict"'))
+        return res
 
     @api.model
     def _get_raw_workorder_inverse_name(self):

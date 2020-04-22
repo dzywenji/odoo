@@ -6,14 +6,12 @@ import logging.handlers
 import os
 import platform
 import pprint
-from . import release
 import sys
 import threading
 import time
+import warnings
 
-import psycopg2
-
-import odoo
+from . import release
 from . import sql_db
 from . import tools
 
@@ -127,8 +125,19 @@ def init_logger():
         return record
     logging.setLogRecordFactory(record_factory)
 
-    logging.addLevelName(25, "INFO")
-    logging.captureWarnings(True)
+    # enable deprecation warnings (disabled by default)
+    warnings.filterwarnings('once', category=DeprecationWarning)
+    # ignore deprecation warnings from invalid escape (there's a ton and it's
+    # pretty likely a super low-value signal)
+    warnings.filterwarnings('ignore', r'^invalid escape sequence \\.', category=DeprecationWarning)
+    # ignore a bunch of warnings we can't really fix ourselves
+    for module in [
+        'setuptools.depends',# older setuptools version using imp
+        'zeep.loader',# zeep using defusedxml.lxml
+        'reportlab.lib.rl_safe_eval',# reportlab importing ABC from collections
+        'xlrd/xlsx',# xlrd mischecks iter() on trees or something so calls deprecated getiterator() instead of iter()
+    ]:
+        warnings.filterwarnings('ignore', category=DeprecationWarning, module=module)
 
     from .tools.translate import resetlocale
     resetlocale()
@@ -220,7 +229,16 @@ PSEUDOCONFIG_MAPPER = {
     'debug': ['odoo:DEBUG', 'odoo.sql_db:INFO'],
     'debug_sql': ['odoo.sql_db:DEBUG'],
     'info': [],
+    'runbot': ['odoo:RUNBOT', 'werkzeug:WARNING'],
     'warn': ['odoo:WARNING', 'werkzeug:WARNING'],
     'error': ['odoo:ERROR', 'werkzeug:ERROR'],
     'critical': ['odoo:CRITICAL', 'werkzeug:CRITICAL'],
 }
+
+logging.RUNBOT = 25
+logging.addLevelName(logging.RUNBOT, "INFO") # displayed as info in log
+logging.captureWarnings(True)
+
+def runbot(self, message, *args, **kws):
+    self.log(logging.RUNBOT, message, *args, **kws)
+logging.Logger.runbot = runbot

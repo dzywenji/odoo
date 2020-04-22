@@ -6,30 +6,14 @@ import logging
 import os
 import re
 
-from functools import partial
 from lxml import etree
 from odoo import tools
-from odoo.tools.safe_eval import safe_eval
 
 _logger = logging.getLogger(__name__)
 
 
 _validators = collections.defaultdict(list)
 _relaxng_cache = {}
-
-# attributes in views that may contain references to field names
-ATTRS_WITH_FIELD_NAMES = {
-    'context',
-    'domain',
-    'decoration-bf',
-    'decoration-it',
-    'decoration-danger',
-    'decoration-info',
-    'decoration-muted',
-    'decoration-primary',
-    'decoration-success',
-    'decoration-warning',
-}
 
 READONLY = re.compile(r"\breadonly\b")
 
@@ -39,7 +23,6 @@ def _get_attrs_symbols():
     return {
         'True', 'False', 'None',    # those are identifiers in Python 2.7
         'self',
-        'parent',
         'id',
         'uid',
         'context',
@@ -62,90 +45,91 @@ def _get_attrs_symbols():
     }
 
 
-def _view_is_editable(node):
-    """ Return whether the node is an editable view. """
-    return node.tag == 'form' or node.tag == 'tree' and node.get('editable')
-
-
-def field_is_editable(field, node):
-    """ Return whether a field is editable (not always readonly). """
-    return (
-        (not field.readonly or READONLY.search(str(field.states or ""))) and
-        (node.get('readonly') != "1" or READONLY.search(node.get('attrs') or ""))
-    )
-
-
-def get_attrs_field_names(env, arch, model, editable):
-    """ Retrieve the field names appearing in context, domain and attrs, and
-        return a list of triples ``(field_name, attr_name, attr_value)``.
+def get_variable_names(expr):
+    """ Return the subexpressions of the kind "VARNAME(.ATTNAME)*" in the given
+    string or AST node.
     """
-    VIEW_TYPES = {item[0] for item in type(env['ir.ui.view']).type.selection}
-    symbols = _get_attrs_symbols() | {None}
-    result = []
+    IGNORED = _get_attrs_symbols()
+    names = set()
 
-    def get_name(node):
-        """ return the name from an AST node, or None """
+    def get_name_seq(node):
         if isinstance(node, ast.Name):
-            return node.id
+            return [node.id]
+        elif isinstance(node, ast.Attribute):
+            left = get_name_seq(node.value)
+            return left and left + [node.attr]
 
-    def get_subname(get, node):
-        """ return the subfield name from an AST node, or None """
-        if isinstance(node, ast.Attribute) and get(node.value) == 'parent':
-            return node.attr
+    def process(node):
+        seq = get_name_seq(node)
+        if seq and seq[0] not in IGNORED:
+            names.add('.'.join(seq))
+        else:
+            for child in ast.iter_child_nodes(node):
+                process(child)
 
-    def process_expr(expr, get, key, val):
-        """ parse `expr` and collect triples """
-        for node in ast.walk(ast.parse(expr.strip(), mode='eval')):
-            name = get(node)
-            if name not in symbols:
-                result.append((name, key, val))
+    if isinstance(expr, str):
+        expr = ast.parse(expr.strip(), mode='eval').body
+    process(expr)
 
-    def process_attrs(expr, get, key, val):
-        """ parse `expr` and collect field names in lhs of conditions. """
-        for domain in safe_eval(expr).values():
-            if not isinstance(domain, list):
+    return names
+
+
+def get_dict_asts(expr):
+    """ Check that the given string or AST node represents a dict expression
+    where all keys are string literals, and return it as a dict mapping string
+    keys to the AST of values.
+    """
+    if isinstance(expr, str):
+        expr = ast.parse(expr.strip(), mode='eval').body
+
+    if not isinstance(expr, ast.Dict):
+        raise ValueError("Non-dict expression")
+    if not all(isinstance(key, ast.Str) for key in expr.keys):
+        raise ValueError("Non-string literal dict key")
+    return {key.s: val for key, val in zip(expr.keys, expr.values)}
+
+
+def _check(condition, explanation):
+    if not condition:
+        raise ValueError("Expression is not a valid domain: %s" % explanation)
+
+
+def get_domain_identifiers(expr):
+    """ Check that the given string or AST node represents a domain expression,
+    and return a pair of sets ``(fields, vars)`` where ``fields`` are the field
+    names on the left-hand side of conditions, and ``vars`` are the variable
+    names on the right-hand side of conditions.
+    """
+    if not expr:  # case of expr=""
+        return (set(), set())
+    if isinstance(expr, str):
+        expr = ast.parse(expr.strip(), mode='eval').body
+
+    fnames = set()
+    vnames = set()
+
+    if isinstance(expr, ast.List):
+        for elem in expr.elts:
+            if isinstance(elem, ast.Str):
+                # note: this doesn't check the and/or structure
+                _check(elem.s in ('&', '|', '!'),
+                       f"logical operators should be '&', '|', or '!', found {elem.s!r}")
                 continue
-            for arg in domain:
-                if isinstance(arg, (tuple, list)):
-                    process_expr(str(arg[0]), get, key, expr)
 
-    def process(node, model, editable, get=get_name):
-        """ traverse `node` and collect triples """
-        if node.tag in VIEW_TYPES:
-            # determine whether this view is editable
-            editable = editable and _view_is_editable(node)
-        elif node.tag in ('field', 'groupby'):
-            # determine whether the field is editable
-            field = model._fields.get(node.get('name'))
-            if field:
-                editable = editable and field_is_editable(field, node)
-
-        for key, val in node.items():
-            if not val:
+            if not isinstance(elem, (ast.List, ast.Tuple)):
                 continue
-            if key in ATTRS_WITH_FIELD_NAMES:
-                process_expr(val, get, key, val)
-            elif key == 'attrs':
-                process_attrs(val, get, key, val)
 
-        if node.tag in ('field', 'groupby') and field and field.relational:
-            if editable and not node.get('domain'):
-                domain = field._description_domain(env)
-                # process the field's domain as if it was in the view
-                if isinstance(domain, str):
-                    process_expr(domain, get, 'domain', domain)
-            # retrieve subfields of 'parent'
-            model = env[field.comodel_name]
-            get = partial(get_subname, get)
+            _check(len(elem.elts) == 3,
+                   f"segments should have 3 elements, found {len(elem.elts)}")
+            lhs, operator, rhs = elem.elts
+            _check(isinstance(operator, ast.Str),
+                   f"operator should be a string, found {type(operator).__name__}")
+            if isinstance(lhs, ast.Str):
+                fnames.add(lhs.s)
 
-        for child in node:
-            if node.tag == 'search' and child.tag == 'searchpanel':
-                # searchpanel part has to be validated independently
-                continue
-            process(child, model, editable, get)
+    vnames.update(get_variable_names(expr))
 
-    process(arch, model, editable)
-    return result
+    return (fnames, vnames)
 
 
 def valid_view(arch, **kwargs):
@@ -183,7 +167,7 @@ def relaxng(view_type):
     return _relaxng_cache[view_type]
 
 
-@validate('calendar', 'diagram', 'graph', 'pivot', 'search', 'tree', 'activity')
+@validate('calendar', 'graph', 'pivot', 'search', 'tree', 'activity')
 def schema_valid(arch, **kwargs):
     """ Get RNG validator and validate RNG file."""
     validator = relaxng(arch.tag)
@@ -194,6 +178,7 @@ def schema_valid(arch, **kwargs):
             result = False
         return result
     return True
+<<<<<<< HEAD
 
 
 @validate('search')
@@ -461,3 +446,5 @@ def valid_alerts(arch, **kwargs):
     if arch.xpath(xpath):
         return "Warning"
     return True
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

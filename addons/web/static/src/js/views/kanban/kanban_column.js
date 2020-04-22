@@ -63,6 +63,7 @@ var KanbanColumn = Widget.extend({
         this.relation = options.relation;
         this.offset = 0;
         this.remaining = data.count - this.data_records.length;
+        this.canBeFolded = this.folded;
 
         if (options.hasProgressBar) {
             this.barOptions = {
@@ -73,8 +74,8 @@ var KanbanColumn = Widget.extend({
 
         this.record_options = _.clone(recordOptions);
 
-        if (options.grouped_by_m2o) {
-            // For many2one, a false value means that the field is not set.
+        if (options.grouped_by_m2o || options.grouped_by_date ) {
+            // For many2one and datetime, a false value means that the field is not set.
             this.title = value ? value : _t('Undefined');
         } else {
             // False and 0 might be valid values for these fields.
@@ -101,10 +102,7 @@ var KanbanColumn = Widget.extend({
             defs.push(this._addRecord(this.data_records[i]));
         }
 
-        if (this.recordsDraggable && !config.device.isMobile) {
-            // deactivate sortable in mobile mode.  It does not work anyway,
-            // and it breaks horizontal scrolling in kanban views.  Someday, we
-            // should find a way to use the touch events to make sortable work.
+        if (this.recordsDraggable) {
             this.$el.sortable({
                 connectWith: '.o_kanban_group',
                 containment: this.draggable ? false : 'parent',
@@ -158,7 +156,7 @@ var KanbanColumn = Widget.extend({
         var title = this.folded ? this.title + ' (' + this.data.count + ')' : this.title;
         this.$header.find('.o_column_title').text(title);
 
-        this.$el.toggleClass('o_column_folded', this.folded && !config.device.isMobile);
+        this.$el.toggleClass('o_column_folded', this.canBeFolded);
         if (this.tooltipInfo) {
             this.$header.find('.o_kanban_header_title').tooltip({}).attr('data-original-title', this.tooltipInfo);
         }

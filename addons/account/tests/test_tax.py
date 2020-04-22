@@ -1,82 +1,89 @@
 # -*- coding: utf-8 -*-
-from odoo.addons.account.tests.account_test_users import AccountTestUsers
+from odoo.addons.account.tests.common import AccountTestInvoicingCommon
 from odoo.tests import tagged
 
 
 @tagged('post_install', '-at_install')
-class TestTax(AccountTestUsers):
+class TestTaxCommon(AccountTestInvoicingCommon):
 
-    def setUp(self):
-        super(TestTax, self).setUp()
+    @classmethod
+    def setUpClass(cls):
+        super(TestTaxCommon, cls).setUpClass()
 
-        self.fixed_tax = self.tax_model.create({
+        # Setup another company having a rounding of 1.0.
+        cls.currency_data['currency'].rounding = 1.0
+        cls.currency_no_decimal = cls.currency_data['currency']
+        cls.company_data_2 = cls.setup_company_data('company_2', currency_id=cls.currency_no_decimal.id)
+        cls.env.user.company_id = cls.company_data['company']
+
+        cls.fixed_tax = cls.env['account.tax'].create({
             'name': "Fixed tax",
             'amount_type': 'fixed',
             'amount': 10,
             'sequence': 1,
         })
-        self.fixed_tax_bis = self.tax_model.create({
+        cls.fixed_tax_bis = cls.env['account.tax'].create({
             'name': "Fixed tax bis",
             'amount_type': 'fixed',
             'amount': 15,
             'sequence': 2,
         })
-        self.percent_tax = self.tax_model.create({
+        cls.percent_tax = cls.env['account.tax'].create({
             'name': "Percent tax",
             'amount_type': 'percent',
             'amount': 10,
             'sequence': 3,
         })
-        self.percent_tax_bis = self.tax_model.create({
+        cls.percent_tax_bis = cls.env['account.tax'].create({
             'name': "Percent tax bis",
             'amount_type': 'percent',
             'amount': 10,
             'sequence': 4,
         })
-        self.division_tax = self.tax_model.create({
+        cls.division_tax = cls.env['account.tax'].create({
             'name': "Division tax",
             'amount_type': 'division',
             'amount': 10,
             'sequence': 4,
         })
-        self.group_tax = self.tax_model.create({
+        cls.group_tax = cls.env['account.tax'].create({
             'name': "Group tax",
             'amount_type': 'group',
             'amount': 0,
             'sequence': 5,
             'children_tax_ids': [
-                (4, self.fixed_tax.id, 0),
-                (4, self.percent_tax.id, 0)
+                (4, cls.fixed_tax.id, 0),
+                (4, cls.percent_tax.id, 0)
             ]
         })
-        self.group_tax_bis = self.tax_model.create({
+        cls.group_tax_bis = cls.env['account.tax'].create({
             'name': "Group tax bis",
             'amount_type': 'group',
             'amount': 0,
             'sequence': 6,
             'children_tax_ids': [
-                (4, self.fixed_tax.id, 0),
-                (4, self.percent_tax.id, 0)
+                (4, cls.fixed_tax.id, 0),
+                (4, cls.percent_tax.id, 0)
             ]
         })
-        self.group_of_group_tax = self.tax_model.create({
+        cls.group_of_group_tax = cls.env['account.tax'].create({
             'name': "Group of group tax",
             'amount_type': 'group',
             'amount': 0,
             'sequence': 7,
             'children_tax_ids': [
-                (4, self.group_tax.id, 0),
-                (4, self.group_tax_bis.id, 0)
+                (4, cls.group_tax.id, 0),
+                (4, cls.group_tax_bis.id, 0)
             ]
         })
-        self.tax_with_no_account = self.tax_model.create({
+        cls.tax_with_no_account = cls.env['account.tax'].create({
             'name': "Tax with no account",
             'amount_type': 'fixed',
             'amount': 0,
             'sequence': 8,
         })
-        some_account = self.env['account.account'].search([], limit=1)
-        self.tax_with_account = self.tax_model.create({
+        some_account = cls.env['account.account'].search([], limit=1)
+        cls.tax_with_account = cls.env['account.tax'].create({
             'name': "Tax with account",
             'amount_type': 'fixed',
             'amount': 0,
@@ -107,18 +114,27 @@ class TestTax(AccountTestUsers):
             ],
         })
 
+<<<<<<< HEAD
         self.tax_12_percent = self.tax_model.create({
+=======
+        cls.tax_12_percent = cls.env['account.tax'].with_company(cls.company_data['company']).create({
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'name': "test_12_percent",
             'amount_type': 'percent',
             'amount': 12,
         })
 
+<<<<<<< HEAD
         self.tax_19_percent = self.tax_model.create({
+=======
+        cls.tax_19_percent = cls.env['account.tax'].with_company(cls.company_data_2['company']).create({
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'name': "test_19_percent",
             'amount_type': 'percent',
             'amount': 19,
         })
 
+<<<<<<< HEAD
         self.tax_21_percent = self.tax_model.create({
             'name': "test_21_percent",
             'amount_type': 'percent',
@@ -128,6 +144,23 @@ class TestTax(AccountTestUsers):
         self.bank_journal = self.env['account.journal'].search([('type', '=', 'bank'), ('company_id', '=', self.account_manager.company_id.id)])[0]
         self.bank_account = self.bank_journal.default_debit_account_id
         self.expense_account = self.env['account.account'].search([('user_type_id.type', '=', 'payable')], limit=1) #Should be done by onchange later
+=======
+        cls.tax_21_percent = cls.env['account.tax'].with_company(cls.company_data['company']).create({
+            'name': "test_21_percent",
+            'amount_type': 'percent',
+            'amount': 19,
+        })
+
+        cls.tax_21_percent = cls.env['account.tax'].with_company(cls.company_data['company']).create({
+            'name': "test_rounding_methods_2",
+            'amount_type': 'percent',
+            'amount': 21,
+        })
+
+        cls.bank_journal = cls.company_data['default_journal_bank']
+        cls.bank_account = cls.bank_journal.default_debit_account_id
+        cls.expense_account = cls.company_data['default_account_expense']
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         # Ensure the rounding method is 'round_per_line' to avoid issue when launching the tests on
         # an existing DB.
@@ -139,6 +172,14 @@ class TestTax(AccountTestUsers):
         for i in range(0, len(taxes)):
             self.assertAlmostEqual(res['taxes'][i]['base'], taxes[i][0])
             self.assertAlmostEqual(res['taxes'][i]['amount'], taxes[i][1])
+
+
+@tagged('post_install', '-at_install')
+class TestTax(TestTaxCommon):
+
+    @classmethod
+    def setUpClass(cls):
+        super(TestTax, cls).setUpClass()
 
     def test_tax_group_of_group_tax(self):
         self.fixed_tax.include_base_amount = True
@@ -698,6 +739,42 @@ class TestTax(AccountTestUsers):
             res2
         )
 
+<<<<<<< HEAD
+=======
+    def test_rounding_tax_excluded_round_globally(self):
+        ''' Test the rounding of a 19% price excluded tax in an invoice having 22689 and 9176 as lines.
+        The decimal precision is set to zero.
+        The computation must be similar to round((22689 + 9176) * 0.19).
+        '''
+        self.tax_19_percent.company_id.tax_calculation_rounding_method = 'round_globally'
+
+        res1 = self.tax_19_percent.compute_all(22689)
+        self._check_compute_all_results(
+            27000,      # 'total_included'
+            22689,      # 'total_excluded'
+            [
+                # base, amount
+                # ---------------
+                (22689, 4310.91),
+                # ---------------
+            ],
+            res1
+        )
+
+        res2 = self.tax_19_percent.compute_all(9176)
+        self._check_compute_all_results(
+            10919,      # 'total_included'
+            9176,       # 'total_excluded'
+            [
+                # base , amount
+                # ---------------
+                (9176,  1743.44),
+                # ---------------
+            ],
+            res2
+        )
+
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     def test_rounding_tax_included_round_per_line_01(self):
         ''' Test the rounding of a 19% price included tax in an invoice having 27000 and 10920 as lines.
         The decimal precision is set to zero.
@@ -754,6 +831,43 @@ class TestTax(AccountTestUsers):
         )
 
     def test_rounding_tax_included_round_globally_01(self):
+<<<<<<< HEAD
+=======
+        ''' Test the rounding of a 19% price included tax in an invoice having 27000 and 10920 as lines.
+        The decimal precision is set to zero.
+        The computation must be similar to round((27000 + 10920) / 1.19).
+        '''
+        self.tax_19_percent.price_include = True
+        self.tax_19_percent.company_id.tax_calculation_rounding_method = 'round_globally'
+
+        res1 = self.tax_19_percent.compute_all(27000)
+        self._check_compute_all_results(
+            27000,      # 'total_included'
+            22689,      # 'total_excluded'
+            [
+                # base , amount
+                # ---------------
+                (22689, 4311),
+                # ---------------
+            ],
+            res1
+        )
+
+        res2 = self.tax_19_percent.compute_all(10920)
+        self._check_compute_all_results(
+            10920,      # 'total_included'
+            9176,       # 'total_excluded'
+            [
+                # base , amount
+                # ---------------
+                (9176,  1744),
+                # ---------------
+            ],
+            res2
+        )
+
+    def test_rounding_tax_included_round_globally_02(self):
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         ''' Test the rounding of a 21% price included tax in an invoice having 11.90 and 2.80 as lines.
         The decimal precision is set to 2.
         '''
@@ -768,7 +882,11 @@ class TestTax(AccountTestUsers):
             [
                 # base , amount
                 # ---------------
+<<<<<<< HEAD
                 (9.8347107, 2.0652893),
+=======
+                (9.83, 2.07),
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 # ---------------
             ],
             res1
@@ -781,7 +899,11 @@ class TestTax(AccountTestUsers):
             [
                 # base , amount
                 # ---------------
+<<<<<<< HEAD
                 (2.3140496,  0.4859504),
+=======
+                (2.31,  0.49),
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 # ---------------
             ],
             res2

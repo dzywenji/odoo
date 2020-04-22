@@ -8,7 +8,7 @@
     'description': "",
     'website': 'https://www.odoo.com/page/warehouse',
     'depends': ['product', 'barcodes'],
-    'category': 'Operations/Inventory',
+    'category': 'Inventory/Inventory',
     'sequence': 13,
     'demo': [
         'data/stock_demo_pre.xml',
@@ -47,7 +47,6 @@
         'wizard/stock_scheduler_compute_views.xml',
         'wizard/stock_immediate_transfer_views.xml',
         'wizard/stock_backorder_confirmation_views.xml',
-        'wizard/stock_overprocessed_transfer_views.xml',
         'wizard/stock_quantity_history.xml',
         'wizard/stock_rules_report_views.xml',
         'wizard/stock_warn_insufficient_qty_views.xml',
@@ -80,6 +79,8 @@
     'qweb': [
         'static/src/xml/inventory_report.xml',
         'static/src/xml/inventory_lines.xml',
+        'static/src/xml/popover_widget.xml',
+        'static/src/xml/stock_orderpoint_lead_days_widget.xml',
         'static/src/xml/stock_traceability_report_backend.xml',
     ],
     'installable': True,

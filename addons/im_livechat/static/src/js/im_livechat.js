@@ -105,6 +105,12 @@ var LivechatButton = Widget.extend({
             }
         }
         this.call('bus_service', 'onNotification', this, this._onNotification);
+        if (this.options.button_background_color) {
+            this.$el.css('background-color', this.options.button_background_color);
+        }
+        if (this.options.button_text_color) {
+            this.$el.css('color', this.options.button_text_color);
+        }
         return this._super();
     },
 
@@ -233,7 +239,11 @@ var LivechatButton = Widget.extend({
         }
         def.then(function (livechatData) {
             if (!livechatData || !livechatData.operator_pid) {
-                alert(_t("None of our collaborators seem to be available, please try again later."));
+                self.displayNotification({
+                    title: _t("Collaborators offline"),
+                    message: _t("None of our collaborators seem to be available, please try again later."),
+                    sticky: true
+                });
             } else {
                 self._livechat = new WebsiteLivechat({
                     parent: self,
@@ -290,7 +300,9 @@ var LivechatButton = Widget.extend({
         var self = this;
         var options = {
             displayStars: false,
+            headerBackgroundColor: this.options.header_background_color,
             placeholder: this.options.input_placeholder || "",
+            titleColor: this.options.title_color,
         };
         this._chatWindow = new WebsiteLivechatWindow(this, this._livechat, options);
         return this._chatWindow.appendTo($('body')).then(function () {
@@ -320,7 +332,15 @@ var LivechatButton = Widget.extend({
         var self = this;
         return session
             .rpc('/mail/chat_post', {uuid: this._livechat.getUUID(), message_content: message.content})
-            .then(function () {
+            .then(function (messageId) {
+                if (!messageId) {
+                    self.displayNotification({
+                        title: _t("Session Expired"),
+                        message: _t("You took to long to send a message. Please refresh the page and try again."),
+                        sticky: true
+                    });
+                    self._closeChat();
+                }
                 self._chatWindow.scrollToBottom();
             });
     },
@@ -462,7 +482,7 @@ var Feedback = Widget.extend({
             if (reason) {
                 content += " \n" + reason;
             }
-            self.trigger('send_message', { content: content });
+            self.trigger('send_message', { content: content, isFeedback: true });
         });
     },
     /**

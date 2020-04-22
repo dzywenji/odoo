@@ -13,9 +13,12 @@ var core = require('web.core');
 var dom = require('web.dom');
 var widgetRegistry = require('web.widget_registry');
 
+const { WidgetAdapterMixin } = require('web.OwlCompatibility');
+const FieldWrapper = require('web.FieldWrapper');
+
 var qweb = core.qweb;
 
-var BasicRenderer = AbstractRenderer.extend({
+var BasicRenderer = AbstractRenderer.extend(WidgetAdapterMixin, {
     custom_events: {
         navigation_move: '_onNavigationMove',
     },
@@ -35,6 +38,44 @@ var BasicRenderer = AbstractRenderer.extend({
         // and on which field it is set.
         this.handleField = null;
     },
+    /**
+     * @override
+     */
+    destroy: function () {
+        this._super.apply(this, arguments);
+        WidgetAdapterMixin.destroy.call(this);
+    },
+    /**
+     * Called each time the renderer is attached into the DOM.
+     */
+    on_attach_callback: function () {
+        for (const handle in this.allFieldWidgets) {
+            this.allFieldWidgets[handle].forEach(widget => {
+                if (widget.on_attach_callback) {
+                    widget.on_attach_callback();
+                }
+            });
+        }
+        WidgetAdapterMixin.on_attach_callback.call(this);
+    },
+    /**
+     * Called each time the renderer is detached from the DOM.
+     */
+    on_detach_callback: function () {
+        for (const handle in this.allFieldWidgets) {
+            this.allFieldWidgets[handle].forEach(widget => {
+                if (widget.on_detach_callback) {
+                    widget.on_detach_callback();
+                }
+            });
+        }
+        WidgetAdapterMixin.on_detach_callback.call(this);
+    },
+
+    //--------------------------------------------------------------------------
+    // Public
+    //--------------------------------------------------------------------------
+
     /**
      * This method has two responsabilities: find every invalid fields in the
      * current view, and making sure that they are displayed as invalid, by
@@ -520,6 +561,7 @@ var BasicRenderer = AbstractRenderer.extend({
      *   value (if not given, it is set to this.mode, the mode of the renderer)
      * @returns {Object} for code efficiency, returns the last evaluated
      *   modifiers for the given node and record.
+     * @throws {Error} if one of the modifier domains is not valid
      */
     _registerModifiers: function (node, record, element, options) {
         options = options || {};
@@ -548,7 +590,15 @@ var BasicRenderer = AbstractRenderer.extend({
 
         // Evaluate if necessary
         if (!modifiersData.evaluatedModifiers[record.id]) {
-            modifiersData.evaluatedModifiers[record.id] = record.evalModifiers(modifiersData.modifiers);
+            try {
+                modifiersData.evaluatedModifiers[record.id] = record.evalModifiers(modifiersData.modifiers);
+            } catch (e) {
+                throw new Error(_.str.sprintf(
+                    "While parsing modifiers for %s%s: %s",
+                    node.tag, node.tag === 'field' ? ' ' + node.attrs.name : '',
+                    e.message
+                ));
+            }
         }
 
         // Element might not be given yet (a second call to the function can
@@ -570,7 +620,7 @@ var BasicRenderer = AbstractRenderer.extend({
             }
             modifiersData.elementsByRecord[record.id].push(newElement);
 
-            this._applyModifiers(modifiersData, record, newElement, options);
+            this._applyModifiers(modifiersData, record, newElement);
         }
 
         return modifiersData.evaluatedModifiers[record.id];
@@ -625,10 +675,21 @@ var BasicRenderer = AbstractRenderer.extend({
         // Initialize and register the widget
         // Readonly status is known as the modifiers have just been registered
         var Widget = record.fieldsInfo[this.viewType][fieldName].Widget;
-        var widget = new Widget(this, fieldName, record, {
+        const legacy = !(Widget.prototype instanceof owl.Component);
+        const widgetOptions = {
             mode: modifiers.readonly ? 'readonly' : mode,
             viewType: this.viewType,
-        });
+        };
+        let widget;
+        if (legacy) {
+            widget = new Widget(this, fieldName, record, widgetOptions);
+        } else {
+            widget = new FieldWrapper(this, Widget, {
+                fieldName,
+                record,
+                options: widgetOptions,
+            });
+        }
 
         // Register the widget so that it can easily be found again
         if (this.allFieldWidgets[record.id] === undefined) {
@@ -639,8 +700,13 @@ var BasicRenderer = AbstractRenderer.extend({
         widget.__node = node; // TODO get rid of this if possible one day
 
         // Prepare widget rendering and save the related promise
-        var def = widget._widgetRenderAndInsert(function () {});
         var $el = $('<div>');
+        let def;
+        if (legacy) {
+            def = widget._widgetRenderAndInsert(function () {});
+        } else {
+            def = widget.mount(document.createDocumentFragment());
+        }
 
         this.defs.push(def);
 
@@ -662,7 +728,7 @@ var BasicRenderer = AbstractRenderer.extend({
                     element.$el.toggleClass('o_field_empty', !!(
                         record.data.id &&
                         (modifiers.readonly || mode === 'readonly') &&
-                        !element.widget.isSet()
+                        element.widget.isEmpty()
                     ));
                 },
                 keepBaseMode: !!options.keepBaseMode,
@@ -746,13 +812,26 @@ var BasicRenderer = AbstractRenderer.extend({
     _rerenderFieldWidget: function (widget, record, options) {
         // Render the new field widget
         var $el = this._renderFieldWidget(widget.__node, record, options);
-        widget.$el.replaceWith($el);
+        // get the new widget that has just been pushed in allFieldWidgets
+        const recordWidgets = this.allFieldWidgets[record.id];
+        const newWidget = recordWidgets[recordWidgets.length - 1];
+        const def = this.defs[this.defs.length - 1]; // this is the widget's def, resolved when it is ready
+        const $div = $('<div>');
+        $div.append($el); // $el will be replaced when widget is ready (see _renderFieldWidget)
+        def.then(() => {
+            widget.$el.replaceWith($div.children());
 
-        // Destroy the old widget and position the new one at the old one's
-        var oldIndex = this._destroyFieldWidget(record.id, widget);
-        var recordWidgets = this.allFieldWidgets[record.id];
-        var newWidget = recordWidgets.pop();
-        recordWidgets.splice(oldIndex, 0, newWidget);
+            // Destroy the old widget and position the new one at the old one's
+            // (it has been temporarily inserted at the end of the list)
+            recordWidgets.splice(recordWidgets.indexOf(newWidget), 1);
+            var oldIndex = this._destroyFieldWidget(record.id, widget);
+            recordWidgets.splice(oldIndex, 0, newWidget);
+
+            // Mount new widget if necessary (mainly for Owl components)
+            if (this._isInDom && newWidget.on_attach_callback) {
+                newWidget.on_attach_callback();
+            }
+        });
     },
     /**
      * Unregisters an element of the modifiers data associated to the given

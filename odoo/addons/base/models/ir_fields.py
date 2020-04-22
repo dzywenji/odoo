@@ -452,24 +452,31 @@ class IrFieldsConverter(models.AbstractModel):
             # [{subfield:ref1},{subfield:ref2},{subfield:ref3}]
             records = ({subfield:item} for item in record[subfield].split(','))
 
-        def log(_, e):
-            if not isinstance(e, Warning):
-                raise e
-            warnings.append(e)
+        def log(f, exception):
+            if not isinstance(exception, Warning):
+                current_field_name = self.env[field.comodel_name]._fields[f].string
+                arg0 = exception.args[0] % {'field': '%(field)s/' + current_field_name}
+                exception.args = (arg0, *exception.args[1:])
+                raise exception
+            warnings.append(exception)
 
         convert = self.for_model(self.env[field.comodel_name])
 
         for record in records:
             id = None
             refs = only_ref_fields(record)
-            # there are ref fields in the record
+            writable = convert(exclude_ref_fields(record), log)
             if refs:
                 subfield, w1 = self._referencing_subfield(refs)
                 warnings.extend(w1)
-                id, _, w2 = self.db_id_for(model, field, subfield, record[subfield])
-                warnings.extend(w2)
+                try:
+                    id, _, w2 = self.db_id_for(model, field, subfield, record[subfield])
+                    warnings.extend(w2)
+                except ValueError:
+                    if subfield != 'id':
+                        raise
+                    writable['id'] = record['id']
 
-            writable = convert(exclude_ref_fields(record), log)
             if id:
                 commands.append(LINK_TO(id))
                 commands.append(UPDATE(id, writable))
@@ -477,3 +484,37 @@ class IrFieldsConverter(models.AbstractModel):
                 commands.append(CREATE(writable))
 
         return commands, warnings
+
+class O2MIdMapper(models.AbstractModel):
+    """
+    Updates the base class to support setting xids directly in create by
+    providing an "id" key (otherwise stripped by create) during an import
+    (which should strip 'id' from the input data anyway)
+    """
+    _inherit = 'base'
+
+    # sadly _load_records_create is only called for the toplevel record so we
+    # can't hook into that
+    @api.model_create_multi
+    @api.returns('self', lambda value: value.id)
+    def create(self, vals_list):
+        recs = super().create(vals_list)
+
+        import_module = self.env.context.get('_import_current_module')
+        if not import_module: # not an import -> bail
+            return recs
+        noupdate = self.env.context.get('noupdate', False)
+
+        xids = (v.get('id') for v in vals_list)
+        self.env['ir.model.data']._update_xmlids([
+            {
+                'xml_id': xid if '.' in xid else ('%s.%s' % (import_module, xid)),
+                'record': rec,
+                # note: this is not used when updating o2ms above...
+                'noupdate': noupdate,
+            }
+            for rec, xid in zip(recs, xids)
+            if xid and isinstance(xid, str)
+        ])
+
+        return recs

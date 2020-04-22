@@ -14,12 +14,14 @@
     If you have any questions, please let us know.
     <br/><br/>
     Thank you,
-    <br/>
+    % if user.signature
+        <br />
+        ${user.signature | safe}
+    % endif
 </div>
         </field>
             <field name="lang">${object.partner_id.lang}</field>
             <field name="auto_delete" eval="True"/>
-            <field name="user_signature" eval="True"/>
         </record>
 
         <!-- Mail sent to request a rating for a task -->
@@ -36,7 +38,7 @@
     <table border="0" cellpadding="0" cellspacing="0" width="590" style="width:100%; margin:0px auto;">
     <tbody>
         <tr><td valign="top" style="font-size: 13px;">
-            Hello ${partner.name},<br/>
+            Hello ${partner.name},<br/><br/>
             Please take a moment to rate our services related to the task "<strong>${object.name}</strong>"
             % if object.rating_get_rated_partner_id().name:
                 assigned to <strong>${object.rating_get_rated_partner_id().name}</strong>.<br/>
@@ -88,7 +90,6 @@
             </field>
             <field name="lang">${object.rating_get_partner_id().lang}</field>
             <field name="auto_delete" eval="True"/>
-            <field name="user_signature" eval="False"/>
         </record>
     </data>
 </odoo>

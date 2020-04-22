@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
+
 #
 # test cases for new-style fields
 #
@@ -8,15 +11,28 @@ import io
 from PIL import Image
 import psycopg2
 
-from odoo import fields
+from odoo import models, fields
+from odoo.addons.base.tests.common import TransactionCaseWithUserDemo
 from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.tests import common
 from odoo.tools import mute_logger, float_repr
 from odoo.tools.date_utils import add, subtract, start_of, end_of
 from odoo.tools.image import image_data_uri
+<<<<<<< HEAD
+=======
 
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
-class TestFields(common.TransactionCase):
+class TestFields(TransactionCaseWithUserDemo):
+
+    def setUp(self):
+        super(TestFields, self).setUp()
+        self.env.ref('test_new_api.discussion_0').write({'participants': [(4, self.user_demo.id)]})
+        # YTI FIX ME: The cache shouldn't be inconsistent (rco is gonna fix it)
+        # self.env.ref('test_new_api.discussion_0').participants -> 1 user
+        # self.env.ref('test_new_api.discussion_0').invalidate_cache()
+        # self.env.ref('test_new_api.discussion_0').with_context(active_test=False).participants -> 2 users
+        self.env.ref('test_new_api.message_0_1').write({'author': self.user_demo.id})
 
     def test_00_basics(self):
         """ test accessing new fields """
@@ -97,19 +113,43 @@ class TestFields(common.TransactionCase):
 
     def test_10_computed(self):
         """ check definition of computed fields """
-        # by default function fields are not stored and readonly
+        # by default function fields are not stored, readonly, not copied
         field = self.env['test_new_api.message']._fields['size']
         self.assertFalse(field.store)
         self.assertFalse(field.compute_sudo)
         self.assertTrue(field.readonly)
+        self.assertFalse(field.copy)
 
         field = self.env['test_new_api.message']._fields['name']
         self.assertTrue(field.store)
         self.assertTrue(field.compute_sudo)
         self.assertTrue(field.readonly)
+        self.assertFalse(field.copy)
+
+        # stored editable computed fields are copied according to their type
+        field = self.env['test_new_api.compute.onchange']._fields['baz']
+        self.assertTrue(field.store)
+        self.assertTrue(field.compute_sudo)
+        self.assertFalse(field.readonly)
+        self.assertTrue(field.copy)
+
+        field = self.env['test_new_api.compute.onchange']._fields['line_ids']
+        self.assertTrue(field.store)
+        self.assertTrue(field.compute_sudo)
+        self.assertFalse(field.readonly)
+        self.assertFalse(field.copy)  # like a regular one2many field
+
+        field = self.env['test_new_api.compute.onchange']._fields['tag_ids']
+        self.assertTrue(field.store)
+        self.assertTrue(field.compute_sudo)
+        self.assertFalse(field.readonly)
+        self.assertTrue(field.copy)  # like a regular many2many field
 
     def test_10_computed_custom(self):
         """ check definition of custom computed fields """
+        # Flush demo user before creating a new ir.model.fields to avoid
+        # a deadlock
+        self.user_demo.flush()
         self.env['ir.model.fields'].create({
             'name': 'x_bool_false_computed',
             'model_id': self.env.ref('test_new_api.model_test_new_api_message').id,
@@ -148,7 +188,7 @@ class TestFields(common.TransactionCase):
 
         # create a message, assign body, and check size in several environments
         message1 = self.env['test_new_api.message'].create({})
-        message2 = message1.with_user(self.env.ref('base.user_demo'))
+        message2 = message1.with_user(self.user_demo)
         self.assertEqual(message1.size, 0)
         self.assertEqual(message2.size, 0)
 
@@ -177,6 +217,10 @@ class TestFields(common.TransactionCase):
         check_stored(discussion1)
 
         # switch message from discussion, and check again
+        
+        # See YTI FIXME
+        discussion1.invalidate_cache()
+        
         discussion2 = discussion1.copy({'name': 'Another discussion'})
         message2 = discussion1.messages[0]
         message2.discussion = discussion2
@@ -184,7 +228,7 @@ class TestFields(common.TransactionCase):
 
         # create a new discussion with messages, and check their name
         user_root = self.env.ref('base.user_root')
-        user_demo = self.env.ref('base.user_demo')
+        user_demo = self.user_demo
         discussion3 = self.env['test_new_api.discussion'].create({
             'name': 'Stuff',
             'participants': [(4, user_root.id), (4, user_demo.id)],
@@ -265,7 +309,7 @@ class TestFields(common.TransactionCase):
         # We need to force the read in order to test the security access
         User.invalidate_cache()
         # group users as a recordset, and read them as user demo
-        users = (user1 + user2 + user3).with_user(self.env.ref('base.user_demo'))
+        users = (user1 + user2 + user3).with_user(self.user_demo)
         user1, user2, user3 = users
         # regression test: a bug invalidated the field's value from cache
         user1.company_type
@@ -480,6 +524,7 @@ class TestFields(common.TransactionCase):
     def test_15_constraint(self):
         """ test new-style Python constraints """
         discussion = self.env.ref('test_new_api.discussion_0')
+        discussion.flush()
 
         # remove oneself from discussion participants: we can no longer create
         # messages in discussion
@@ -800,7 +845,7 @@ class TestFields(common.TransactionCase):
 
     def test_23_relation(self):
         """ test relation fields """
-        demo = self.env.ref('base.user_demo')
+        demo = self.user_demo
         message = self.env.ref('test_new_api.message_0_0')
 
         # check environment of record and related records
@@ -818,6 +863,9 @@ class TestFields(common.TransactionCase):
         demo_message = message.with_user(demo)
         self.assertEqual(demo_message.env, demo_env)
         self.assertEqual(demo_message.discussion.env, demo_env)
+
+        # See YTI FIXME
+        message.discussion.invalidate_cache()
 
         # assign record's parent to a record in demo_env
         message.discussion = message.discussion.copy({'name': 'Copy'})
@@ -954,12 +1002,9 @@ class TestFields(common.TransactionCase):
         tag2 = self.env['test_new_api.multi.tag'].create({'name': 'Quuz'})
 
         # create default values for the company-dependent fields
-        field_foo = self.env['ir.model.fields']._get('test_new_api.company', 'foo')
-        self.env['ir.property'].create({'name': 'foo', 'fields_id': field_foo.id,
-                                        'value': 'default', 'type': 'char'})
-        field_tag_id = self.env['ir.model.fields']._get('test_new_api.company', 'tag_id')
-        self.env['ir.property'].create({'name': 'foo', 'fields_id': field_tag_id.id,
-                                        'value': tag0, 'type': 'many2one'})
+        self.env['ir.property'].set_default('foo', 'test_new_api.company', 'default')
+        self.env['ir.property'].set_default('foo', 'test_new_api.company', 'default1', company1)
+        self.env['ir.property'].set_default('tag_id', 'test_new_api.company', tag0)
 
         # assumption: users don't have access to 'ir.property'
         accesses = self.env['ir.model.access'].search([('model_id.model', '=', 'ir.property')])
@@ -973,7 +1018,7 @@ class TestFields(common.TransactionCase):
             'tag_id': tag1.id,
         })
         self.assertEqual(record.with_user(user0).foo, 'main')
-        self.assertEqual(record.with_user(user1).foo, 'default')
+        self.assertEqual(record.with_user(user1).foo, 'default1')
         self.assertEqual(record.with_user(user2).foo, 'default')
         self.assertEqual(str(record.with_user(user0).date), '1932-11-09')
         self.assertEqual(record.with_user(user1).date, False)
@@ -1021,8 +1066,7 @@ class TestFields(common.TransactionCase):
         self.assertEqual(record.with_user(user1).foo, False)
         self.assertEqual(record.with_user(user2).foo, 'default')
 
-        # set field with 'force_company' in context
-        record.with_user(user0).with_context(force_company=company1.id).foo = 'beta'
+        record.with_user(user0).with_company(company1).foo = 'beta'
         record.invalidate_cache()
         self.assertEqual(record.with_user(user0).foo, 'main')
         self.assertEqual(record.with_user(user1).foo, 'beta')
@@ -1096,6 +1140,52 @@ class TestFields(common.TransactionCase):
         self.assertEqual(cat2.parent, cat1)
         with self.assertRaises(AccessError):
             cat1.name
+
+    def test_40_real_vs_new(self):
+        """ test field access on new records vs real records. """
+        Model = self.env['test_new_api.category']
+        real_record = Model.create({'name': 'Foo'})
+        self.env.cache.invalidate()
+        new_origin = Model.new({'name': 'Bar'}, origin=real_record)
+        new_record = Model.new({'name': 'Baz'})
+
+        # non-computed non-stored field: default value
+        real_record = real_record.with_context(default_dummy='WTF')
+        new_origin = new_origin.with_context(default_dummy='WTF')
+        new_record = new_record.with_context(default_dummy='WTF')
+        self.assertEqual(real_record.dummy, 'WTF')
+        self.assertEqual(new_origin.dummy, 'WTF')
+        self.assertEqual(new_record.dummy, 'WTF')
+
+        # non-computed stored field: origin or default if no origin
+        real_record = real_record.with_context(default_color=42)
+        new_origin = new_origin.with_context(default_color=42)
+        new_record = new_record.with_context(default_color=42)
+        self.assertEqual(real_record.color, 0)
+        self.assertEqual(new_origin.color, 0)
+        self.assertEqual(new_record.color, 42)
+
+        # computed non-stored field: always computed
+        self.assertEqual(real_record.display_name, 'Foo')
+        self.assertEqual(new_origin.display_name, 'Bar')
+        self.assertEqual(new_record.display_name, 'Baz')
+
+        # computed stored field: origin or computed if no origin
+        Model = self.env['test_new_api.recursive']
+        real_record = Model.create({'name': 'Foo'})
+        new_origin = Model.new({'name': 'Bar'}, origin=real_record)
+        new_record = Model.new({'name': 'Baz'})
+        self.assertEqual(real_record.display_name, 'Foo')
+        self.assertEqual(new_origin.display_name, 'Foo')
+        self.assertEqual(new_record.display_name, 'Baz')
+
+        # computed stored field with recomputation: always computed
+        real_record.name = 'Fool'
+        new_origin.name = 'Barr'
+        new_record.name = 'Bazz'
+        self.assertEqual(real_record.display_name, 'Fool')
+        self.assertEqual(new_origin.display_name, 'Barr')
+        self.assertEqual(new_record.display_name, 'Bazz')
 
     def test_40_new_defaults(self):
         """ Test new records with defaults. """
@@ -1223,6 +1313,20 @@ class TestFields(common.TransactionCase):
         # check that this does not generate an infinite recursion
         new_disc._convert_to_write(new_disc._cache)
 
+    def test_40_new_inherited_fields(self):
+        """ Test the behavior of new records with inherited fields. """
+        email = self.env['test_new_api.emailmessage'].new({'body': 'XXX'})
+        self.assertEqual(email.body, 'XXX')
+        self.assertEqual(email.message.body, 'XXX')
+
+        email.body = 'YYY'
+        self.assertEqual(email.body, 'YYY')
+        self.assertEqual(email.message.body, 'YYY')
+
+        email.message.body = 'ZZZ'
+        self.assertEqual(email.body, 'ZZZ')
+        self.assertEqual(email.message.body, 'ZZZ')
+
     def test_40_new_ref_origin(self):
         """ Test the behavior of new records with ref/origin. """
         Discussion = self.env['test_new_api.discussion']
@@ -1285,7 +1389,7 @@ class TestFields(common.TransactionCase):
         access.write({'perm_read': False})
 
         # create an environment for demo user
-        env = self.env(user=self.env.ref('base.user_demo'))
+        env = self.env(user=self.user_demo)
         self.assertEqual(env.user.login, "demo")
 
         # create a new message as demo user
@@ -1310,7 +1414,7 @@ class TestFields(common.TransactionCase):
         access.write({'perm_read': False})
 
         # create an environment for demo user
-        env = self.env(user=self.env.ref('base.user_demo'))
+        env = self.env(user=self.user_demo)
         self.assertEqual(env.user.login, "demo")
 
         # create a new discussion and a new message as demo user
@@ -1364,6 +1468,9 @@ class TestFields(common.TransactionCase):
 
     def test_70_x2many_write(self):
         discussion = self.env.ref('test_new_api.discussion_0')
+        # See YTI FIXME
+        discussion.invalidate_cache()
+
         Message = self.env['test_new_api.message']
         # There must be 3 messages, 0 important
         self.assertEqual(len(discussion.messages), 3)
@@ -1389,10 +1496,14 @@ class TestFields(common.TransactionCase):
     def test_70_relational_inverse(self):
         """ Check the consistency of relational fields with inverse(s). """
         discussion = self.env.ref('test_new_api.discussion_0')
-        demo_discussion = discussion.with_user(self.env.ref('base.user_demo'))
+        demo_discussion = discussion.with_user(self.user_demo)
 
         # check that the demo user sees the same messages
         self.assertEqual(demo_discussion.messages, discussion.messages)
+
+        # See YTI FIXME
+        discussion.invalidate_cache()
+        demo_discussion.invalidate_cache()
 
         # add a message as user demo
         messages = demo_discussion.messages
@@ -1415,7 +1526,7 @@ class TestFields(common.TransactionCase):
         email = self.env.ref('test_new_api.emailmessage_0_0')
         self.assertEqual(email.message, message)
 
-        self.env['res.lang'].load_lang('fr_FR')
+        self.env['res.lang']._activate_lang('fr_FR')
 
         def count(msg):
             # return the number of translations of msg.label
@@ -1458,7 +1569,11 @@ class TestFields(common.TransactionCase):
                 'name': 'Test without attachment',
                 'image_wo_attachment': SVG.decode("utf-8"),
             })
+<<<<<<< HEAD
         self.assertEqual(e.exception.name, 'Only admins can upload SVG files.')
+=======
+        self.assertEqual(e.exception.args[0], 'Only admins can upload SVG files.')
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     def test_90_binary_svg(self):
         from odoo.addons.base.tests.test_mimetypes import SVG
@@ -1470,7 +1585,7 @@ class TestFields(common.TransactionCase):
         # And this gives error
         with self.assertRaises(UserError):
             self.env['test_new_api.binary_svg'].with_user(
-                self.env.ref('base.user_demo'),
+                self.user_demo,
             ).create({
                 'name': 'Test without attachment',
                 'image_wo_attachment': SVG,
@@ -1491,7 +1606,7 @@ class TestFields(common.TransactionCase):
         self.assertEqual(attachment.mimetype, 'image/svg+xml')
         # ...but this should be neutered with demo user
         record = self.env['test_new_api.binary_svg'].with_user(
-            self.env.ref('base.user_demo'),
+            self.user_demo,
         ).create({
             'name': 'Test without attachment',
             'image_attachment': SVG,
@@ -1505,7 +1620,7 @@ class TestFields(common.TransactionCase):
 
     def test_92_binary_self_avatar_svg(self):
         from odoo.addons.base.tests.test_mimetypes import SVG
-        demo_user = self.env.ref('base.user_demo')
+        demo_user = self.user_demo
         # User demo changes his own avatar
         demo_user.with_user(demo_user).image_1920 = SVG
         # The SVG file should have been neutered
@@ -1908,6 +2023,25 @@ class TestX2many(common.TransactionCase):
         self.assertEqual(parent.with_context(active_test=False).all_children_ids, all_children)
         self.assertEqual(parent.with_context(active_test=False).active_children_ids, act_children)
 
+<<<<<<< HEAD
+=======
+    def test_12_active_test_one2many_search(self):
+        Model = self.env['test_new_api.model_active_field']
+        parent = Model.create({})
+        all_children = Model.create([
+            {'name': 'A', 'parent_id': parent.id, 'active': True},
+            {'name': 'B', 'parent_id': parent.id, 'active': False},
+        ])
+
+        # a one2many field without context does not match its inactive children
+        self.assertIn(parent, Model.search([('children_ids.name', '=', 'A')]))
+        self.assertNotIn(parent, Model.search([('children_ids.name', '=', 'B')]))
+
+        # a one2many field with active_test=False matches its inactive children
+        self.assertIn(parent, Model.search([('all_children_ids.name', '=', 'A')]))
+        self.assertIn(parent, Model.search([('all_children_ids.name', '=', 'B')]))
+
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     def test_search_many2many(self):
         """ Tests search on many2many fields. """
         tags = self.env['test_new_api.multi.tag']
@@ -2365,3 +2499,212 @@ class TestSelectionDeleteUpdate(common.TransactionCase):
             ('field_id.name', '=', 'state'),
             ('value', '=', 'confirmed'),
         ], limit=1).unlink()
+<<<<<<< HEAD
+=======
+
+
+@common.tagged('selection_ondelete_base')
+class TestSelectionOndelete(common.TransactionCase):
+
+    MODEL_BASE = 'test_new_api.model_selection_base'
+    MODEL_REQUIRED = 'test_new_api.model_selection_required'
+    MODEL_NONSTORED = 'test_new_api.model_selection_non_stored'
+
+    def setUp(self):
+        super().setUp()
+        # enable unlinking ir.model.fields.selection
+        self.patch(self.registry, 'ready', False)
+
+    def _unlink_option(self, model, option):
+        self.env['ir.model.fields.selection'].search([
+            ('field_id.model', '=', model),
+            ('field_id.name', '=', 'my_selection'),
+            ('value', '=', option),
+        ], limit=1).unlink()
+
+    def test_ondelete_default(self):
+        # create some records, one of which having the extended selection option
+        rec1 = self.env[self.MODEL_REQUIRED].create({'my_selection': 'foo'})
+        rec2 = self.env[self.MODEL_REQUIRED].create({'my_selection': 'bar'})
+        rec3 = self.env[self.MODEL_REQUIRED].create({'my_selection': 'baz'})
+
+        # test that all values are correct before the removal of the value
+        self.assertEqual(rec1.my_selection, 'foo')
+        self.assertEqual(rec2.my_selection, 'bar')
+        self.assertEqual(rec3.my_selection, 'baz')
+
+        # unlink the extended option (simulates a module uninstall)
+        self._unlink_option(self.MODEL_REQUIRED, 'baz')
+
+        # verify that the ondelete policy has succesfully been applied
+        self.assertEqual(rec1.my_selection, 'foo')
+        self.assertEqual(rec2.my_selection, 'bar')
+        self.assertEqual(rec3.my_selection, 'foo')   # reset to default
+
+    def test_ondelete_base_null_explicit(self):
+        rec1 = self.env[self.MODEL_BASE].create({'my_selection': 'foo'})
+        rec2 = self.env[self.MODEL_BASE].create({'my_selection': 'bar'})
+        rec3 = self.env[self.MODEL_BASE].create({'my_selection': 'quux'})
+
+        self.assertEqual(rec1.my_selection, 'foo')
+        self.assertEqual(rec2.my_selection, 'bar')
+        self.assertEqual(rec3.my_selection, 'quux')
+
+        self._unlink_option(self.MODEL_BASE, 'quux')
+
+        self.assertEqual(rec1.my_selection, 'foo')
+        self.assertEqual(rec2.my_selection, 'bar')
+        self.assertFalse(rec3.my_selection)
+
+    def test_ondelete_base_null_implicit(self):
+        rec1 = self.env[self.MODEL_BASE].create({'my_selection': 'foo'})
+        rec2 = self.env[self.MODEL_BASE].create({'my_selection': 'bar'})
+        rec3 = self.env[self.MODEL_BASE].create({'my_selection': 'ham'})
+
+        self.assertEqual(rec1.my_selection, 'foo')
+        self.assertEqual(rec2.my_selection, 'bar')
+        self.assertEqual(rec3.my_selection, 'ham')
+
+        self._unlink_option(self.MODEL_BASE, 'ham')
+
+        self.assertEqual(rec1.my_selection, 'foo')
+        self.assertEqual(rec2.my_selection, 'bar')
+        self.assertFalse(rec3.my_selection)
+
+    def test_ondelete_cascade(self):
+        rec1 = self.env[self.MODEL_REQUIRED].create({'my_selection': 'foo'})
+        rec2 = self.env[self.MODEL_REQUIRED].create({'my_selection': 'bar'})
+        rec3 = self.env[self.MODEL_REQUIRED].create({'my_selection': 'eggs'})
+
+        self.assertEqual(rec1.my_selection, 'foo')
+        self.assertEqual(rec2.my_selection, 'bar')
+        self.assertEqual(rec3.my_selection, 'eggs')
+
+        self._unlink_option(self.MODEL_REQUIRED, 'eggs')
+
+        self.assertEqual(rec1.my_selection, 'foo')
+        self.assertEqual(rec2.my_selection, 'bar')
+        self.assertFalse(rec3.exists())
+
+    def test_ondelete_literal(self):
+        rec1 = self.env[self.MODEL_REQUIRED].create({'my_selection': 'foo'})
+        rec2 = self.env[self.MODEL_REQUIRED].create({'my_selection': 'bar'})
+        rec3 = self.env[self.MODEL_REQUIRED].create({'my_selection': 'bacon'})
+
+        self.assertEqual(rec1.my_selection, 'foo')
+        self.assertEqual(rec2.my_selection, 'bar')
+        self.assertEqual(rec3.my_selection, 'bacon')
+
+        self._unlink_option(self.MODEL_REQUIRED, 'bacon')
+
+        self.assertEqual(rec1.my_selection, 'foo')
+        self.assertEqual(rec2.my_selection, 'bar')
+        self.assertEqual(rec3.my_selection, 'bar')
+
+    def test_ondelete_multiple_explicit(self):
+        rec1 = self.env[self.MODEL_REQUIRED].create({'my_selection': 'foo'})
+        rec2 = self.env[self.MODEL_REQUIRED].create({'my_selection': 'eevee'})
+        rec3 = self.env[self.MODEL_REQUIRED].create({'my_selection': 'pikachu'})
+
+        self.assertEqual(rec1.my_selection, 'foo')
+        self.assertEqual(rec2.my_selection, 'eevee')
+        self.assertEqual(rec3.my_selection, 'pikachu')
+
+        self._unlink_option(self.MODEL_REQUIRED, 'eevee')
+        self._unlink_option(self.MODEL_REQUIRED, 'pikachu')
+
+        self.assertEqual(rec1.my_selection, 'foo')
+        self.assertEqual(rec2.my_selection, 'bar')
+        self.assertEqual(rec3.my_selection, 'foo')
+
+    def test_ondelete_callback(self):
+        rec = self.env[self.MODEL_REQUIRED].create({'my_selection': 'knickers'})
+
+        self.assertEqual(rec.my_selection, 'knickers')
+
+        self._unlink_option(self.MODEL_REQUIRED, 'knickers')
+
+        self.assertEqual(rec.my_selection, 'foo')
+        self.assertFalse(rec.active)
+
+    def test_non_stored_selection(self):
+        rec = self.env[self.MODEL_NONSTORED].create({})
+        rec.my_selection = 'foo'
+
+        self.assertEqual(rec.my_selection, 'foo')
+
+        self._unlink_option(self.MODEL_NONSTORED, 'foo')
+
+        self.assertFalse(rec.my_selection)
+
+
+@common.tagged('selection_ondelete_advanced')
+class TestSelectionOndeleteAdvanced(common.TransactionCase):
+
+    MODEL_BASE = 'test_new_api.model_selection_base'
+    MODEL_REQUIRED = 'test_new_api.model_selection_required'
+
+    def setUp(self):
+        super().setUp()
+        # necessary cleanup for resetting changes in the registry
+        for model_name in (self.MODEL_BASE, self.MODEL_REQUIRED):
+            Model = self.registry[model_name]
+            self.addCleanup(setattr, Model, '__bases__', Model.__bases__)
+        self.addCleanup(self.registry.model_cache.clear)
+
+    def test_ondelete_unexisting_policy(self):
+        class Foo(models.Model):
+            _module = None
+            _inherit = self.MODEL_REQUIRED
+
+            my_selection = fields.Selection(selection_add=[
+                ('random', "Random stuff"),
+            ], ondelete={'random': 'poop'})
+
+        Foo._build_model(self.registry, self.env.cr)
+
+        with self.assertRaises(ValueError):
+            self.registry.setup_models(self.env.cr)
+
+    def test_ondelete_default_no_default(self):
+        class Foo(models.Model):
+            _module = None
+            _inherit = self.MODEL_BASE
+
+            my_selection = fields.Selection(selection_add=[
+                ('corona', "Corona beers suck"),
+            ], ondelete={'corona': 'set default'})
+
+        Foo._build_model(self.registry, self.env.cr)
+
+        with self.assertRaises(AssertionError):
+            self.registry.setup_models(self.env.cr)
+
+    def test_ondelete_required_null_explicit(self):
+        class Foo(models.Model):
+            _module = None
+            _inherit = self.MODEL_REQUIRED
+
+            my_selection = fields.Selection(selection_add=[
+                ('brap', "Brap"),
+            ], ondelete={'brap': 'set null'})
+
+        Foo._build_model(self.registry, self.env.cr)
+
+        with self.assertRaises(ValueError):
+            self.registry.setup_models(self.env.cr)
+
+    def test_ondelete_required_null_implicit(self):
+        class Foo(models.Model):
+            _module = None
+            _inherit = self.MODEL_REQUIRED
+
+            my_selection = fields.Selection(selection_add=[
+                ('boing', "Boyoyoyoing"),
+            ])
+
+        Foo._build_model(self.registry, self.env.cr)
+
+        with self.assertRaises(ValueError):
+            self.registry.setup_models(self.env.cr)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

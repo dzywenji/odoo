@@ -1021,7 +1021,7 @@
         ]"/>
     </record>
 
-    <record id="22v INC" model="account.tax.template">
+    <record id="22v_INC" model="account.tax.template">
         <field name="description">22v INC</field>
         <field name="chart_template_id" ref="l10n_it_chart_template_generic"/>
         <field name="name">Iva al 22% (debito) INC</field>
@@ -1055,7 +1055,7 @@
         ]"/>
     </record>
 
-    <record id="21v INC" model="account.tax.template">
+    <record id="21v_INC" model="account.tax.template">
         <field name="description">21v INC</field>
         <field name="chart_template_id" ref="l10n_it_chart_template_generic"/>
         <field name="name">Iva al 21% (debito) INC</field>
@@ -1089,7 +1089,7 @@
         ]"/>
     </record>
 
-    <record id="20v INC" model="account.tax.template">
+    <record id="20v_INC" model="account.tax.template">
         <field name="description">20v INC</field>
         <field name="chart_template_id" ref="l10n_it_chart_template_generic"/>
         <field name="name">Iva al 20% (debito) INC</field>
@@ -1123,7 +1123,7 @@
         ]"/>
     </record>
 
-    <record id="10v INC" model="account.tax.template">
+    <record id="10v_INC" model="account.tax.template">
         <field name="description">10v INC</field>
         <field name="chart_template_id" ref="l10n_it_chart_template_generic"/>
         <field name="name">Iva al 10% (debito) INC</field>
@@ -1157,7 +1157,7 @@
         ]"/>
     </record>
 
-    <record id="12v INC" model="account.tax.template">
+    <record id="12v_INC" model="account.tax.template">
         <field name="description">12v INC</field>
         <field name="chart_template_id" ref="l10n_it_chart_template_generic"/>
         <field name="name">Iva 12% (debito) INC</field>
@@ -1191,7 +1191,7 @@
         ]"/>
     </record>
 
-    <record id="2v INC" model="account.tax.template">
+    <record id="2v_INC" model="account.tax.template">
         <field name="description">2v INC</field>
         <field name="chart_template_id" ref="l10n_it_chart_template_generic"/>
         <field name="name">Iva 2% (debito) INC</field>
@@ -1225,7 +1225,7 @@
         ]"/>
     </record>
 
-    <record id="4v INC" model="account.tax.template">
+    <record id="4v_INC" model="account.tax.template">
         <field name="description">4v INC</field>
         <field name="chart_template_id" ref="l10n_it_chart_template_generic"/>
         <field name="name">Iva 4% (debito) INC</field>
@@ -1259,7 +1259,7 @@
         ]"/>
     </record>
 
-    <record id="00v INC" model="account.tax.template">
+    <record id="00v_INC" model="account.tax.template">
         <field name="description">00v INC</field>
         <field name="chart_template_id" ref="l10n_it_chart_template_generic"/>
         <field name="name">Fuori Campo IVA (debito) INC</field>

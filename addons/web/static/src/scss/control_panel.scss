@@ -1,12 +1,13 @@
 
 .o_control_panel {
     border-bottom: 1px solid darken($o-control-panel-background-color, 20%);
-    @include o-webclient-padding($top: 10px, $bottom: 10px);
+    @include o-webclient-padding($top: 5px, $bottom: 5px);
     background-color: $o-control-panel-background-color;
 
     > div {
         display: flex;
         min-height: 30px;
+        margin: 5px 0px;
     }
 
     @include media-breakpoint-up(md) {
@@ -27,6 +28,7 @@
         min-height: $o-cp-breadcrumb-height;
     }
 
+<<<<<<< HEAD
     .btn.o_enable_searchview{
         color: $gray-600;
         &:hover {
@@ -34,12 +36,13 @@
         }
     }
 
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     .o_cp_left {
         display: flex;
         justify-content: space-between;
-        margin-top: 5px;
 
-        > .o_cp_sidebar {
+        > .o_cp_action_menus {
             padding-right: 10px;
 
             .o_hidden_input_file {
@@ -70,7 +73,6 @@
 
     .o_cp_right {
         display: flex;
-        margin-top: 5px;
 
         > .o_cp_pager {
             margin: auto 0 auto auto;
@@ -78,14 +80,20 @@
             text-align: center;
             user-select: none;
 
-            > div {
+            .o_pager {
                 display: flex;
                 align-items: center;
-            }
 
+<<<<<<< HEAD
             .o_pager_counter {
                 margin-right: 5px;
                 min-width: $o-statbutton-height;
+=======
+                .o_pager_counter {
+                    margin-right: 5px;
+                    min-width: $o-statbutton-height;
+                }
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             }
         }
 
@@ -118,12 +126,17 @@
     }
 }
 
-// Pager input (to edit pager values)
-.o_pager_value > input {
+.o_pager_value {
     display: inline-block;
-    width: 60px;
-    text-align: right;
+}
 
+span.o_pager_value {
+    border-bottom: 1px solid transparent;
+}
+
+input.o_pager_value {
+    text-align: right;
+    width: 60px;
     &:focus {
         outline: none;
     }

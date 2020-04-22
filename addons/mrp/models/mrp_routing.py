@@ -50,7 +50,7 @@ class MrpRoutingWorkcenter(models.Model):
     company_id = fields.Many2one(
         'res.company', 'Company',
         readonly=True, related='routing_id.company_id', store=True)
-    worksheet = fields.Binary('PDF', help="Upload your PDF file.")
+    worksheet = fields.Binary('PDF')
     worksheet_type = fields.Selection([
         ('pdf', 'PDF'), ('google_slide', 'Google Slide')],
         string="Work Sheet", default="pdf",
@@ -97,4 +97,3 @@ class MrpRoutingWorkcenter(models.Model):
         count_data = dict((item['operation_id'][0], item['operation_id_count']) for item in data)
         for operation in self:
             operation.workorder_count = count_data.get(operation.id, 0)
-

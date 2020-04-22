@@ -5,7 +5,6 @@ from odoo import api, fields, models
 
 
 class SMSTemplatePreview(models.TransientModel):
-    _inherit = "sms.template"
     _name = "sms.template.preview"
     _description = "SMS Template Preview"
 
@@ -21,11 +20,16 @@ class SMSTemplatePreview(models.TransientModel):
     @api.model
     def default_get(self, fields):
         result = super(SMSTemplatePreview, self).default_get(fields)
-        sms_template = self._context.get('default_sms_template_id') and self.env['sms.template'].browse(self._context['default_sms_template_id']) or False
-        if sms_template and not result.get('res_id'):
-            result['res_id'] = self.env[sms_template.model].search([], limit=1)
+        sms_template_id = self.env.context.get('default_sms_template_id')
+        if not sms_template_id or 'resource_ref' not in fields:
+            return result
+        sms_template = self.env['sms.template'].browse(sms_template_id)
+        res = self.env[sms_template.model_id.model].search([], limit=1)
+        if res:
+            result['resource_ref'] = '%s,%s' % (sms_template.model_id.model, res.id)
         return result
 
+<<<<<<< HEAD
     sms_template_id = fields.Many2one('sms.template') # NOTE This should probably be required
 
     lang = fields.Selection(_selection_languages, string='Template Preview Language')
@@ -40,9 +44,19 @@ class SMSTemplatePreview(models.TransientModel):
                 preview.resource_ref = '%s,%s' % (preview.model_id.model, preview.res_id or 0)
             else:
                 preview.resource_ref = False
+=======
+    sms_template_id = fields.Many2one('sms.template', required=True, ondelete='cascade')
+    lang = fields.Selection(_selection_languages, string='Template Preview Language')
+    model_id = fields.Many2one('ir.model', related="sms_template_id.model_id")
+    body = fields.Char('Body', compute='_compute_sms_template_fields')
+    resource_ref = fields.Reference(string='Record reference', selection='_selection_target_model')
+    no_record = fields.Boolean('No Record', compute='_compute_no_record')
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
-    def _inverse_resource_ref(self):
+    @api.depends('model_id')
+    def _compute_no_record(self):
         for preview in self:
+<<<<<<< HEAD
             if preview.resource_ref:
                 preview.res_id = preview.resource_ref.id
 
@@ -54,3 +68,14 @@ class SMSTemplatePreview(models.TransientModel):
         if self.sms_template_id:
             template = self.sms_template_id.with_context(lang=self.lang)
             self.body = template._render_template(template.body, template.model, self.res_id or 0) if self.resource_ref else template.body
+=======
+            preview.no_record = (self.env[preview.model_id.model].search_count([]) == 0) if preview.model_id else True
+
+    @api.depends('lang', 'resource_ref')
+    def _compute_sms_template_fields(self):
+        for wizard in self:
+            if wizard.sms_template_id and wizard.resource_ref:
+                wizard.body = wizard.sms_template_id._render_field('body', [wizard.resource_ref.id], set_lang=wizard.lang)[wizard.resource_ref.id]
+            else:
+                wizard.body = wizard.sms_template_id.body
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

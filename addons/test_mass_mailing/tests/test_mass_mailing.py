@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
-from unittest.mock import patch
 from werkzeug import urls
 
-from odoo.addons.test_mass_mailing.tests.common import MassMailingCase
-from odoo.addons.base.models.ir_config_parameter import IrConfigParameter
+from odoo.addons.test_mass_mailing.tests.common import TestMailCommon
 from odoo.tests.common import TransactionCase, users
 from odoo.tools import mute_logger
 
 
-class TestMassMail(MassMailingCase):
+class TestMassMail(TestMailCommon):
 
     def setUp(self):
         """ In this setup we prepare 20 blacklist entries. We therefore add
@@ -137,7 +135,7 @@ class TestAccessRights(TransactionCase):
         self.mass_mailing = mass_mailing.create({
             'name': 'One',
             'subject': 'One',
-            'mailing_model_id': self.env['ir.model']._get(mass_mailing_contacts).id,
+            'mailing_model_id': self.env['ir.model']._get('mailing.contact').id,
             'body_html': 'This is mass mail marketing demo'})
         self.mass_mailing.contact_list_ids = [mailing_list_1.id]
         self.mass_mailing.action_put_in_queue()
@@ -193,7 +191,7 @@ class TestAccessRights(TransactionCase):
         self.mass_mailing = mass_mailing.create({
             'name': 'One',
             'subject': 'One',
-            'mailing_model_id': self.env['ir.model']._get(mass_mailing_contacts).id,
+            'mailing_model_id': self.env['ir.model']._get('mailing.contact').id,
             'body_html': 'This is mass mail marketing demo'})
         self.mass_mailing.contact_list_ids = [mailing_list_1.id, mailing_list_2.id]
         self.mass_mailing.action_put_in_queue()
@@ -243,7 +241,7 @@ class TestAccessRights(TransactionCase):
         self.mass_mailing = mass_mailing.create({
             'name': 'One',
             'subject': 'One',
-            'mailing_model_id': self.env['ir.model']._get(mass_mailing_contacts).id,
+            'mailing_model_id': self.env['ir.model']._get('mailing.contact').id,
             'body_html': 'This is mass mail marketing demo'})
         self.mass_mailing.contact_list_ids = [mailing_list_1.id]
         self.mass_mailing.action_put_in_queue()

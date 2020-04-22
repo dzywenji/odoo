@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
+import ast
 import itertools
 import logging
 from datetime import date, timedelta
@@ -8,7 +9,6 @@ from dateutil.relativedelta import relativedelta, MO
 
 from odoo import api, models, fields, _, exceptions
 from odoo.tools import ustr
-from odoo.tools.safe_eval import safe_eval
 
 _logger = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ class Challenge(models.Model):
     last_report_date = fields.Date("Last Report Date", default=fields.Date.today)
     next_report_date = fields.Date("Next Report Date", compute='_get_next_report_date', store=True)
 
-    category = fields.Selection([
+    challenge_category = fields.Selection([
         ('hr', 'Human Resources / Engagement'),
         ('other', 'Settings / Gamification Tools'),
     ], string="Appears in", required=True, default='hr',
@@ -283,8 +283,7 @@ class Challenge(models.Model):
         return True
 
     def _get_challenger_users(self, domain):
-        # FIXME: literal_eval?
-        user_domain = safe_eval(domain)
+        user_domain = ast.literal_eval(domain)
         return self.env['res.users'].search(user_domain)
 
     def _recompute_challenge_users(self):
@@ -552,23 +551,22 @@ class Challenge(models.Model):
 
         challenge = self
 
-        MailTemplates = self.env['mail.template']
         if challenge.visibility_mode == 'ranking':
             lines_boards = challenge._get_serialized_challenge_lines(restrict_goals=subset_goals)
 
-            body_html = MailTemplates.with_context(challenge_lines=lines_boards)._render_template(challenge.report_template_id.body_html, 'gamification.challenge', challenge.id)
+            body_html = challenge.report_template_id.with_context(challenge_lines=lines_boards)._render_field('body_html', challenge.ids)[challenge.id]
 
             # send to every follower and participant of the challenge
             challenge.message_post(
                 body=body_html,
                 partner_ids=challenge.mapped('user_ids.partner_id.id'),
-                subtype='mail.mt_comment',
+                subtype_xmlid='mail.mt_comment',
                 email_layout_xmlid='mail.mail_notification_light',
                 )
             if challenge.report_message_group_id:
                 challenge.report_message_group_id.message_post(
                     body=body_html,
-                    subtype='mail.mt_comment')
+                    subtype_xmlid='mail.mt_comment')
 
         else:
             # generate individual reports
@@ -577,22 +575,19 @@ class Challenge(models.Model):
                 if not lines:
                     continue
 
-                body_html = MailTemplates.with_user(user).with_context(challenge_lines=lines)._render_template(
-                    challenge.report_template_id.body_html,
-                    'gamification.challenge',
-                    challenge.id)
+                body_html = challenge.report_template_id.with_user(user).with_context(challenge_lines=lines)._render_field('body_html', challenge.ids)[challenge.id]
 
                 # notify message only to users, do not post on the challenge
                 challenge.message_notify(
                     body=body_html,
                     partner_ids=[user.partner_id.id],
-                    subtype='mail.mt_comment',
+                    subtype_xmlid='mail.mt_comment',
                     email_layout_xmlid='mail.mail_notification_light',
                 )
                 if challenge.report_message_group_id:
                     challenge.report_message_group_id.message_post(
                         body=body_html,
-                        subtype='mail.mt_comment',
+                        subtype_xmlid='mail.mt_comment',
                         email_layout_xmlid='mail.mail_notification_light',
                     )
         return challenge.write({'last_report_date': fields.Date.today()})
@@ -791,7 +786,7 @@ class ChallengeLine(models.Model):
     target_goal = fields.Float('Target Value to Reach', required=True)
 
     name = fields.Char("Name", related='definition_id.name', readonly=False)
-    condition = fields.Selection("Condition", related='definition_id.condition', readonly=True)
+    condition = fields.Selection(string="Condition", related='definition_id.condition', readonly=True)
     definition_suffix = fields.Char("Unit", related='definition_id.suffix', readonly=True)
     definition_monetary = fields.Boolean("Monetary", related='definition_id.monetary', readonly=True)
     definition_full_suffix = fields.Char("Suffix", related='definition_id.full_suffix', readonly=True)

@@ -13,8 +13,13 @@ class TestMenusAdmin(odoo.tests.HttpCase):
         menus = self.env['ir.ui.menu'].load_menus(False)
         for app in menus['children']:
                 with self.subTest(app=app['name']):
+<<<<<<< HEAD
                     _logger.log(25, 'Testing %s', app['name'])
                     self.browser_js("/web", "odoo.__DEBUG__.services['web.clickEverywhere'](%d);" % app['id'], "odoo.isReady === true", login="admin", timeout=300)
+=======
+                    _logger.runbot('Testing %s', app['name'])
+                    self.browser_js("/web", "odoo.__DEBUG__.services['web.clickEverywhere']('%s');" % app['xmlid'], "odoo.isReady === true", login="admin", timeout=300)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                     self.terminate_browser()
 
 
@@ -25,6 +30,24 @@ class TestMenusDemo(odoo.tests.HttpCase):
         menus = self.env['ir.ui.menu'].load_menus(False)
         for app in menus['children']:
                 with self.subTest(app=app['name']):
+<<<<<<< HEAD
                     _logger.log(25, 'Testing %s', app['name'])
                     self.browser_js("/web", "odoo.__DEBUG__.services['web.clickEverywhere'](%d);" % app['id'], "odoo.isReady === true", login="demo", timeout=300)
                     self.terminate_browser()
+=======
+                    _logger.runbot('Testing %s', app['name'])
+                    self.browser_js("/web", "odoo.__DEBUG__.services['web.clickEverywhere']('%s');" % app['xmlid'], "odoo.isReady === true", login="demo", timeout=300)
+                    self.terminate_browser()
+
+@odoo.tests.tagged('post_install', '-at_install')
+class TestMenusAdminLight(odoo.tests.HttpCase):
+
+    def test_01_click_apps_menus_as_admin(self):
+        self.browser_js("/web", "odoo.__DEBUG__.services['web.clickEverywhere'](undefined, true);", "odoo.isReady === true", login="admin", timeout=120)
+
+@odoo.tests.tagged('post_install', '-at_install',)
+class TestMenusDemoLight(odoo.tests.HttpCase):
+
+    def test_01_click_apps_menus_as_demo(self):
+            self.browser_js("/web", "odoo.__DEBUG__.services['web.clickEverywhere'](undefined, true);", "odoo.isReady === true", login="demo", timeout=120)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

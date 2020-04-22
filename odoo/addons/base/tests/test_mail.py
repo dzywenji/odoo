@@ -3,11 +3,22 @@
 
 
 from unittest.mock import patch
+<<<<<<< HEAD
 
 from odoo.tests.common import BaseCase
 from odoo.tests.common import SavepointCase
 from odoo.tools import (
     html_sanitize, append_content_to_html, plaintext2html, email_split,
+=======
+import email.policy
+import email.message
+import threading
+
+from odoo.tests.common import BaseCase, SavepointCase, TransactionCase
+from odoo.tools import (
+    is_html_empty, html_sanitize, append_content_to_html, plaintext2html,
+    email_split,
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     misc, formataddr,
 )
 
@@ -88,7 +99,7 @@ class TestSanitizer(BaseCase):
             self.assertTrue('ha.ckers.org' not in html or 'http://ha.ckers.org/xss.css' in html, 'html_sanitize did not remove a malicious code in %s (%s)' % (content, html))
 
         content = "<!--[if gte IE 4]><SCRIPT>alert('XSS');</SCRIPT><![endif]-->"  # down-level hidden block
-        self.assertEquals(html_sanitize(content, silent=False), '')
+        self.assertEqual(html_sanitize(content, silent=False), '')
 
     def test_html(self):
         sanitized_html = html_sanitize(test_mail_examples.MISC_HTML_SOURCE)
@@ -101,10 +112,10 @@ class TestSanitizer(BaseCase):
         not_emails = [
             '<blockquote cite="mid:CAEJSRZvWvud8c6Qp=wfNG6O1+wK3i_jb33qVrF7XyrgPNjnyUA@mail.gmail.com" type="cite">cat</blockquote>',
             '<img alt="@github-login" class="avatar" src="/web/image/pi" height="36" width="36">']
-        for email in not_emails:
-            sanitized = html_sanitize(email)
-            left_part = email.split('>')[0]  # take only left part, as the sanitizer could add data information on node
-            self.assertNotIn(misc.html_escape(email), sanitized, 'html_sanitize stripped emails of original html')
+        for not_email in not_emails:
+            sanitized = html_sanitize(not_email)
+            left_part = not_email.split('>')[0]  # take only left part, as the sanitizer could add data information on node
+            self.assertNotIn(misc.html_escape(not_email), sanitized, 'html_sanitize stripped emails of original html')
             self.assertIn(left_part, sanitized)
 
     def test_style_parsing(self):
@@ -316,6 +327,19 @@ class TestHtmlTools(BaseCase):
         for html, content, plaintext_flag, preserve_flag, container_tag, expected in test_samples:
             self.assertEqual(append_content_to_html(html, content, plaintext_flag, preserve_flag, container_tag), expected, 'append_content_to_html is broken')
 
+    def test_is_html_empty(self):
+        void_strings_samples = ['', False, ' ']
+        for content in void_strings_samples:
+            self.assertTrue(is_html_empty(content))
+
+        void_html_samples = ['<p><br></p>', '<p><br> </p>']
+        for content in void_html_samples:
+            self.assertTrue(is_html_empty(content), 'Failed with %s' % content)
+
+        valid_html_samples = ['<p><br>1</p>', '<p>1<br > </p>']
+        for content in valid_html_samples:
+            self.assertFalse(is_html_empty(content))
+
 
 class TestEmailTools(BaseCase):
     """ Test some of our generic utility functions for emails """
@@ -374,3 +398,34 @@ class EmailConfigCase(SavepointCase):
             "The body of an email",
         )
         self.assertEqual(message["From"], "settings@example.com")
+<<<<<<< HEAD
+=======
+
+
+class TestEmailMessage(TransactionCase):
+    def test_as_string(self):
+        """Ensure all email sent are bpo-34424 free"""
+
+        class FakeSMTP:
+            """SMTP stub"""
+            def __init__(this):
+                this.email_sent = False
+
+            def sendmail(this, smtp_from, smtp_to_list, message_str):
+                this.email_sent = True
+                message_truth = (
+                    r'From: .+? <joe@example\.com>\r\n'
+                    r'To: .+? <joe@example\.com>\r\n'
+                    r'\r\n'
+                )
+                self.assertRegex(message_str, message_truth)
+
+        msg = email.message.EmailMessage(policy=email.policy.SMTP)
+        msg['From'] = '"Joé Doe" <joe@example.com>'
+        msg['To'] = '"Joé Doe" <joe@example.com>'
+
+        smtp = FakeSMTP()
+        self.patch(threading.currentThread(), 'testing', False)
+        self.env['ir.mail_server'].send_email(msg, smtp_session=smtp)
+        self.assertTrue(smtp.email_sent)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

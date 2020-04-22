@@ -14,6 +14,7 @@ var widgetRegistry = require('web.widget_registry');
 
 var makeTestPromise = testUtils.makeTestPromise;
 var nextTick = testUtils.nextTick;
+const cpHelpers = testUtils.controlPanel;
 var createView = testUtils.createView;
 
 QUnit.module('Views', {
@@ -183,7 +184,7 @@ QUnit.module('Views', {
                     var records = this.data.partner.records
                     _.each(partnerIDS, function(partnerID) {
                         _.find(records, function (record) {
-                            return record.id === partnerID; 
+                            return record.id === partnerID;
                         }).active = false;
                     })
                     this.data.partner.records[0].active;
@@ -240,7 +241,7 @@ QUnit.module('Views', {
                     var records = this.data.partner.records
                     _.each(partnerIDS, function(partnerID) {
                         _.find(records, function (record) {
-                            return record.id === partnerID; 
+                            return record.id === partnerID;
                         }).active = false;
                     })
                     this.data.partner.records[0].active;
@@ -345,10 +346,9 @@ QUnit.module('Views', {
                     '</t></templates></kanban>',
             groupBy: ['bar'],
         });
-        await kanban.renderPager();
 
-        assert.isNotVisible(kanban.pager.$el,
-                        "pager should be hidden in grouped kanban");
+        assert.containsNone(kanban, '.o_pager');
+
         kanban.destroy();
     });
 
@@ -369,9 +369,8 @@ QUnit.module('Views', {
             },
         });
 
-        assert.isVisible(kanban.pager.$el,
-                        "pager should be visible in ungrouped kanban");
-        assert.strictEqual(kanban.pager.state.size, 4, "pager's size should be 4");
+        assert.containsOnce(kanban, '.o_pager');
+        assert.strictEqual(cpHelpers.getPagerSize(kanban), "4", "pager's size should be 4");
         kanban.destroy();
     });
 
@@ -395,8 +394,8 @@ QUnit.module('Views', {
             },
         });
 
-        assert.strictEqual(kanban.pager.state.limit, 2, "pager's limit should be 2");
-        assert.strictEqual(kanban.pager.state.size, 4, "pager's size should be 4");
+        assert.strictEqual(cpHelpers.getPagerValue(kanban), "1-2", "pager's limit should be 2");
+        assert.strictEqual(cpHelpers.getPagerSize(kanban), "4", "pager's size should be 4");
         kanban.destroy();
     });
 
@@ -421,8 +420,8 @@ QUnit.module('Views', {
             },
         });
 
-        assert.strictEqual(kanban.pager.state.limit, 3, "pager's limit should be 3");
-        assert.strictEqual(kanban.pager.state.size, 4, "pager's size should be 4");
+        assert.strictEqual(cpHelpers.getPagerValue(kanban), "1-3", "pager's limit should be 3");
+        assert.strictEqual(cpHelpers.getPagerSize(kanban), "4", "pager's size should be 4");
         kanban.destroy();
     });
 
@@ -577,7 +576,7 @@ QUnit.module('Views', {
             },
         });
 
-        assert.containsOnce(kanban, '.o_cp_controller', 'should have one control panel');
+        assert.containsOnce(kanban, '.o_control_panel', 'should have one control panel');
         assert.containsOnce(kanban, '.o_kanban_group:first .o_kanban_record',
             "first column should contain one record");
 
@@ -589,7 +588,7 @@ QUnit.module('Views', {
             "should have a quick create element in the first column");
         assert.strictEqual($quickCreate.find('.o_form_view.o_xxs_form_view').length, 1,
             "should have rendered an XXS form view");
-        assert.containsOnce(kanban, '.o_cp_controller', 'should not have instantiated an extra control panel');
+        assert.containsOnce(kanban, '.o_control_panel', 'should not have instantiated an extra control panel');
         assert.strictEqual($quickCreate.find('input').length, 2,
             "should have two inputs");
         assert.strictEqual($quickCreate.find('.o_field_widget').length, 3,
@@ -1160,7 +1159,7 @@ QUnit.module('Views', {
                     assert.step('onchange');
                     if (shouldDelayOnchange) {
                         return Promise.resolve(prom).then(function () {
-                            return result
+                            return result;
                         });
                     }
                 }
@@ -1255,7 +1254,7 @@ QUnit.module('Views', {
                     assert.step('onchange');
                     if (shouldDelayOnchange) {
                         return Promise.resolve(prom).then(function () {
-                            return result
+                            return result;
                         });
                     }
                 }
@@ -2413,6 +2412,7 @@ QUnit.module('Views', {
                     throw new Error("should not switch view");
                 },
             },
+            doNotDisableAHref: true,
         });
 
         var $record = kanban.$('.o_kanban_record:not(.o_kanban_ghost)');
@@ -2425,10 +2425,6 @@ QUnit.module('Views', {
         assert.ok(!!$testLink[0].href,
             "link inside kanban record should have non-empty href");
 
-        // Mocked views prevent accessing a link with href. This is intented
-        // most of the time, but not in this test which specifically needs to
-        // let the browser access a link with href.
-        kanban.$el.off('click', 'a');
         // Prevent the browser default behaviour when clicking on anything.
         // This includes clicking on a `<a>` with `href`, so that it does not
         // change the URL in the address bar.
@@ -4839,7 +4835,7 @@ QUnit.module('Views', {
                     '</t></templates>' +
                 '</kanban>',
             mockRPC: function (route, args) {
-                assert.step(route)
+                assert.step(route);
                 return this._super(route, args);
             },
         });
@@ -4974,12 +4970,12 @@ QUnit.module('Views', {
             mockRPC: function (route, args) {
                 if (route === '/web/dataset/call_kw/partner/action_archive') {
                     var partnerIDS = args.args[0];
-                    var records = this.data.partner.records
+                    var records = this.data.partner.records;
                     _.each(partnerIDS, function(partnerID) {
                         _.find(records, function (record) {
-                            return record.id === partnerID; 
+                            return record.id === partnerID;
                         }).active = false;
-                    })
+                    });
                     this.data.partner.records[0].active;
                     return Promise.resolve();
                 }
@@ -5034,7 +5030,7 @@ QUnit.module('Views', {
                     var records = this.data.partner.records
                     _.each(partnerIDS, function(partnerID) {
                         _.find(records, function (record) {
-                            return record.id === partnerID; 
+                            return record.id === partnerID;
                         }).active = false;
                     })
                     this.data.partner.records[0].active;
@@ -5300,8 +5296,15 @@ QUnit.module('Views', {
                 return this._super.apply(this, arguments);
             },
         });
+        var images = kanban.el.querySelectorAll('img');
+        var placeholders = [];
+        for (var [index, img] of images.entries()) {
+            if (img.dataset.src.indexOf(this.data.partner.records[index].image) === -1) {
+                // Then we display a placeholder
+                placeholders.push(img);
+            }
+        }
 
-        var placeholders = kanban.$('img[data-src$="/web/static/src/img/placeholder.png"]');
         assert.strictEqual(placeholders.length, this.data.partner.records.length - 1,
             "partner with no image should display the placeholder");
 
@@ -6014,6 +6017,29 @@ QUnit.module('Views', {
 
         await testUtils.dom.click(kanban.$('.o_field_image').first());
 
+        kanban.destroy();
+    });
+
+    QUnit.test('kanban view with boolean widget', async function (assert) {
+        assert.expect(1);
+
+        const kanban = await testUtils.createView({
+            View: KanbanView,
+            model: 'partner',
+            data: this.data,
+            arch: `
+                <kanban>
+                    <templates>
+                        <t t-name="kanban-box">
+                            <div><field name="bar" widget="boolean"/></div>
+                        </t>
+                    </templates>
+                </kanban>
+            `,
+        });
+
+        assert.containsOnce(kanban.el.querySelector('.o_kanban_record'),
+            'div.custom-checkbox.o_field_boolean');
         kanban.destroy();
     });
 });

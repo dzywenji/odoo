@@ -38,6 +38,38 @@
     </div>
 
     <!--
+        Chatter Suggested Partners
+    -->
+    <t t-name="mail.chatter.ComposerSuggestedPartners">
+        <!-- List of followers -->
+        <div class="o_composer_suggested_partners">
+            <t t-foreach='widget.suggestedPartners' t-as='recipient'>
+                <div t-attf-title="Add as recipient and follower (reason: {{recipient.reason}})" t-att-class="recipient_index > 2 ? 'o_suggested_toggle o_hidden' : ''">
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox"
+                                class="custom-control-input"
+                                t-attf-id="o_composer_suggested_partners_p{{recipient_index}}"
+                                t-att-checked="recipient.checked ? 'checked' : undefined"
+                                t-att-data-fullname="recipient.full_name"/>
+                        <label t-attf-for="o_composer_suggested_partners_p{{recipient_index}}" class="custom-control-label">
+                            <t t-esc="recipient.name"/>
+                            <t t-if="recipient.email_address">(<t t-esc="recipient.email_address"/>)</t>
+                        </label>
+                    </div>
+                </div>
+            </t>
+            <t t-if='widget.suggestedPartners.length > 3'>
+                <a href="#" class='o_suggested_show_more_less o_suggested_toggle'>
+                    Show <t t-esc="widget.suggestedPartners.length - 3"/> more
+                </a>
+                <a href="#" class='o_suggested_show_more_less o_suggested_toggle o_hidden'>
+                    Show <t t-esc="widget.suggestedPartners.length - 3"/> less
+                </a>
+            </t>
+        </div>
+    </t>
+
+    <!--
         Chatter composer
 
         @param {mail.composer.Chatter} widget
@@ -61,32 +93,7 @@
                         </t>
                     </b>
                 </small>
-                <!-- List of followers -->
-                <div class="o_composer_suggested_partners">
-                    <t t-foreach='widget.suggestedPartners' t-as='recipient'>
-                        <div t-attf-title="Add as recipient and follower (reason: #{recipient.reason})" t-att-class="recipient_index > 2 ? 'o_suggested_toggle o_hidden' : ''">
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox"
-                                       class="custom-control-input"
-                                       t-attf-id="o_composer_suggested_partners_p#{recipient_index}"
-                                       t-att-checked="recipient.checked ? 'checked' : undefined"
-                                       t-att-data-fullname="recipient.full_name"/>
-                                <label t-attf-for="o_composer_suggested_partners_p#{recipient_index}" class="custom-control-label">
-                                    <t t-esc="recipient.name"/>
-                                    <t t-if="recipient.email_address">(<t t-esc="recipient.email_address"/>)</t>
-                                </label>
-                            </div>
-                        </div>
-                    </t>
-                    <t t-if='widget.suggestedPartners.length > 3'>
-                        <a href="#" class='o_suggested_show_more_less o_suggested_toggle'>
-                            Show <t t-esc="widget.suggestedPartners.length - 3"/> more
-                        </a>
-                        <a href="#" class='o_suggested_show_more_less o_suggested_toggle o_hidden'>
-                            Show <t t-esc="widget.suggestedPartners.length - 3"/> less
-                        </a>
-                    </t>
-                </div>
+                <t t-call="mail.chatter.ComposerSuggestedPartners"/>
             </t>
         </t>
 
@@ -114,13 +121,15 @@
         <button t-if="scheduleActivityButton" class="btn btn-link o_chatter_button_schedule_activity" title="Log or schedule an activity" disabled="disabled">
             <i class="fa fa-clock-o" title="Dates"/> <t t-if="isMobile">Activity</t><t t-else="">Schedule activity</t>
         </button>
+<<<<<<< HEAD
 
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     </t>
 
     <!--
         Chatter attachment paperclip button.
 
-        @param {boolean} [displayCounter]
         @param {integer} [count]
     -->
     <t t-name="mail.chatter.Attachment.Button">
@@ -128,9 +137,7 @@
         <button class="btn btn-link o_chatter_button_attachment" title="View all the attachments of the current record" t-attf-aria-label="#{attachment_button_aria_label} #{count}">
             <span>
                 <i class="fa fa-paperclip"/>
-                <span t-if="displayCounter" class="o_chatter_attachment_button_count">
-                    <t t-esc="count"/>
-                </span>
+                <span class="o_chatter_attachment_button_count" t-esc="count"/>
             </span>
         </button>
     </t>

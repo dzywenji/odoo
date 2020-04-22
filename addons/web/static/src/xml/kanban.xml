@@ -2,7 +2,7 @@
 
 <t t-name="KanbanView.buttons">
     <div>
-        <button type="button" t-attf-class="btn #{btnClass} o-kanban-button-new" accesskey="c">
+        <button t-if="!noCreate" type="button" t-attf-class="btn #{btnClass} o-kanban-button-new" accesskey="c">
             <t t-esc="create_text || _t('Create')"/>
         </button>
     </div>
@@ -56,8 +56,8 @@
                         <button class="btn btn-primary o_kanban_add" type="button">Add</button>
                     </span>
                 </div>
-                <span class="o_discard_msg text-muted float-right">Esc to discard</span>
-                <t t-if="widget.examples">
+                <span t-if="!widget.isMobile" class="o_discard_msg text-muted float-right">Esc to discard</span>
+                <t t-if="widget.examples &amp;&amp; !widget.isMobile">
                     <button type="button" class="btn btn-link o_kanban_examples">See examples</button>
                 </t>
             </div>
@@ -146,7 +146,7 @@
         <ul class="nav nav-pills flex-column">
             <t t-foreach="examples" t-as="example">
                 <li class="nav-item">
-                    <a t-attf-aria-controls="example_#{example_index}" data-toggle="tab" role="tab" t-attf-href="#example_#{example_index}" t-attf-class="nav-link#{example_index == 0 and ' active' or ''}"> <t t-esc="example.name"/> </a>
+                    <a t-attf-aria-controls="example_#{example_index}" data-toggle="tab" role="tab" t-att-data-example-index="example_index" t-attf-href="#example_#{example_index}" t-attf-class="nav-link#{example_index == 0 and ' active' or ''}"> <t t-esc="example.name"/> </a>
                 </li>
             </t>
         </ul>
@@ -319,12 +319,17 @@
 
 <!-- Mobile templates -->
 <t t-name="KanbanView.MobileTabs">
-    <div class="o_kanban_mobile_tabs">
-        <t t-foreach="data" t-as="group">
-            <div class="o_kanban_mobile_tab" t-att-data-id="group.res_id or group.id">
-                <span class="o_column_title"><t t-esc="group.value"/></span>
+    <div class="o_kanban_mobile_tabs_container">
+        <div class="o_kanban_mobile_tabs">
+            <t t-foreach="data" t-as="group">
+                <div class="o_kanban_mobile_tab" t-att-data-id="group.res_id or group.id">
+                    <span class="o_column_title"><t t-esc="group.value"/></span>
+                </div>
+            </t>
+            <div class="o_kanban_mobile_add_column" t-if="quickCreateEnabled">
+                <i class="fa fa-plus " role="img" aria-label="Add column" title="Add column"/>
             </div>
-        </t>
+        </div>
     </div>
 </t>
 </template>

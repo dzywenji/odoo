@@ -3,6 +3,10 @@
 
 import logging
 import re
+<<<<<<< HEAD
+=======
+import werkzeug
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 from odoo import api, fields, models, tools, _
 from odoo.exceptions import UserError
@@ -43,7 +47,13 @@ class SurveyInvite(models.TransientModel):
         help="Author of the message.")
     # recipients
     partner_ids = fields.Many2many(
-        'res.partner', 'survey_invite_partner_ids', 'invite_id', 'partner_id', string='Recipients')
+        'res.partner', 'survey_invite_partner_ids', 'invite_id', 'partner_id', string='Recipients',
+        domain="""[
+            '|', (survey_users_can_signup, '=', 1),
+            '|', (not survey_users_login_required, '=', 1),
+                 ('user_ids', '!=', False),
+        ]"""
+    )
     existing_partner_ids = fields.Many2many(
         'res.partner', compute='_compute_existing_partner_ids', readonly=True, store=False)
     emails = fields.Text(string='Additional emails', help="This list of emails of recipients will not be converted in contacts.\
@@ -59,9 +69,10 @@ class SurveyInvite(models.TransientModel):
     mail_server_id = fields.Many2one('ir.mail_server', 'Outgoing mail server')
     # survey
     survey_id = fields.Many2one('survey.survey', string='Survey', required=True)
-    survey_url = fields.Char(related="survey_id.public_url", readonly=True)
+    survey_start_url = fields.Char('Survey URL', compute='_compute_survey_start_url')
     survey_access_mode = fields.Selection(related="survey_id.access_mode", readonly=True)
     survey_users_login_required = fields.Boolean(related="survey_id.users_login_required", readonly=True)
+    survey_users_can_signup = fields.Boolean(related='survey_id.users_can_signup')
     deadline = fields.Datetime(string="Answer deadline")
 
     @api.depends('partner_ids', 'survey_id')
@@ -92,6 +103,12 @@ class SurveyInvite(models.TransientModel):
 
         self.existing_text = existing_text
 
+    @api.depends('survey_id.access_token')
+    def _compute_survey_start_url(self):
+        base_url = self.env['ir.config_parameter'].sudo().get_param('web.base.url')
+        for invite in self:
+            invite.survey_start_url = werkzeug.urls.url_join(base_url, invite.survey_id.get_start_url()) if invite.survey_id else False
+
     @api.onchange('emails')
     def _onchange_emails(self):
         if self.emails and (self.survey_users_login_required and not self.survey_id.users_can_signup):
@@ -109,16 +126,6 @@ class SurveyInvite(models.TransientModel):
         if error:
             raise UserError(_("Some emails you just entered are incorrect: %s") % (', '.join(error)))
         self.emails = '\n'.join(valid)
-
-    @api.onchange('survey_users_login_required')
-    def _onchange_survey_users_login_required(self):
-        if self.survey_users_login_required and not self.survey_id.users_can_signup:
-            return {'domain': {
-                    'partner_ids': [('user_ids', '!=', False)]
-                    }}
-        return {'domain': {
-                'partner_ids': []
-                }}
 
     @api.onchange('partner_ids')
     def _onchange_partner_ids(self):
@@ -150,9 +157,9 @@ class SurveyInvite(models.TransientModel):
                 values['body'] = template.body_html
         return super(SurveyInvite, self).create(values)
 
-    #------------------------------------------------------
+    # ------------------------------------------------------
     # Wizard validation and send
-    #------------------------------------------------------
+    # ------------------------------------------------------
 
     def _prepare_answers(self, partners, emails):
         answers = self.env['survey.user_input']
@@ -190,14 +197,13 @@ class SurveyInvite(models.TransientModel):
 
     def _get_answers_values(self):
         return {
-            'input_type': 'link',
             'deadline': self.deadline,
         }
 
     def _send_mail(self, answer):
         """ Create mail specific for recipient containing notably its access token """
-        subject = self.env['mail.template']._render_template(self.subject, 'survey.user_input', answer.id, post_process=True)
-        body = self.env['mail.template']._render_template(self.body, 'survey.user_input', answer.id, post_process=True)
+        subject = self.env['mail.render.mixin']._render_template(self.subject, 'survey.user_input', answer.ids, post_process=True)[answer.id]
+        body = self.env['mail.render.mixin']._render_template(self.body, 'survey.user_input', answer.ids, post_process=True)[answer.id]
         # post the message
         mail_values = {
             'email_from': self.email_from,
@@ -228,7 +234,7 @@ class SurveyInvite(models.TransientModel):
                     'company': self.env.company,
                 }
                 body = template.render(template_ctx, engine='ir.qweb', minimal_qcontext=True)
-                mail_values['body_html'] = self.env['mail.thread']._replace_local_links(body)
+                mail_values['body_html'] = self.env['mail.render.mixin']._replace_local_links(body)
 
         return self.env['mail.mail'].sudo().create(mail_values)
 

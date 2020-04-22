@@ -5,18 +5,22 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
 from odoo import tests
+<<<<<<< HEAD
 from odoo.addons.hr_holidays.tests.common import TestHrHolidaysBase
+=======
+from odoo.addons.hr_holidays.tests.common import TestHrHolidaysCommon
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.tools import mute_logger
 
 
 @tests.tagged('access_rights', 'post_install', '-at_install')
-class TestLeavesRights(TestHrHolidaysBase):
+class TestHrHolidaysAccessRightsCommon(TestHrHolidaysCommon):
     def setUp(self):
-        super(TestLeavesRights, self).setUp()
+        super(TestHrHolidaysAccessRightsCommon, self).setUp()
         self.leave_type = self.env['hr.leave.type'].create({
             'name': 'Unlimited',
-            'validation_type': 'hr',
+            'leave_validation_type': 'hr',
             'allocation_type': 'no',
             'validity_start': False,
         })
@@ -35,28 +39,28 @@ class TestLeavesRights(TestHrHolidaysBase):
 
         self.lt_no_validation = self.env['hr.leave.type'].create({
             'name': 'Validation = no_validation',
-            'validation_type': 'hr',
+            'leave_validation_type': 'hr',
             'allocation_type': 'no',
             'validity_start': False,
         })
 
         self.lt_validation_hr = self.env['hr.leave.type'].create({
             'name': 'Validation = HR',
-            'validation_type': 'hr',
+            'leave_validation_type': 'hr',
             'allocation_type': 'no',
             'validity_start': False,
         })
 
         self.lt_validation_manager = self.env['hr.leave.type'].create({
             'name': 'Validation = manager',
-            'validation_type': 'hr',
+            'leave_validation_type': 'hr',
             'allocation_type': 'no',
             'validity_start': False,
         })
 
         self.lt_validation_both = self.env['hr.leave.type'].create({
             'name': 'Validation = both',
-            'validation_type': 'hr',
+            'leave_validation_type': 'hr',
             'allocation_type': 'no',
             'validity_start': False,
         })
@@ -84,7 +88,7 @@ class TestLeavesRights(TestHrHolidaysBase):
 
 
 @tests.tagged('access_rights', 'access_rights_states')
-class TestAcessRightsStates(TestLeavesRights):
+class TestAcessRightsStates(TestHrHolidaysAccessRightsCommon):
     # ******************************************************
     # Action draft
     # ******************************************************
@@ -107,9 +111,10 @@ class TestAcessRightsStates(TestLeavesRights):
                 'name': 'Ranoi',
                 'employee_id': self.employee_emp.id,
                 'holiday_status_id': status.id,
-                'state': 'draft'
             }
             leave = self.request_leave(1, datetime.today() + relativedelta(days=20 + i), 1, values)
+            # the state has to be set to draft in a write because it is initialized to confirm if it has validation
+            leave.write({'state': 'draft'})
             with self.assertRaises(UserError):
                 leave.action_draft()
 
@@ -377,7 +382,7 @@ class TestAcessRightsStates(TestLeavesRights):
             leave.with_user(self.user_hrmanager.id).action_draft()
 
 @tests.tagged('access_rights', 'access_rights_create')
-class TestAccessRightsCreate(TestLeavesRights):
+class TestAccessRightsCreate(TestHrHolidaysAccessRightsCommon):
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
     def test_base_user_create_self(self):
         """ A simple user can create a leave for himself """
@@ -399,6 +404,7 @@ class TestAccessRightsCreate(TestLeavesRights):
         with self.assertRaises(AccessError):
             self.request_leave(self.user_employee_id, datetime.today() + relativedelta(days=5), 1, values)
 
+<<<<<<< HEAD
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
     def test_base_user_create_validate(self):
         """ A simple user cannot create a leave in validate state """
@@ -410,6 +416,8 @@ class TestAccessRightsCreate(TestLeavesRights):
         }
         with self.assertRaises(ValidationError):
             self.request_leave(self.user_employee_id, datetime.today() + relativedelta(days=5), 1, values)
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
     def test_base_user_create_batch(self):
@@ -446,6 +454,7 @@ class TestAccessRightsCreate(TestLeavesRights):
         self.request_leave(self.user_hruser_id, datetime.today() + relativedelta(days=5), 1, values)
 
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
+<<<<<<< HEAD
     def test_holidays_user_create_validate(self):
         """ A holidays user cannot create a leave in validate state """
         values = {
@@ -462,6 +471,8 @@ class TestAccessRightsCreate(TestLeavesRights):
 
 
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     def test_holidays_user_create_batch(self):
         """ A holidays user cannot create a leave in bacth mode (by company, by department, by tag)"""
         values = {
@@ -496,6 +507,7 @@ class TestAccessRightsCreate(TestLeavesRights):
         self.request_leave(self.user_hrmanager_id, datetime.today() + relativedelta(days=5), 1, values)
 
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
+<<<<<<< HEAD
     def test_holidays_manager_create_validate(self):
         """ A holidays manager cannot create a leave in validate state """
         values = {
@@ -511,6 +523,8 @@ class TestAccessRightsCreate(TestLeavesRights):
             self.request_leave(self.user_hrmanager_id, datetime.today() + relativedelta(days=5), 1, values)
 
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     def test_holidays_manager_create_batch(self):
         """ A holidays manager can create a leave in bacth mode (by company, by department, by tag)"""
         values = {
@@ -523,7 +537,7 @@ class TestAccessRightsCreate(TestLeavesRights):
 
 
 @tests.tagged('access_rights', 'access_rights_read')
-class TestAccessRightsRead(TestLeavesRights):
+class TestAccessRightsRead(TestHrHolidaysAccessRightsCommon):
     # base.group_user
 
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
@@ -565,7 +579,7 @@ class TestAccessRightsRead(TestLeavesRights):
 
 
 @tests.tagged('access_rights', 'access_rights_write')
-class TestAccessRightsWrite(TestLeavesRights):
+class TestAccessRightsWrite(TestHrHolidaysAccessRightsCommon):
     # base.group_user
 
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
@@ -607,7 +621,7 @@ class TestAccessRightsWrite(TestLeavesRights):
         """ User may communicate on its own leaves, even if validated """
         self.employee_leave.with_user(self.user_employee_id).message_post(
             body='I haz messaging',
-            subtype='mail.mt_comment',
+            subtype_xmlid='mail.mt_comment',
             message_type='comment'
         )
 
@@ -615,7 +629,7 @@ class TestAccessRightsWrite(TestLeavesRights):
 
         self.employee_leave.with_user(self.user_employee_id).message_post(
             body='I still haz messaging',
-            subtype='mail.mt_comment',
+            subtype_xmlid='mail.mt_comment',
             message_type='comment'
         )
 
@@ -669,7 +683,7 @@ class TestAccessRightsWrite(TestLeavesRights):
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
     def test_leave_manager_to_validate_by_user(self):
         """ A simple user can validate in manager mode if he is leave_manager_id """
-        self.leave_type.write({'validation_type': 'manager'})
+        self.leave_type.write({'leave_validation_type': 'manager'})
         values = {
             'name': 'Hol HrUser',
             'employee_id': self.employee_hruser_id,
@@ -687,7 +701,7 @@ class TestAccessRightsWrite(TestLeavesRights):
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
     def test_leave_manager_to_validate_by_holiday_user(self):
         """ A holiday user can validate in manager mode """
-        self.leave_type.write({'validation_type': 'manager'})
+        self.leave_type.write({'leave_validation_type': 'manager'})
         values = {
             'name': 'Hol HrUser',
             'employee_id': self.employee_emp_id,
@@ -703,7 +717,7 @@ class TestAccessRightsWrite(TestLeavesRights):
 
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
     def test_leave_double_validate(self):
-        self.leave_type.write({'validation_type': 'both'})
+        self.leave_type.write({'leave_validation_type': 'both'})
         values = {
             'name': 'double HrManager',
             'employee_id': self.employee_hrmanager_id,
@@ -727,7 +741,7 @@ class TestAccessRightsWrite(TestLeavesRights):
 
     @mute_logger('odoo.models.unlink', 'odoo.addons.mail.models.mail_mail')
     def test_leave_double_validate_holiday_manager(self):
-        self.leave_type.write({'validation_type': 'both'})
+        self.leave_type.write({'leave_validation_type': 'both'})
         values = {
             'name': 'double HrManager',
             'employee_id': self.employee_emp_id,
@@ -769,7 +783,7 @@ class TestAccessRightsWrite(TestLeavesRights):
     # TODO Can always cancel with great powers comes great responbilities
 
 
-class TestMultiCompany(TestHrHolidaysBase):
+class TestMultiCompany(TestHrHolidaysCommon):
 
     def setUp(self):
         super(TestMultiCompany, self).setUp()
@@ -779,7 +793,7 @@ class TestMultiCompany(TestHrHolidaysBase):
         self.leave_type = self.env['hr.leave.type'].create({
             'name': 'Unlimited - Company New',
             'company_id': self.new_company.id,
-            'validation_type': 'hr',
+            'leave_validation_type': 'hr',
             'allocation_type': 'no',
         })
         self.rd_dept.manager_id = False

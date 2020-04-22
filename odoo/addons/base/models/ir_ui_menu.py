@@ -9,7 +9,6 @@ from odoo import api, fields, models, tools, _
 from odoo.exceptions import ValidationError
 from odoo.http import request
 from odoo.modules import get_module_resource
-from odoo.tools.safe_eval import safe_eval
 
 MENU_ITEM_SEPARATOR = "/"
 NUMBER_PARENS = re.compile(r"\(([0-9]+)\)")
@@ -67,7 +66,7 @@ class IrUiMenu(models.Model):
         icon_image = False
         if icon_path:
             with tools.file_open(icon_path, 'rb') as icon_file:
-                icon_image = base64.encodestring(icon_file.read())
+                icon_image = base64.encodebytes(icon_file.read())
         return icon_image
 
     @api.constrains('parent_id')

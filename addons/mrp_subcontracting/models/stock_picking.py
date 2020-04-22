@@ -36,9 +36,14 @@ class StockPicking(models.Model):
     # -------------------------------------------------------------------------
     # Action methods
     # -------------------------------------------------------------------------
+<<<<<<< HEAD
 
     def action_done(self):
         res = super(StockPicking, self).action_done()
+=======
+    def _action_done(self):
+        res = super(StockPicking, self)._action_done()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         productions = self.env['mrp.production']
         for picking in self:
             for move in picking.move_lines:
@@ -121,8 +126,8 @@ class StockPicking(models.Model):
             'product_id': product.id,
             'product_uom_id': subcontract_move.product_uom.id,
             'bom_id': bom.id,
-            'location_src_id': subcontract_move.picking_id.partner_id.with_context(force_company=subcontract_move.company_id.id).property_stock_subcontractor.id,
-            'location_dest_id': subcontract_move.picking_id.partner_id.with_context(force_company=subcontract_move.company_id.id).property_stock_subcontractor.id,
+            'location_src_id': subcontract_move.picking_id.partner_id.with_company(subcontract_move.company_id).property_stock_subcontractor.id,
+            'location_dest_id': subcontract_move.picking_id.partner_id.with_company(subcontract_move.company_id).property_stock_subcontractor.id,
             'product_qty': subcontract_move.product_uom_qty,
             'picking_type_id': warehouse.subcontracting_type_id.id
         }
@@ -131,7 +136,7 @@ class StockPicking(models.Model):
     def _subcontracted_produce(self, subcontract_details):
         self.ensure_one()
         for move, bom in subcontract_details:
-            mo = self.env['mrp.production'].with_context(force_company=move.company_id.id).create(self._prepare_subcontract_mo_vals(move, bom))
+            mo = self.env['mrp.production'].with_company(move.company_id).create(self._prepare_subcontract_mo_vals(move, bom))
             self.env['stock.move'].create(mo._get_moves_raw_values())
             mo.action_confirm()
 

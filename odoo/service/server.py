@@ -403,7 +403,7 @@ class ThreadedServer(CommonServer):
             time.sleep(SLEEP_INTERVAL + number)     # Steve Reich timing style
             registries = odoo.modules.registry.Registry.registries
             _logger.debug('cron%d polling for jobs', number)
-            for db_name, registry in registries.items():
+            for db_name, registry in registries.d.items():
                 if registry.ready:
                     thread = threading.currentThread()
                     thread.start_time = time.time()
@@ -683,7 +683,7 @@ class PreforkServer(CommonServer):
             self.queue.append(sig)
             self.pipe_ping(self.pipe)
         else:
-            _logger.warn("Dropping signal: %s", sig)
+            _logger.warning("Dropping signal: %s", sig)
 
     def worker_spawn(self, klass, workers_registry):
         self.generation += 1
@@ -1147,6 +1147,7 @@ def _reexec(updated_modules=None):
     os.execve(sys.executable, args, os.environ)
 
 def load_test_file_py(registry, test_file):
+    from odoo.tests.common import OdooSuite
     threading.currentThread().testing = True
     try:
         test_path, _ = os.path.splitext(os.path.abspath(test_file))
@@ -1154,9 +1155,9 @@ def load_test_file_py(registry, test_file):
             for mod_mod in get_test_modules(mod):
                 mod_path, _ = os.path.splitext(getattr(mod_mod, '__file__', ''))
                 if test_path == mod_path:
-                    suite = unittest.TestSuite()
-                    for t in unittest.TestLoader().loadTestsFromModule(mod_mod):
-                        suite.addTest(t)
+                    tests = odoo.modules.module.unwrap_suite(
+                        unittest.TestLoader().loadTestsFromModule(mod_mod))
+                    suite = OdooSuite(tests)
                     _logger.log(logging.INFO, 'running tests %s.', mod_mod.__name__)
                     result = odoo.modules.module.OdooTestRunner().run(suite)
                     success = result.wasSuccessful()

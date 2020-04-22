@@ -199,7 +199,7 @@ exports.PosModel = Backbone.Model.extend({
     },{
         model:  'res.partner',
         label: 'load_partners',
-        fields: ['name','street','city','state_id','country_id','vat',
+        fields: ['name','street','city','state_id','country_id','vat','lang',
                  'phone','zip','mobile','email','barcode','write_date',
                  'property_account_position_id','property_product_pricelist'],
         loaded: function(self,partners){
@@ -223,6 +223,12 @@ exports.PosModel = Backbone.Model.extend({
                     self.company.country = countries[i];
                 }
             }
+        },
+    },{
+        model:  'res.lang',
+        fields: ['name', 'code'],
+        loaded: function (self, langs){
+            self.langs = langs;
         },
     },{
         model:  'account.tax',
@@ -294,7 +300,11 @@ exports.PosModel = Backbone.Model.extend({
        },
     },{
         model:  'res.users',
+<<<<<<< HEAD
         fields: ['name','company_id', 'id', 'groups_id'],
+=======
+        fields: ['name','company_id', 'id', 'groups_id', 'lang'],
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         domain: function(self){ return [['company_ids', 'in', self.config.company_id[0]],'|', ['groups_id','=', self.config.group_pos_manager_id[0]],['groups_id','=', self.config.group_pos_user_id[0]]]; },
         loaded: function(self,users){
             users.forEach(function(user) {
@@ -413,6 +423,13 @@ exports.PosModel = Backbone.Model.extend({
                 return new exports.Product({}, product);
             }));
         },
+    },{
+        model: 'account.cash.rounding',
+        fields: ['name', 'rounding', 'rounding_method'],
+        domain: function(self){return [['id', '=', self.config.rounding_method[0]]]; },
+        loaded: function(self, cash_rounding) {
+            self.cash_rounding = cash_rounding;
+        }
     },{
         model:  'pos.payment.method',
         fields: ['name', 'is_cash_count', 'use_payment_terminal'],
@@ -1009,11 +1026,6 @@ exports.PosModel = Backbone.Model.extend({
             }).catch(function (reason){
                 var error = reason.message;
                 if(error.code === 200 ){    // Business Logic Error, not a connection problem
-                    //if warning do not need to display traceback!!
-                    if (error.data.exception_type == 'warning') {
-                        delete error.data.debug;
-                    }
-
                     // Hide error if already shown before ...
                     if ((!self.get('failed') || options.show_error) && !options.to_invoice) {
                         self.gui.show_popup('error-traceback',{
@@ -1058,13 +1070,6 @@ exports.PosModel = Backbone.Model.extend({
                 self.db.set_ids_removed_from_server(server_ids);
                 return server_ids;
             }).catch(function (reason){
-                var error = reason.message;
-                if(error.code === 200 ){    // Business Logic Error, not a connection problem
-                    //if warning do not need to display traceback!!
-                    if (error.data.exception_type == 'warning') {
-                        delete error.data.debug;
-                    }
-                }
                 self.gui.show_sync_error_popup();
                 console.error('Failed to remove orders:', server_ids);
             });
@@ -1474,7 +1479,7 @@ exports.Orderline = Backbone.Model.extend({
         return orderline;
     },
     set_product_lot: function(product){
-        this.has_product_lot = product.tracking !== 'none' && this.pos.config.use_existing_lots;
+        this.has_product_lot = product.tracking !== 'none';
         this.pack_lot_lines  = this.has_product_lot && new PacklotlineCollection(null, {'order_line': this});
     },
     // sets a discount [0,100]%
@@ -1893,6 +1898,7 @@ exports.Orderline = Backbone.Model.extend({
 
         var round_tax = this.pos.company.tax_calculation_rounding_method != 'round_globally';
 
+        var initial_currency_rounding = currency_rounding;
         if(!round_tax)
             currency_rounding = currency_rounding * 0.00001;
 
@@ -1901,7 +1907,7 @@ exports.Orderline = Backbone.Model.extend({
              return round_pr((base_amount - fixed_amount) / (1.0 + percent_amount / 100.0) * (100 - division_amount) / 100, prec);
         }
 
-        var base = round_pr(price_unit * quantity, currency_rounding);
+        var base = round_pr(price_unit * quantity, initial_currency_rounding);
 
         var sign = 1;
         if(base < 0){
@@ -1947,7 +1953,11 @@ exports.Orderline = Backbone.Model.extend({
             i -= 1;
         });
 
+<<<<<<< HEAD
         var total_excluded = recompute_base(base, incl_fixed_amount, incl_percent_amount, incl_division_amount, currency_rounding);
+=======
+        var total_excluded = round_pr(recompute_base(base, incl_fixed_amount, incl_percent_amount, incl_division_amount), initial_currency_rounding);
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         var total_included = total_excluded;
 
         // 5) Iterate the taxes in the sequence order to fill missing base/amount values.
@@ -2206,6 +2216,14 @@ exports.Paymentline = Backbone.Model.extend({
     },
 
     /**
+     * Check if paymentline is done.
+     * Paymentline is done if there is no payment status or the payment status is done.
+     */
+    is_done: function() {
+        return this.get_payment_status() ? this.get_payment_status() === 'done' : true;
+    },
+
+    /**
      * Set additional info to be printed on the receipts. value should
      * be compatible with both the QWeb and ESC/POS receipts.
      *
@@ -2454,14 +2472,16 @@ exports.Order = Backbone.Model.extend({
             paymentlines: paymentlines,
             subtotal: this.get_subtotal(),
             total_with_tax: this.get_total_with_tax(),
+            total_rounded: this.get_total_with_tax() + this.get_rounding_applied(),
             total_without_tax: this.get_total_without_tax(),
             total_tax: this.get_total_tax(),
             total_paid: this.get_total_paid(),
             total_discount: this.get_total_discount(),
+            rounding_applied: this.get_rounding_applied(),
             tax_details: this.get_tax_details(),
             change: this.get_change(),
             name : this.get_name(),
-            client: client ? client.name : null ,
+            client: client ? client : null ,
             invoice_id: null,   //TODO
             cashier: cashier ? cashier.name : null,
             precision: {
@@ -2637,12 +2657,15 @@ exports.Order = Backbone.Model.extend({
         attr.order = this;
         var line = new exports.Orderline({}, {pos: this.pos, order: this, product: product});
         this.fix_tax_included_price(line);
+<<<<<<< HEAD
 
         if(options.extras !== undefined){
             for (var prop in options.extras) {
                 line[prop] = options.extras[prop];
             }
         }
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         if(options.quantity !== undefined){
             line.set_quantity(options.quantity);
@@ -2723,7 +2746,7 @@ exports.Order = Backbone.Model.extend({
         this.assert_editable();
         var newPaymentline = new exports.Paymentline({},{order: this, payment_method:payment_method, pos: this.pos});
         if(!payment_method.is_cash_count || this.pos.config.iface_precompute_cash){
-            newPaymentline.set_amount( this.get_due() );
+            newPaymentline.set_amount(this.get_due() );
         };
         this.paymentlines.add(newPaymentline);
         this.select_paymentline(newPaymentline);
@@ -2801,7 +2824,7 @@ exports.Order = Backbone.Model.extend({
         }
     },
     /* ---- Payment Status --- */
-    get_subtotal : function(){
+    get_subtotal: function(){
         return round_pr(this.orderlines.reduce((function(sum, orderLine){
             return sum + orderLine.get_display_price();
         }), 0), this.pos.currency.rounding);
@@ -2857,11 +2880,7 @@ exports.Order = Backbone.Model.extend({
     },
     get_total_paid: function() {
         return round_pr(this.paymentlines.reduce((function(sum, paymentLine) {
-            if (paymentLine.get_payment_status()) {
-                if (paymentLine.get_payment_status() == 'done') {
-                    sum += paymentLine.get_amount();
-                }
-            } else {
+            if (paymentLine.is_done()) {
                 sum += paymentLine.get_amount();
             }
             return sum;
@@ -2935,7 +2954,7 @@ exports.Order = Backbone.Model.extend({
     },
     get_change_value: function(paymentline) {
         if (!paymentline) {
-            var change = this.get_total_paid() - this.get_total_with_tax();
+            var change = this.get_total_paid() - this.get_total_with_tax() - this.get_rounding_applied();
         } else {
             var change = -this.get_total_with_tax();
             var lines  = this.paymentlines.models;
@@ -2954,7 +2973,7 @@ exports.Order = Backbone.Model.extend({
     },
     get_due: function(paymentline) {
         if (!paymentline) {
-            var due = this.get_total_with_tax() - this.get_total_paid();
+            var due = this.get_total_with_tax() - this.get_total_paid() + this.get_rounding_applied();
         } else {
             var due = this.get_total_with_tax();
             var lines = this.paymentlines.models;
@@ -2967,6 +2986,35 @@ exports.Order = Backbone.Model.extend({
             }
         }
         return round_pr(due, this.pos.currency.rounding);
+    },
+    get_rounding_applied: function() {
+        if(this.pos.config.cash_rounding) {
+            var total = round_pr(this.get_total_with_tax(), this.pos.cash_rounding[0].rounding);
+
+            var rounding_applied = total - (this.pos.config['iface_tax_included'] === "total"? this.get_subtotal(): this.get_total_with_tax());
+            // because floor and ceil doesn't include decimals in calculation, we reuse the value of the half-up and adapt it.
+            if(this.pos.cash_rounding[0].rounding_method === "UP" && rounding_applied < 0) {
+                rounding_applied += this.pos.cash_rounding[0].rounding;
+            }
+            else if(this.pos.cash_rounding[0].rounding_method === "DOWN" && rounding_applied > 0){
+                rounding_applied -= this.pos.cash_rounding[0].rounding;
+            }
+            return rounding_applied;
+        }
+        return 0;
+    },
+    has_not_valid_rounding: function() {
+        if(!this.pos.config.cash_rounding)
+            return false;
+
+        var lines = this.paymentlines.models;
+
+        for(var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            if(!utils.float_is_zero(line.amount - round_pr(line.amount, this.pos.cash_rounding[0].rounding), 6))
+                return line;
+        }
+        return false;
     },
     is_paid: function(){
         return this.get_due() <= 0;

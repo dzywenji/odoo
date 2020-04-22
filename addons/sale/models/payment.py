@@ -117,11 +117,18 @@ class PaymentTransaction(models.Model):
             default_template = self.env['ir.config_parameter'].sudo().get_param('sale.default_email_template')
             if default_template:
                 for trans in self.filtered(lambda t: t.sale_order_ids):
+<<<<<<< HEAD
                     ctx_company = {'company_id': trans.acquirer_id.company_id.id,
                                    'force_company': trans.acquirer_id.company_id.id,
                                    'mark_invoice_as_sent': True,
                                    }
                     trans = trans.with_context(ctx_company)
+=======
+                    trans = trans.with_company(trans.acquirer_id.company_id).with_context(
+                        mark_invoice_as_sent=True,
+                        company_id=trans.acquirer_id.company_id.id,
+                    )
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                     for invoice in trans.invoice_ids.with_user(SUPERUSER_ID):
                         invoice.message_post_with_template(int(default_template), email_layout_xmlid="mail.mail_notification_paynow")
         return res
@@ -129,9 +136,8 @@ class PaymentTransaction(models.Model):
     def _invoice_sale_orders(self):
         if self.env['ir.config_parameter'].sudo().get_param('sale.automatic_invoice'):
             for trans in self.filtered(lambda t: t.sale_order_ids):
-                ctx_company = {'company_id': trans.acquirer_id.company_id.id,
-                               'force_company': trans.acquirer_id.company_id.id}
-                trans = trans.with_context(**ctx_company)
+                trans = trans.with_company(trans.acquirer_id.company_id)\
+                    .with_context(company_id=trans.acquirer_id.company_id.id)
                 trans.sale_order_ids._force_lines_to_invoice_policy_order()
                 invoices = trans.sale_order_ids._create_invoices()
                 trans.invoice_ids = [(6, 0, invoices.ids)]
@@ -140,8 +146,8 @@ class PaymentTransaction(models.Model):
     def _compute_reference_prefix(self, values):
         prefix = super(PaymentTransaction, self)._compute_reference_prefix(values)
         if not prefix and values and values.get('sale_order_ids'):
-            many_list = self.resolve_2many_commands('sale_order_ids', values['sale_order_ids'], fields=['name'])
-            return ','.join(dic['name'] for dic in many_list)
+            sale_orders = self.new({'sale_order_ids': values['sale_order_ids']}).sale_order_ids
+            return ','.join(sale_orders.mapped('name'))
         return prefix
 
     def action_view_sales_orders(self):

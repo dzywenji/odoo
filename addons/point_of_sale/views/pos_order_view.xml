@@ -14,7 +14,16 @@
                     <field name="state" widget="statusbar" statusbar_visible="draft,paid,done" />
                 </header>
                 <sheet>
+                <field name="failed_pickings" invisible="1"/>
                 <div class="oe_button_box" name="button_box">
+                    <button name="action_stock_picking"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-truck"
+                        attrs="{'invisible':[('picking_count', '=', 0)]}">
+                        <field name="picking_count" widget="statinfo" string="Pickings" attrs="{'invisible': [('failed_pickings', '!=', False)]}"/>
+                        <field name="picking_count" widget="statinfo" string="Pickings" class="text-danger" attrs="{'invisible': [('failed_pickings', '=', False)]}"/>
+                    </button>
                     <button name="action_view_invoice"
                         string="Invoice"
                         type="object"
@@ -33,7 +42,7 @@
                     <field name="invoice_group" invisible="1"/>
                 </group>
                 <notebook colspan="4">
-                    <page string="Products">
+                    <page string="Products" name="products">
                         <field name="lines" colspan="4" nolabel="1">
                             <tree string="Order lines" editable="bottom">
                                 <field name="product_id"/>
@@ -76,10 +85,15 @@
                                    nolabel="1"
                                    class="oe_subtotal_footer_separator"
                                    widget="monetary"/>
+                            <field name="amount_paid"
+                                string="Total Paid (with rounding)"
+                                class="oe_subtotal_footer_separator"
+                                widget="monetary"
+                                attrs="{'invisible': [('amount_paid','=', 'amount_total')]}"/>
                         </group>
                         <div class="oe_clear"/>
                     </page>
-                    <page string="Payments">
+                    <page string="Payments" name="payments">
                         <field name="payment_ids" colspan="4" nolabel="1">
                             <tree string="Payments">
                                 <field name="currency_id" invisible="1" />
@@ -91,10 +105,6 @@
                     </page>
                     <page name="extra" string="Extra Info">
                         <group >
-                            <group string="Inventory">
-                                <field name="location_id" widget="selection" groups="stock.group_stock_multi_locations"/>
-                                <field name="picking_id" readonly="1"/>
-                            </group>
                             <group
                                 string="Accounting"
                                 groups="account.group_account_manager"
@@ -109,7 +119,7 @@
                             </group>
                         </group>
                     </page>
-                    <page string="Notes" >
+                    <page string="Notes" name="notes">
                         <field name="note"/>
                     </page>
                 </notebook>
@@ -341,6 +351,19 @@
                     <filter string="Order Date" name="order_month" domain="[]" context="{'group_by': 'date_order'}"/>
                 </group>
             </search>
+        </field>
+    </record>
+
+    <record id="pos_rounding_form_view_inherited" model="ir.ui.view">
+        <field name="name">pos.cash.rounding.form.inherited</field>
+        <field name="model">account.cash.rounding</field>
+        <field name="inherit_id" ref="account.rounding_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[hasclass('oe_title')]" position="before">
+                <div class="o_notification_alert alert alert-warning" role="alert">
+                  The Point of Sale only support the "add a rounding line" rounding strategy.
+                </div>
+            </xpath>
         </field>
     </record>
 </odoo>

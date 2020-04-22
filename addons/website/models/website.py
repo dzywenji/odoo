@@ -59,6 +59,7 @@ class Website(models.Model):
     language_ids = fields.Many2many('res.lang', 'website_lang_rel', 'website_id', 'lang_id', 'Languages', default=_active_languages)
     default_lang_id = fields.Many2one('res.lang', string="Default Language", default=_default_language, required=True)
     auto_redirect_lang = fields.Boolean('Autoredirect Language', default=True, help="Should users be redirected to their browser's language")
+    cookies_bar = fields.Boolean('Cookies Bar', help="Display a customizable cookies bar on your website.")
 
     def _default_social_facebook(self):
         return self.env.ref('base.main_company').social_facebook
@@ -90,11 +91,13 @@ class Website(models.Model):
     social_linkedin = fields.Char('LinkedIn Account', default=_default_social_linkedin)
     social_youtube = fields.Char('Youtube Account', default=_default_social_youtube)
     social_instagram = fields.Char('Instagram Account', default=_default_social_instagram)
-    social_default_image = fields.Binary(string="Default Social Share Image", help="If set, replaces the company logo as the default social share image.")
+    social_default_image = fields.Binary(string="Default Social Share Image", help="If set, replaces the website logo as the default social share image.")
+    has_social_default_image = fields.Boolean(compute='_compute_has_social_default_image', store=True)
 
     google_analytics_key = fields.Char('Google Analytics Key')
     google_management_client_id = fields.Char('Google Client ID')
     google_management_client_secret = fields.Char('Google Client Secret')
+    google_search_console = fields.Char(help='Google key, or Enable to access first reply')
 
     google_maps_api_key = fields.Char('Google Maps API Key')
 
@@ -102,9 +105,13 @@ class Website(models.Model):
     cdn_activated = fields.Boolean('Content Delivery Network (CDN)')
     cdn_url = fields.Char('CDN Base URL', default='')
     cdn_filters = fields.Text('CDN Filters', default=lambda s: '\n'.join(DEFAULT_CDN_FILTERS), help="URL matching those filters will be rewritten using the CDN Base URL")
-    partner_id = fields.Many2one(related='user_id.partner_id', relation='res.partner', string='Public Partner', readonly=False)
+    partner_id = fields.Many2one(related='user_id.partner_id', string='Public Partner', readonly=False)
     menu_id = fields.Many2one('website.menu', compute='_compute_menu', string='Main Menu')
     homepage_id = fields.Many2one('website.page', string='Homepage')
+    custom_code_head = fields.Text('Custom <head> code')
+    custom_code_footer = fields.Text('Custom end of <body> code')
+
+    robots_txt = fields.Text('Robots.txt', translate=False, groups='website.group_website_designer')
 
     def _default_favicon(self):
         img_path = get_resource_path('web', 'static/src/img/favicon.ico')
@@ -126,6 +133,11 @@ class Website(models.Model):
         if language_ids and self.default_lang_id not in language_ids:
             self.default_lang_id = language_ids[0]
 
+    @api.depends('social_default_image')
+    def _compute_has_social_default_image(self):
+        for website in self:
+            website.has_social_default_image = bool(website.social_default_image)
+
     def _compute_menu(self):
         for website in self:
             menus = self.env['website.menu'].browse(website._get_menu_ids())
@@ -137,7 +149,12 @@ class Website(models.Model):
                 # don't add child menu if parent is forbidden
                 if menu.parent_id and menu.parent_id in menus:
                     menu.parent_id._cache['child_id'] += (menu.id,)
+<<<<<<< HEAD
 
+=======
+            # prefetch every website.page and ir.ui.view at once
+            menus.mapped('is_visible')
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             website.menu_id = menus and menus.filtered(lambda m: not m.parent_id)[0].id or False
 
     # self.env.uid for ir.rule groups on menu
@@ -179,6 +196,26 @@ class Website(models.Model):
         if 'cdn_activated' in values or 'cdn_url' in values or 'cdn_filters' in values:
             # invalidate the caches from static node at compile time
             self.env['ir.qweb'].clear_caches()
+
+        if 'cookies_bar' in values:
+            if values['cookies_bar']:
+                cookies_view = self.env.ref('website.cookie_policy', raise_if_not_found=False)
+                if cookies_view:
+                    cookies_view.with_context(website_id=self.id).write({'website_id': self.id})
+                    specific_cook_view = self.with_context(website_id=self.id).viewref('website.cookie_policy')
+                    self.env['website.page'].create({
+                        'is_published': True,
+                        'website_indexed': False,
+                        'url': '/cookie-policy',
+                        'website_id': self.id,
+                        'view_id': specific_cook_view.id,
+                    })
+            else:
+                self.env['website.page'].search([
+                    ('website_id', '=', self.id),
+                    ('url', '=', '/cookie-policy'),
+                ]).unlink()
+
         return result
 
     @api.model
@@ -197,6 +234,11 @@ class Website(models.Model):
         ])
         attachments_to_unlink.unlink()
         return super(Website, self).unlink()
+
+    def create_and_redirect_to_theme(self):
+        self._force()
+        action = self.env.ref('website.theme_install_kanban_action')
+        return action.read()[0]
 
     # ----------------------------------------------------------
     # Page Management
@@ -232,6 +274,8 @@ class Website(models.Model):
         # Bootstrap default menu hierarchy, create a new minimalist one if no default
         default_menu = self.env.ref('website.main_menu')
         self.copy_menu_hierarchy(default_menu)
+        home_menu = self.env['website.menu'].search([('website_id', '=', self.id), ('url', '=', '/')])
+        home_menu.page_id = self.homepage_id
 
     def copy_menu_hierarchy(self, top_menu):
         def copy_menu(menu, t_menu):
@@ -288,6 +332,7 @@ class Website(models.Model):
                 'url': page_url,
                 'website_id': website.id,  # remove it if only one website or not?
                 'view_id': view.id,
+                'track': True,
             })
             result['view_id'] = view.id
         if add_menu:
@@ -668,7 +713,7 @@ class Website(models.Model):
             view_id = View.get_view_id(template)
         if not view_id:
             raise NotFound
-        return View.browse(view_id)
+        return View.sudo().browse(view_id)
 
     @api.model
     def pager(self, url, total, page=1, step=30, scope=5, url_args=None):
@@ -692,14 +737,15 @@ class Website(models.Model):
                 return False
 
         # dont't list routes without argument having no default value or converter
-        spec = inspect.getargspec(endpoint.method.original_func)
-
-        # remove self and arguments having a default value
-        defaults_count = len(spec.defaults or [])
-        args = spec.args[1:(-defaults_count or None)]
+        sign = inspect.signature(endpoint.method.original_func)
+        params = list(sign.parameters.values())[1:]  # skip self
+        supported_kinds = (inspect.Parameter.POSITIONAL_ONLY,
+                           inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        has_no_default = lambda p: p.default is inspect.Parameter.empty
 
         # check that all args have a converter
-        return all((arg in rule._converters) for arg in args)
+        return all(p.name in rule._converters for p in params
+                   if p.kind in supported_kinds and has_no_default(p))
 
     def enumerate_pages(self, query_string=None, force=False):
         """ Available pages in the website/CMS. This is mostly used for links
@@ -721,7 +767,7 @@ class Website(models.Model):
         sitemap_endpoint_done = set()
 
         for rule in router.iter_rules():
-            if 'sitemap' in rule.endpoint.routing:
+            if 'sitemap' in rule.endpoint.routing and rule.endpoint.routing['sitemap'] is not True:
                 if rule.endpoint in sitemap_endpoint_done:
                     continue
                 sitemap_endpoint_done.add(rule.endpoint)
@@ -736,6 +782,10 @@ class Website(models.Model):
             if not self.rule_is_enumerable(rule):
                 continue
 
+            if 'sitemap' not in rule.endpoint.routing:
+                logger.warning('No Sitemap value provided for controller %s (%s)' %
+                               (rule.endpoint.method, ','.join(rule.endpoint.routing['routes'])))
+
             converters = rule._converters or {}
             if query_string and not converters and (query_string not in rule.build({}, append_unknown=False)[1]):
                 continue
@@ -747,6 +797,9 @@ class Website(models.Model):
                 key=lambda x: (hasattr(x[1], 'domain') and (x[1].domain != '[]'), rule._trace.index((True, x[0]))))
 
             for (i, (name, converter)) in enumerate(convitems):
+                if 'website_id' in self.env[converter.model]._fields and (not converter.domain or converter.domain == '[]'):
+                    converter.domain = "[('website_id', 'in', (False, current_website_id))]"
+
                 newval = []
                 for val in values:
                     query = i == len(convitems) - 1 and query_string
@@ -755,11 +808,10 @@ class Website(models.Model):
                         query = sitemap_qs2dom(query, r, self.env[converter.model]._rec_name)
                         if query == FALSE_DOMAIN:
                             continue
-                    for value_dict in converter.generate(uid=self.env.uid, dom=query, args=val):
+
+                    for rec in converter.generate(uid=self.env.uid, dom=query, args=val):
                         newval.append(val.copy())
-                        value_dict[name] = value_dict['loc']
-                        del value_dict['loc']
-                        newval[-1].update(value_dict)
+                        newval[-1].update({name: rec})
                 values = newval
 
             for value in values:
@@ -775,9 +827,12 @@ class Website(models.Model):
         # '/' already has a http.route & is in the routing_map so it will already have an entry in the xml
         domain = [('url', '!=', '/')]
         if not force:
-            domain += [('website_indexed', '=', True)]
+            domain += [('website_indexed', '=', True), ('visibility', '=', False)]
             # is_visible
-            domain += [('website_published', '=', True), '|', ('date_publish', '=', False), ('date_publish', '<=', fields.Datetime.now())]
+            domain += [
+                ('website_published', '=', True), ('visibility', '=', False),
+                '|', ('date_publish', '=', False), ('date_publish', '<=', fields.Datetime.now())
+            ]
 
         if query_string:
             domain += [('url', 'like', query_string)]
@@ -811,7 +866,7 @@ class Website(models.Model):
     def image_url(self, record, field, size=None):
         """ Returns a local url that points to the image field of a given browse record. """
         sudo_record = record.sudo()
-        sha = hashlib.sha1(str(getattr(sudo_record, '__last_update')).encode('utf-8')).hexdigest()[0:7]
+        sha = hashlib.sha512(str(getattr(sudo_record, '__last_update')).encode('utf-8')).hexdigest()[:7]
         size = '' if size is None else '/%s' % size
         return '/web/image/%s/%s/%s%s?unique=%s' % (record._name, record.id, field, size, sha)
 
@@ -904,6 +959,18 @@ class Website(models.Model):
         # and canonical url is always quoted, so it is never possible to tell
         # if the current URL is indeed canonical or not.
         return current_url == canonical_url
+
+    @tools.ormcache('self.id')
+    def _get_cached_values(self):
+        self.ensure_one()
+        return {
+            'user_id': self.user_id.id,
+            'company_id': self.company_id.id,
+            'default_lang_id': self.default_lang_id.id,
+        }
+
+    def _get_cached(self, field):
+        return self._get_cached_values()[field]
 
 
 class BaseModel(models.AbstractModel):

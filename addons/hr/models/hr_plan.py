@@ -13,9 +13,10 @@ class HrPlanActivityType(models.Model):
     activity_type_id = fields.Many2one(
         'mail.activity.type', 'Activity Type',
         default=lambda self: self.env.ref('mail.mail_activity_data_todo'),
-        domain=lambda self: ['|', ('res_model_id', '=', False), ('res_model_id', '=', self.env['ir.model']._get('hr.employee').id)]
+        domain=lambda self: ['|', ('res_model_id', '=', False), ('res_model_id', '=', self.env['ir.model']._get('hr.employee').id)],
+        ondelete='restrict'
     )
-    summary = fields.Char('Summary')
+    summary = fields.Char('Summary', compute="_compute_default_summary", store=True, readonly=False)
     responsible = fields.Selection([
         ('coach', 'Coach'),
         ('manager', 'Manager'),
@@ -24,10 +25,11 @@ class HrPlanActivityType(models.Model):
     responsible_id = fields.Many2one('res.users', 'Responsible Person', help='Specific responsible of activity if not linked to the employee.')
     note = fields.Html('Note')
 
-    @api.onchange('activity_type_id')
-    def _onchange_activity_type_id(self):
-        if self.activity_type_id and self.activity_type_id.summary and not self.summary:
-            self.summary = self.activity_type_id.summary
+    @api.depends('activity_type_id')
+    def _compute_default_summary(self):
+        for plan_type in self:
+            if not plan_type.summary and plan_type.activity_type_id and plan_type.activity_type_id.summary:
+                plan_type.summary = plan_type.activity_type_id.summary
 
     def get_responsible_id(self, employee):
         if self.responsible == 'coach':

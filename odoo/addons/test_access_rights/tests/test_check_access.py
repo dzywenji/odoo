@@ -3,6 +3,10 @@
 import odoo.tests
 
 
+<<<<<<< HEAD
+=======
+@odoo.tests.tagged('-at_install', 'post_install')
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 class TestAccess(odoo.tests.HttpCase):
     def setUp(self):
         super(TestAccess, self).setUp()

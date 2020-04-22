@@ -7,5 +7,9 @@
         <field name="transfer_account_code_prefix">1999999</field>
         <field name="code_digits">8</field>
         <field name="currency_id" ref="base.IDR"/>
+<<<<<<< HEAD
+=======
+        <field name="spoken_languages" eval="'id_ID'"/>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     </record>
 </odoo>

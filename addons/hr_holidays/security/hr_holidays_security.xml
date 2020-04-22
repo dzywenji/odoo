@@ -24,6 +24,8 @@
         <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
     </record>
 
+    <data noupdate="1">
+
     <record id="base.default_user" model="res.users">
         <field name="groups_id" eval="[(4,ref('hr_holidays.group_hr_holidays_manager'))]"/>
     </record>
@@ -132,7 +134,6 @@
     <record id="hr_leave_rule_multicompany" model="ir.rule">
         <field name="name">Time Off: multi company global rule</field>
         <field name="model_id" ref="model_hr_leave"/>
-        <field name="global" eval="True"/>
         <field name="domain_force">['|', ('holiday_status_id.company_id', '=', False), ('holiday_status_id.company_id', 'in', company_ids)]</field>
     </record>
 
@@ -142,7 +143,7 @@
         <field name="domain_force">[
             '|',
                 ('employee_id.leave_manager_id', '=', user.id),
-                ('employee_id.user_id', '=', user.id)
+                ('employee_id.user_id', '=', user.id),
         ]</field>
         <field name="perm_create" eval="False"/>
         <field name="perm_write" eval="False"/>
@@ -151,19 +152,21 @@
     </record>
 
     <record id="hr_leave_allocation_rule_employee_update" model="ir.rule">
-        <field name="name">Allocations: employee: create/write/unlink not validated own</field>
+        <field name="name">Allocations: base.group_user create/write</field>
         <field name="model_id" ref="model_hr_leave_allocation"/>
-        <field name="domain_force">
-            [('holiday_type', '=', 'employee'),
+        <field name="domain_force">[
+            ('holiday_status_id.allocation_type', '=', 'fixed_allocation'),
+            ('holiday_type', '=', 'employee'),
             '|',
                 '&amp;',
                     ('employee_id.user_id', '=', user.id),
                     ('state', 'not in', ['validate', 'validate1']),
                 '&amp;',
-                    ('validation_type', 'in', ['manager', 'both', 'no_validation']),
-                    ('employee_id.leave_manager_id', '=', user.id),]
-        </field>
+                    ('validation_type', 'in', ['manager', 'both']),
+                    ('employee_id.leave_manager_id', '=', user.id),
+        ]</field>
         <field name="perm_read" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
         <field name="groups" eval="[(4,ref('base.group_user'))]"/>
     </record>
 
@@ -177,12 +180,29 @@
         <field name="groups" eval="[(4, ref('hr_holidays.group_hr_holidays_user'))]"/>
     </record>
 
-    <record id="hr_leave_allocation_rule_officer_update" model="ir.rule">
-        <field name="name">Allocations: see all time off: create/write/unlink own + managed employee + without department + same or managed department</field>
+    <record id="hr_leav_allocation_rule_employee_unlink" model="ir.rule">
+        <field name="name">Allocations base.group_user unlink</field>
         <field name="model_id" ref="model_hr_leave_allocation"/>
-        <field name="domain_force">['|',
-'|', ('employee_id.user_id', '=', user.id), ('employee_id.parent_id.user_id', '=', user.id),
-'|', '|', ('department_id', '=', False), ('department_id.member_ids.user_id', 'in', [user.id]), ('department_id.manager_id.user_id', '=', user.id)]</field>
+        <field name="domain_force">[('employee_id.user_id', '=', user.id), ('state', '=', 'draft')]</field>
+        <field name="perm_read" eval="False"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+
+    <record id="hr_leave_allocation_rule_officer_update" model="ir.rule">
+        <field name="name">Allocations: holiday user : create/write</field>
+        <field name="model_id" ref="model_hr_leave_allocation"/>
+        <field name="domain_force">[
+            ('holiday_type', '=', 'employee'),
+            '|',
+                '&amp;',
+                    ('employee_id.user_id', '=', user.id),
+                    ('state', '!=', 'validate'),
+                '|',
+                    ('employee_id.user_id', '!=', user.id),
+                    ('employee_id.user_id', '=', False)
+        ]</field>
         <field name="groups" eval="[(4,ref('hr_holidays.group_hr_holidays_user'))]"/>
     </record>
 
@@ -214,7 +234,18 @@
     <record id="hr_holidays_status_rule_multi_company" model="ir.rule">
         <field name="name">Time Off multi company rule</field>
         <field name="model_id" ref="model_hr_leave_type"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="hr_leave_report_calendar_rule_multi_company" model="ir.rule">
+        <field name="name">Time Off Report Calendar: multi company global rule</field>
+        <field name="model_id" ref="model_hr_leave_report_calendar"/>
         <field name="global" eval="True"/>
         <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
     </record>
+<<<<<<< HEAD
+=======
+
+    </data>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 </odoo>

@@ -3,11 +3,7 @@
 
 from odoo.tests import common
 from lxml import etree
-
-try:
-    from unittest.mock import patch
-except ImportError:
-    from mock import patch
+from unittest.mock import patch
 
 
 class TestMassMailingShortener(common.TransactionCase):
@@ -23,16 +19,9 @@ class TestMassMailingShortener(common.TransactionCase):
         def _get_title_from_url(u):
             return "Hello"
 
-        def _compute_favicon():
-            # 1px to avoid real request
-            return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=='
-
-        patcher = patch('odoo.addons.link_tracker.models.link_tracker.LinkTracker._compute_favicon', wraps=_compute_favicon)
-        patcher2 = patch('odoo.addons.link_tracker.models.link_tracker.LinkTracker._get_title_from_url', wraps=_get_title_from_url)
+        patcher = patch('odoo.addons.link_tracker.models.link_tracker.LinkTracker._get_title_from_url', wraps=_get_title_from_url)
         patcher.start()
-        patcher2.start()
         self.addCleanup(patcher.stop)
-        self.addCleanup(patcher2.stop)
 
     def test_00_test_mass_mailing_shortener(self):
         mailing_list_A = self.env['mailing.list'].create({
@@ -75,10 +64,10 @@ Email: <a id="url4" href="mailto:test@odoo.com">test@odoo.com</h1>
         mass_mailing.action_put_in_queue()
         mass_mailing._process_mass_mailing_queue()
 
-        sent_mails = self.env['mail.mail'].search([('mailing_id', '=', mass_mailing.id)])
+        sent_mails = self.env['mail.mail'].sudo().search([('mailing_id', '=', mass_mailing.id)])
         sent_messages = sent_mails.mapped('mail_message_id')
 
-        self.assertEqual(mailing_list_A.contact_nbr, len(sent_messages),
+        self.assertEqual(len(mailing_list_A.contact_ids), len(sent_messages),
                          'Some message has not been sent')
 
         xbody = etree.fromstring(sent_messages[0].body)

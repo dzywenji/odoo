@@ -15,20 +15,26 @@ __all__ = [
 ]
 
 import logging
-from collections import defaultdict, Mapping
+from collections import defaultdict
+from collections.abc import Mapping
 from contextlib import contextmanager
-from copy import deepcopy
-from inspect import getargspec
+from inspect import signature
 from pprint import pformat
 from weakref import WeakSet
 
-from decorator import decorate, decorator
+from decorator import decorate
 from werkzeug.local import Local, release_local
 
+<<<<<<< HEAD
 import odoo
 from .tools.translate import _
 from odoo.tools import frozendict, classproperty, lazy_property, StackMap
 from odoo.exceptions import CacheMiss
+=======
+from .exceptions import CacheMiss
+from .tools import frozendict, classproperty, lazy_property, StackMap
+from .tools.translate import _
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 _logger = logging.getLogger(__name__)
 
@@ -148,7 +154,10 @@ def onchange(*args):
     .. code-block:: python
 
         return {
+<<<<<<< HEAD
             'domain': {'other_id': [('partner_id', '=', partner_id)]},
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'warning': {'title': "Warning", 'message': "What is this?", 'type': 'notification'},
         }
 
@@ -225,7 +234,11 @@ def depends_context(*args):
     All dependencies must be hashable.  The following keys have special
     support:
 
+<<<<<<< HEAD
     * `force_company` (value in context or current company id),
+=======
+    * `company` (value in context or current company id),
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     * `uid` (current user id and superuser flag),
     * `active_test` (value in env.context or value in field.context).
     """
@@ -275,7 +288,7 @@ def downgrade(method, value, self, args, kwargs):
     if not spec:
         return value
     _, convert, _ = spec
-    if convert and len(getargspec(convert).args) > 1:
+    if convert and len(signature(convert).parameters) > 1:
         return convert(self, value, *args, **kwargs)
     elif convert:
         return convert(value)
@@ -445,6 +458,7 @@ class Environment(Mapping):
         self.cr, self.uid, self.context, self.su = self.args = args
         self.registry = Registry(cr.dbname)
         self.cache = envs.cache
+        self._cache_key = {}                    # memo {field: cache_key}
         self._protected = envs.protected        # proxy to shared data structure
         self.all = envs
         envs.add(self)
@@ -702,6 +716,38 @@ class Environment(Mapping):
         """ Delay recomputations (deprecated: this is not the default behavior). """
         yield
 
+    def cache_key(self, field):
+        """ Return the cache key corresponding to ``field.depends_context``. """
+        try:
+            return self._cache_key[field]
+
+        except KeyError:
+            def get(key, get_context=self.context.get):
+                if key == 'company':
+                    return self.company.id
+                elif key == 'uid':
+                    return (self.uid, self.su)
+                elif key == 'active_test':
+                    return get_context('active_test', field.context.get('active_test', True))
+                else:
+                    val = get_context(key)
+                    if type(val) is list:
+                        val = tuple(val)
+                    try:
+                        hash(val)
+                    except TypeError:
+                        raise TypeError(
+                            "Can only create cache keys from hashable values, "
+                            "got non-hashable value {!r} at context key {!r} "
+                            "(dependency of field {})".format(val, key, field)
+                        ) from None  # we don't need to chain the exception created 2 lines above
+                    else:
+                        return val
+
+            result = tuple(get(key) for key in field.depends_context)
+            self._cache_key[field] = result
+            return result
+
 
 class Environments(object):
     """ A common object for all environments in a request. """
@@ -735,7 +781,7 @@ class Cache(object):
     def contains(self, record, field):
         """ Return whether ``record`` has a value for ``field``. """
         if field.depends_context:
-            key = field.cache_key(record.env)
+            key = record.env.cache_key(field)
             return key in self._data.get(field, {}).get(record.id, {})
         return record.id in self._data.get(field, ())
 
@@ -744,7 +790,7 @@ class Cache(object):
         try:
             value = self._data[field][record._ids[0]]
             if field.depends_context:
-                value = value[field.cache_key(record.env)]
+                value = value[record.env.cache_key(field)]
             return value
         except KeyError:
             if default is NOTHING:
@@ -754,7 +800,7 @@ class Cache(object):
     def set(self, record, field, value):
         """ Set the value of ``field`` for ``record``. """
         if field.depends_context:
-            key = field.cache_key(record.env)
+            key = record.env.cache_key(field)
             self._data[field].setdefault(record._ids[0], {})[key] = value
         else:
             self._data[field][record._ids[0]] = value
@@ -762,7 +808,7 @@ class Cache(object):
     def update(self, records, field, values):
         """ Set the values of ``field`` for several ``records``. """
         if field.depends_context:
-            key = field.cache_key(records.env)
+            key = records.env.cache_key(field)
             field_cache = self._data[field]
             for record_id, value in zip(records._ids, values):
                 field_cache.setdefault(record_id, {})[key] = value
@@ -779,7 +825,7 @@ class Cache(object):
     def get_values(self, records, field):
         """ Return the cached values of ``field`` for ``records``. """
         field_cache = self._data[field]
-        key = field.cache_key(records.env) if field.depends_context else None
+        key = records.env.cache_key(field) if field.depends_context else None
         for record_id in records._ids:
             try:
                 if key is not None:
@@ -789,10 +835,25 @@ class Cache(object):
             except KeyError:
                 pass
 
+    def get_until_miss(self, records, field):
+        """ Return the cached values of ``field`` for ``records`` until a value is not found. """
+        field_cache = self._data[field]
+        key = records.env.cache_key(field) if field.depends_context else None
+        vals = []
+        for record_id in records._ids:
+            try:
+                if key is not None:
+                    vals.append(field_cache[record_id][key])
+                else:
+                    vals.append(field_cache[record_id])
+            except KeyError:
+                break
+        return vals
+
     def get_records_different_from(self, records, field, value):
         """ Return the subset of ``records`` that has not ``value`` for ``field``. """
         field_cache = self._data[field]
-        key = field.cache_key(records.env) if field.depends_context else None
+        key = records.env.cache_key(field) if field.depends_context else None
         ids = []
         for record_id in records._ids:
             try:
@@ -815,7 +876,7 @@ class Cache(object):
             values = self._data.get(field, {})
             if record.id not in values:
                 continue
-            if field.depends_context and field.cache_key(record.env) not in values[record.id]:
+            if field.depends_context and record.env.cache_key(field) not in values[record.id]:
                 continue
             yield field
 

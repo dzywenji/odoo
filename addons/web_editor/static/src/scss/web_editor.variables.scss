@@ -5,6 +5,7 @@
 $o-we-font-family: Roboto, 'Montserrat', 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif !default;
 
 $o-we-font-size: 13px;
+$o-we-line-height: 1.5;
 $o-we-bg-color: #F7F7F7 !default;
 $o-we-bg-color-dark: #a7a7a7 !default;
 $o-we-color: #212629 !default;
@@ -280,15 +281,26 @@ $o-we-toolbar-height: 32px;
 
 // Edition colors
 
-// Colors
-$o-color-palettes: (
-    (
+// Note: the "base" palettes contain all possible keys a palette should or
+// must contain, with a default value which should work in use cases where it
+// will be used. Any palette defined by an app will be merged with the base
+// palette once selected to ensure it works.
 
-    ),
+// Colors
+$o-base-color-palette: () !default;
+$o-color-palettes: (
+    (),
 ) !default;
-$o-color-palette-number: 1;
+$o-color-palette-number: 1 !default;
 
 // Theme colors
+$o-base-theme-color-palette: (
+    'alpha': white,
+    'beta': white,
+    'gamma': white,
+    'delta': white,
+    'epsilon': white,
+) !default;
 $o-theme-color-palettes: (
     (
         'alpha': $o-enterprise-primary-color,
@@ -298,24 +310,27 @@ $o-theme-color-palettes: (
         'epsilon': #E46F78,
     ),
 ) !default;
-$o-theme-color-palette-number: 1;
+$o-theme-color-palette-number: 1 !default;
 
 // Greyscale transparent colours
+$o-base-gray-color-palette: (
+    'white': #FFFFFF, // Those two will enforce the creation of bg-white
+    'black': #000000, // and bg-black classes.
+) !default;
 $o-transparent-grays: (
+    'black-15': rgba(black, 0.15),
     'black-25': rgba(black, 0.25),
     'black-50': rgba(black, 0.5),
     'black-75': rgba(black, 0.75),
     'white-25': rgba(white, 0.25),
     'white-50': rgba(white, 0.5),
     'white-75': rgba(white, 0.75),
+    'white-85': rgba(white, 0.85),
 ) !default;
 $o-gray-color-palettes: (
-    (
-        'white': #FFFFFF, // Those two will enforce the creation of bg-white
-        'black': #000000, // and bg-black classes.
-    ),
+    (),
 ) !default;
-$o-gray-color-palette-number: 1;
+$o-gray-color-palette-number: 1 !default;
 
 // Translations
 $o-we-content-to-translate-color: rgb(255, 255, 90) !default;

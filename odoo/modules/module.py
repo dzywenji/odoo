@@ -3,27 +3,25 @@
 
 import ast
 import collections
-import imp
 import importlib
 import inspect
 import itertools
 import logging
 import os
-import pkg_resources
-import re
 import sys
 import time
-import types
 import unittest
 import threading
+<<<<<<< HEAD
 import warnings
 from operator import itemgetter
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 from os.path import join as opj
 
 import odoo
 import odoo.tools as tools
 import odoo.release as release
-from odoo import SUPERUSER_ID, api
 from odoo.tools import pycompat
 from odoo.tools.misc import mute_logger
 
@@ -32,6 +30,7 @@ README = ['README.rst', 'README.md', 'README.txt']
 
 _logger = logging.getLogger(__name__)
 
+<<<<<<< HEAD
 # addons path as a list
 # ad_paths is a deprecated alias, please use odoo.addons.__path__
 @tools.lazy
@@ -101,15 +100,21 @@ class OdooHook(object):
 
         return sys.modules[name]
 
+=======
+# Modules already loaded
+loaded = []
+
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 def initialize_sys_path():
     """
-    Setup an import-hook to be able to import OpenERP addons from the different
-    addons paths.
-
-    This ensures something like ``import crm`` (or even
-    ``import odoo.addons.crm``) works even if the addons are not in the
-    PYTHONPATH.
+    Setup the addons path ``odoo.addons.__path__`` with various defaults
+    and explicit directories.
     """
+<<<<<<< HEAD
+=======
+    # if getattr(initialize_sys_path, 'called', False): # only initialize once
+    #    return
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     initialize_sys_path.called = True
 
     # hook odoo.addons on data dir
@@ -142,11 +147,14 @@ def initialize_sys_path():
     maintenance_pkg.migrations = upgrade
     sys.modules["odoo.addons.base.maintenance"] = maintenance_pkg
     sys.modules["odoo.addons.base.maintenance.migrations"] = upgrade
+<<<<<<< HEAD
 
     if getattr(initialize_sys_path, 'called', False): # only initialize once
         sys.meta_path.insert(0, OdooHook())
         sys.meta_path.insert(0, AddonsHook())
 
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 def get_module_path(module, downloaded=False, display_warning=True):
     """Return the path of the given module.
@@ -463,7 +471,7 @@ def _get_tests_modules(path, module):
         _logger.exception('Can not `import %s`.', module)
         return []
     if hasattr(mod, 'fast_suite') or hasattr(mod, 'checks'):
-        _logger.warn(
+        _logger.warning(
             "Found deprecated fast_suite or checks attribute in test module "
             "%s. These have no effect in or after version 8.0.",
             mod.__name__)
@@ -487,7 +495,10 @@ class OdooTestResult(unittest.result.TestResult):
         (fn, lno, func, sinfo) (logger.findCaller format), see logger.log for
         the other parameters.
         """
-        logger = logging.getLogger((test or self).__module__)  # test should be always set
+        test = test or self
+        if isinstance(test, unittest.case._SubTest) and test.test_case:
+            test = test.test_case
+        logger = logging.getLogger(test.__module__)
         try:
             caller_infos = caller_infos or logger.findCaller(stack_info)
         except ValueError:
@@ -501,6 +512,8 @@ class OdooTestResult(unittest.result.TestResult):
             logger.handle(record)
 
     def getDescription(self, test):
+        if isinstance(test, unittest.case._SubTest):
+            return 'Subtest %s' % test._subDescription()
         if isinstance(test, unittest.TestCase):
             # since we have the module name in the logger, this will avoid to duplicate module info in log line
             # we only apply this for TestCase since we can receive error handler or other special case
@@ -571,18 +584,13 @@ class OdooTestResult(unittest.result.TestResult):
 
 
 class OdooTestRunner(object):
-    """A test runner class that displays results in in logger.
-    Simplified verison of TextTestRunner(
+    """A test runner class that displays results in in logger using OdooTestResult.
+    Simplified verison of TextTestRunner
     """
 
     def run(self, test):
         result = OdooTestResult()
-
-        start_time = time.perf_counter()
         test(result)
-        time_taken = time.perf_counter() - start_time
-        run = result.testsRun
-        _logger.info("Ran %d test%s in %.3fs", run, run != 1 and "s" or "", time_taken)
         return result
 
 current_test = None
@@ -594,7 +602,8 @@ def run_unit_tests(module_name, position='at_install'):
     :rtype: bool
     """
     global current_test
-    from odoo.tests.common import TagsSelector # Avoid import loop
+    # avoid dependency hell
+    from odoo.tests.common import TagsSelector, OdooSuite
     current_test = module_name
     mods = get_test_modules(module_name)
     threading.currentThread().testing = True
@@ -603,15 +612,17 @@ def run_unit_tests(module_name, position='at_install'):
     r = True
     for m in mods:
         tests = unwrap_suite(unittest.TestLoader().loadTestsFromModule(m))
-        suite = unittest.TestSuite(t for t in tests if position_tag.check(t) and config_tags.check(t))
+        suite = OdooSuite(t for t in tests if position_tag.check(t) and config_tags.check(t))
 
         if suite.countTestCases():
             t0 = time.time()
             t0_sql = odoo.sql_db.sql_counter
             _logger.info('%s running tests.', m.__name__)
             result = OdooTestRunner().run(suite)
+            log_level = logging.INFO
             if time.time() - t0 > 5:
-                _logger.log(25, "%s tested in %.2fs, %s queries", m.__name__, time.time() - t0, odoo.sql_db.sql_counter - t0_sql)
+                log_level = logging.RUNBOT
+            _logger.log(log_level, "%s ran %s tests in %.2fs, %s queries", m.__name__, result.testsRun, time.time() - t0, odoo.sql_db.sql_counter - t0_sql)
             if not result.wasSuccessful():
                 r = False
                 _logger.error("Module %s: %d failures, %d errors", module_name, len(result.failures), len(result.errors))

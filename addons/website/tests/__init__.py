@@ -11,6 +11,10 @@ from . import test_page
 from . import test_performance
 from . import test_qweb
 from . import test_res_users
+<<<<<<< HEAD
+=======
+from . import test_theme
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 from . import test_ui
 from . import test_views
 from . import test_website_favicon

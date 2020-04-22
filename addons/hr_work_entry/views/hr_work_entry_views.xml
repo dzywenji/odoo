@@ -74,10 +74,14 @@
         <field name="arch" type="xml">
             <tree multi_edit="1">
                 <field name="name"/>
+<<<<<<< HEAD
                 <field name="work_entry_type_id"/>
+=======
+                <field name="work_entry_type_id" options="{'no_create': True, 'no_open': True}"/>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 <field name="duration" readonly="1"/>
                 <field name="state"/>
-                <field name="date_start" string="Beginning"/>
+                <field name="date_start" string="Beginning" readonly="1"/>
             </tree>
         </field>
     </record>

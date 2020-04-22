@@ -19,7 +19,9 @@ _logger = logging.getLogger(__name__)
 class AcquirerPaypal(models.Model):
     _inherit = 'payment.acquirer'
 
-    provider = fields.Selection(selection_add=[('paypal', 'Paypal')])
+    provider = fields.Selection(selection_add=[
+        ('paypal', 'Paypal')
+    ], ondelete={'paypal': 'set default'})
     paypal_email_account = fields.Char('Email', required_if_provider='paypal', groups='base.group_user')
     paypal_seller_account = fields.Char(
         'Merchant Account ID', groups='base.group_user',
@@ -195,12 +197,13 @@ class TxPaypal(models.Model):
                 render_template = template.render({
                     'acquirer': self.acquirer_id,
                 }, engine='ir.qweb')
-                mail_body = self.env['mail.thread']._replace_local_links(render_template)
+                mail_body = self.env['mail.render.mixin']._replace_local_links(render_template)
                 mail_values = {
                     'body_html': mail_body,
                     'subject': _('Add your Paypal account to Odoo'),
                     'email_to': self.acquirer_id.paypal_email_account,
-                    'email_from': self.acquirer_id.create_uid.email
+                    'email_from': self.acquirer_id.create_uid.email_formatted,
+                    'author_id': self.acquirer_id.create_uid.partner_id.id,
                 }
                 self.env['mail.mail'].sudo().create(mail_values).send()
 

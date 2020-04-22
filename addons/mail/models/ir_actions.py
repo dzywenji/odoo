@@ -17,7 +17,7 @@ class ServerActions(models.Model):
         ('email', 'Send Email'),
         ('followers', 'Add Followers'),
         ('next_activity', 'Create Next Activity'),
-    ])
+        ], ondelete={'email': 'cascade', 'followers': 'cascade', 'next_activity': 'cascade'})
     # Followers
     partner_ids = fields.Many2many('res.partner', string='Add Followers')
     channel_ids = fields.Many2many('mail.channel', string='Add Channels')
@@ -29,7 +29,8 @@ class ServerActions(models.Model):
     # Next Activity
     activity_type_id = fields.Many2one(
         'mail.activity.type', string='Activity',
-        domain="['|', ('res_model_id', '=', False), ('res_model_id', '=', model_id)]")
+        domain="['|', ('res_model_id', '=', False), ('res_model_id', '=', model_id)]",
+        ondelete='restrict')
     activity_summary = fields.Char('Summary')
     activity_note = fields.Html('Note')
     activity_date_deadline_range = fields.Integer(string='Due Date In')
@@ -50,11 +51,14 @@ class ServerActions(models.Model):
         if self.activity_date_deadline_range < 0:
             raise UserError(_("The 'Due Date In' value can't be negative."))
 
+<<<<<<< HEAD
     @api.onchange('template_id')
     def on_change_template_id(self):
         # TODO: remove in master
         pass
 
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     @api.constrains('state', 'model_id')
     def _check_mail_thread(self):
         for action in self:

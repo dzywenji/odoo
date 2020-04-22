@@ -127,7 +127,11 @@ publicWidget.registry.productsRecentlyViewedSnippet = publicWidget.Widget.extend
      */
     _addCarousel: function () {
         var carousel = config.device.size_class <= config.device.SIZES.SM ? this.mobileCarousel : this.webCarousel;
+<<<<<<< HEAD
         this.$('.slider').html(carousel).css('display', ''); // TODO removing the style is useless in master
+=======
+        this.$('.slider').html(carousel).css('display', ''); // Removing display is kept for compatibility (it was hidden before)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     },
 
     //--------------------------------------------------------------------------
@@ -150,7 +154,11 @@ publicWidget.registry.productsRecentlyViewedSnippet = publicWidget.Widget.extend
             },
         }).then(function (data) {
             wSaleUtils.updateCartNavBar(data);
+<<<<<<< HEAD
             var $navButton = wSaleUtils.getNavBarButton('.o_wsale_my_cart');
+=======
+            var $navButton = $('header .o_wsale_my_cart').first();
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             var fetch = self._fetch();
             var animation = wSaleUtils.animateClone($navButton, $(ev.currentTarget).parents('.o_carousel_product_card'), 25, 40);
             Promise.all([fetch, animation]).then(function (values) {

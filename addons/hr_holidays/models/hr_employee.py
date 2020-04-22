@@ -12,7 +12,9 @@ class HrEmployeeBase(models.AbstractModel):
 
     leave_manager_id = fields.Many2one(
         'res.users', string='Time Off',
-        help="User responsible of leaves approval.")
+        compute='_compute_leave_manager', store=True, readonly=False,
+        help='Select the user responsible for approving "Time Off" of this employee.\n'
+             'If empty, the approval is done by an Administrator or Approver (determined in settings/users).')
     remaining_leaves = fields.Float(
         compute='_compute_remaining_leaves', string='Remaining Paid Time Off',
         help='Total number of paid time off allocated to this employee, change this value to create allocation/time off request. '
@@ -119,13 +121,15 @@ class HrEmployeeBase(models.AbstractModel):
             employee.current_leave_id = leave_data.get(employee.id, {}).get('current_leave_id')
             employee.is_absent = leave_data.get(employee.id) and leave_data.get(employee.id, {}).get('current_leave_state') not in ['cancel', 'refuse', 'draft']
 
-    @api.onchange('parent_id')
-    def _onchange_parent_id(self):
-        super(HrEmployeeBase, self)._onchange_parent_id()
-        previous_manager = self._origin.parent_id.user_id
-        manager = self.parent_id.user_id
-        if manager and self.leave_manager_id == previous_manager or not self.leave_manager_id:
-            self.leave_manager_id = manager
+    @api.depends('parent_id')
+    def _compute_leave_manager(self):
+        for employee in self:
+            previous_manager = employee._origin.parent_id.user_id
+            manager = employee.parent_id.user_id
+            if manager and employee.leave_manager_id == previous_manager or not employee.leave_manager_id:
+                employee.leave_manager_id = manager
+            elif not employee.leave_manager_id:
+                employee.leave_manager_id = False
 
     def _compute_show_leaves(self):
         show_leaves = self.env['res.users'].has_group('hr_holidays.group_hr_holidays_user')

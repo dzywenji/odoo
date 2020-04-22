@@ -1,19 +1,33 @@
 # -*- coding: utf-8 -*-
 
+<<<<<<< HEAD
 from odoo.addons.account.tests.account_test_classes import AccountingTestCase
+=======
+from odoo.addons.account.tests.common import AccountTestCommon
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 from odoo.tests import tagged
 
 
 @tagged('post_install', '-at_install')
+<<<<<<< HEAD
 class TestAccountMoveRounding(AccountingTestCase):
 
     def setUp(self):
         super(TestAccountMoveRounding, self).setUp()
         self.currency = self.env['res.currency'].create({
+=======
+class TestAccountMoveRounding(AccountTestCommon):
+
+    @classmethod
+    def setUpClass(cls):
+        super(TestAccountMoveRounding, cls).setUpClass()
+        cls.currency = cls.env['res.currency'].create({
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'name': "RAM",
             'symbol': "🐏",
             'rounding': 0.01,
         })
+<<<<<<< HEAD
         self.company = self.env['res.company'].create({
             'name': "SHEEP",
             'currency_id': self.currency.id,
@@ -34,6 +48,28 @@ class TestAccountMoveRounding(AccountingTestCase):
             'name': 'EWE',
             'code': 'E',
             'user_type_id': self.account_type.id,
+=======
+        cls.company = cls.env['res.company'].create({
+            'name': "SHEEP",
+            'currency_id': cls.currency.id,
+        })
+        cls.account_type = cls.env['account.account.type'].create({
+            'name': 'BAAH',
+            'internal_group': 'asset',
+            'type': 'receivable'
+        })
+        cls.journal = cls.env['account.journal'].create({
+            'company_id': cls.company.id,
+            'name': 'LAMB',
+            'code': 'LL',
+            'type': 'purchase',
+        })
+        cls.account = cls.env['account.account'].create({
+            'company_id': cls.company.id,
+            'name': 'EWE',
+            'code': 'EE',
+            'user_type_id': cls.account_type.id,
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'reconcile': True,
         })
 

@@ -156,10 +156,16 @@ class CustomerPortal(CustomerPortal):
         # only if he knows the private token
         # Log only once a day
         if order_sudo:
+<<<<<<< HEAD
             now = fields.Date.today().isoformat()
             session_obj_date = request.session.get('view_quote_%s' % order_sudo.id)
             if isinstance(session_obj_date, date):
                 session_obj_date = session_obj_date.isoformat()
+=======
+            # store the date as a string in the session to allow serialization
+            now = fields.Date.today().isoformat()
+            session_obj_date = request.session.get('view_quote_%s' % order_sudo.id)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             if session_obj_date != now and request.env.user.share and access_token:
                 request.session['view_quote_%s' % order_sudo.id] = now
                 body = _('Quotation viewed by customer %s') % order_sudo.partner_id.name
@@ -169,7 +175,11 @@ class CustomerPortal(CustomerPortal):
                     body,
                     token=order_sudo.access_token,
                     message_type="notification",
+<<<<<<< HEAD
                     subtype="mail.mt_note",
+=======
+                    subtype_xmlid="mail.mt_note",
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                     partner_ids=order_sudo.user_id.sudo().partner_id.ids,
                 )
 

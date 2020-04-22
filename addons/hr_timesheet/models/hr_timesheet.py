@@ -5,11 +5,12 @@ from lxml import etree
 import re
 
 from odoo import api, fields, models, _
-from odoo.exceptions import UserError
-
+from odoo.exceptions import UserError, AccessError
+from odoo.osv import expression
 
 class AccountAnalyticLine(models.Model):
-    _inherit = 'account.analytic.line'
+    _name = 'account.analytic.line'
+    _inherit = ['account.analytic.line', 'timer.mixin']
 
     @api.model
     def default_get(self, field_list):
@@ -20,12 +21,36 @@ class AccountAnalyticLine(models.Model):
             result['employee_id'] = self.env['hr.employee'].search([('user_id', '=', result['user_id'])], limit=1).id
         return result
 
-    task_id = fields.Many2one('project.task', 'Task', index=True, domain="[('company_id', '=', company_id)]")
-    project_id = fields.Many2one('project.project', 'Project', domain=[('allow_timesheets', '=', True)])
+    def _domain_project_id(self):
+        domain = [('allow_timesheets', '=', True)]
+        if not self.user_has_groups('hr_timesheet.group_timesheet_manager'):
+            return expression.AND([domain,
+                ['|', ('privacy_visibility', '!=', 'followers'), ('allowed_internal_user_ids', 'in', self.env.user.ids)]
+            ])
+        return domain
 
-    employee_id = fields.Many2one('hr.employee', "Employee", check_company=True)
+    def _domain_employee_id(self):
+        if not self.user_has_groups('hr_timesheet.group_hr_timesheet_approver'):
+            return [('user_id', '=', self.env.user.id)]
+        return []
+
+    def _domain_task_id(self):
+        if not self.user_has_groups('hr_timesheet.group_hr_timesheet_approver'):
+            return ['|', ('privacy_visibility', '!=', 'followers'), ('allowed_user_ids', 'in', self.env.user.ids)]
+        return []
+
+    task_id = fields.Many2one(
+        'project.task', 'Task', index=True,
+        domain="[('company_id', '=', company_id), ('project_id.allow_timesheets', '=', True), ('project_id', '=?', project_id)]"
+    )
+    project_id = fields.Many2one('project.project', 'Project', domain=_domain_project_id)
+
+    employee_id = fields.Many2one('hr.employee', "Employee", check_company=True, domain=_domain_employee_id)
     department_id = fields.Many2one('hr.department', "Department", compute='_compute_department_id', store=True, compute_sudo=True)
     encoding_uom_id = fields.Many2one('uom.uom', compute='_compute_encoding_uom_id')
+    display_timer = fields.Boolean(
+        compute='_compute_display_timer',
+        help="Technical field used to display the timer if the encoding unit is 'Hours'.")
 
     def _compute_encoding_uom_id(self):
         for analytic_line in self:
@@ -33,18 +58,9 @@ class AccountAnalyticLine(models.Model):
 
     @api.onchange('project_id')
     def onchange_project_id(self):
-        # force domain on task when project is set
-        if self.project_id:
-            if self.project_id != self.task_id.project_id:
-                # reset task when changing project
-                self.task_id = False
-            return {'domain': {
-                'task_id': [('project_id', '=', self.project_id.id)]
-            }}
-        return {'domain': {
-            'task_id': [('project_id.allow_timesheets', '=', True)]
-        }}
-
+        if self.project_id and self.project_id != self.task_id.project_id:
+            # reset task when changing project
+            self.task_id = False
 
     @api.onchange('task_id')
     def _onchange_task_id(self):
@@ -63,27 +79,33 @@ class AccountAnalyticLine(models.Model):
         for line in self:
             line.department_id = line.employee_id.department_id
 
-    # ----------------------------------------------------
-    # ORM overrides
-    # ----------------------------------------------------
+    @api.model_create_multi
+    def create(self, vals_list):
+        default_user_id = self._default_user()
+        user_ids = list(map(lambda x: x.get('user_id', default_user_id), filter(lambda x: not x.get('employee_id') and x.get('project_id'), vals_list)))
+        employees = self.env['hr.employee'].search([('user_id', 'in', user_ids)])
+        user_map = {employee.user_id.id: employee.id for employee in employees}
 
-    @api.model
-    def create(self, values):
-        # compute employee only for timesheet lines, makes no sense for other lines
-        if not values.get('employee_id') and values.get('project_id'):
-            if values.get('user_id'):
-                ts_user_id = values['user_id']
-            else:
-                ts_user_id = self._default_user()
-            values['employee_id'] = self.env['hr.employee'].search([('user_id', '=', ts_user_id)], limit=1).id
+        for vals in vals_list:
+            # when the name is not provide by the 'Add a line', we set a default one
+            if vals.get('project_id') and not vals.get('name'):
+                vals['name'] = _('/')
+            # compute employee only for timesheet lines, makes no sense for other lines
+            if not vals.get('employee_id') and vals.get('project_id'):
+                vals['employee_id'] = user_map.get(vals.get('user_id') or default_user_id)
+            vals.update(self._timesheet_preprocess(vals))
 
-        values = self._timesheet_preprocess(values)
-        result = super(AccountAnalyticLine, self).create(values)
-        if result.project_id:  # applied only for timesheet
-            result._timesheet_postprocess(values)
-        return result
+        lines = super(AccountAnalyticLine, self).create(vals_list)
+        for line, values in zip(lines, vals_list):
+            if line.project_id:  # applied only for timesheet
+                line._timesheet_postprocess(values)
+        return lines
 
     def write(self, values):
+        # If it's a basic user then check if the timesheet is his own.
+        if not self.user_has_groups('hr_timesheet.group_hr_timesheet_approver') and any(self.env.user.id != analytic_line.user_id.id for analytic_line in self):
+            raise AccessError(_("You cannot access timesheets that are not yours."))
+
         values = self._timesheet_preprocess(values)
         result = super(AccountAnalyticLine, self).write(values)
         # applied only for timesheet
@@ -107,10 +129,6 @@ class AccountAnalyticLine(models.Model):
         for node in doc.xpath("//field[@name='unit_amount'][@widget='timesheet_uom'][not(@string)]"):
             node.set('string', _('Duration (%s)') % (re.sub(r'[\(\)]', '', encoding_uom.name or '')))
         return etree.tostring(doc, encoding='unicode')
-
-    # ----------------------------------------------------
-    # Business Methods
-    # ----------------------------------------------------
 
     def _timesheet_get_portal_domain(self):
         return ['|', '&',
@@ -165,7 +183,7 @@ class AccountAnalyticLine(models.Model):
             :param dict values: values for the model's fields, as a dictionary::
                 {'field_name': field_value, ...}
             :return: a dictionary mapping each record id to its corresponding
-                dictionnary values to write (may be empty).
+                dictionary values to write (may be empty).
         """
         result = {id_: {} for id_ in self.ids}
         sudo_self = self.sudo()  # this creates only one env for all operation that required sudo()
@@ -180,3 +198,40 @@ class AccountAnalyticLine(models.Model):
                     'amount': amount_converted,
                 })
         return result
+
+    def _compute_display_timer(self):
+        uom_hour = self.env.ref('uom.product_uom_hour')
+        for analytic_line in self:
+            analytic_line.display_timer = analytic_line.encoding_uom_id == uom_hour
+
+    def action_timer_start(self):
+        """ Start a timer if it isn't already started and the
+        timesheets allow to track time
+        """
+        if not self.user_timer_id.timer_start and self.display_timer:
+            super().action_timer_start()
+
+    def action_timer_stop(self):
+        """ Stop the current timer
+        """
+        if self.user_timer_id.timer_start and self.display_timer:
+            minutes_spent = super().action_timer_stop()
+            self._add_timesheet_time(minutes_spent)
+
+    def _add_timesheet_time(self, minutes_spent):
+        if self.unit_amount == 0 and minutes_spent < 1:
+            # Check if unit_amount equals 0 and minutes_spent is less than 1 minute,
+            # if yes, then remove the timesheet
+            self.unlink()
+        else:
+            if minutes_spent < 1:
+                amount = self.unit_amount
+            else:
+                minimum_duration = int(self.env['ir.config_parameter'].sudo().get_param('hr_timesheet.timesheet_min_duration', 0))
+                rounding = int(self.env['ir.config_parameter'].sudo().get_param('hr_timesheet.timesheet_rounding', 0))
+                minutes_spent = self._timer_rounding(minutes_spent, minimum_duration, rounding)
+                amount = self.unit_amount + minutes_spent * 60 / 3600
+            self.write({'unit_amount': amount})
+
+    def _action_interrupt_user_timers(self):
+        self.action_timer_stop()

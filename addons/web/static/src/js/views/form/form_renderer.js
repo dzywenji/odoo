@@ -49,9 +49,6 @@ var FormRenderer = BasicRenderer.extend({
      */
     on_attach_callback: function () {
         this._isInDom = true;
-        _.forEach(this.allFieldWidgets, function (widgets){
-            _.invoke(widgets, 'on_attach_callback');
-        });
         this._super.apply(this, arguments);
     },
     /**
@@ -212,18 +209,14 @@ var FormRenderer = BasicRenderer.extend({
      * @returns {Object} a map from notebook name to the active tab index
      */
     getLocalState: function () {
-        var state = {};
-        this.$('div.o_notebook').each(function () {
-            var $notebook = $(this);
-            var name = $notebook.data('name');
-            var index = -1;
-            $notebook.find('.nav-link').each(function (i) {
-                if ($(this).hasClass('active')) {
-                    index = i;
-                }
-            });
-            state[name] = index;
-        });
+        const state = {};
+        for (const notebook of this.el.querySelectorAll(':scope div.o_notebook')) {
+            const name = notebook.dataset.name;
+            const navs = notebook.querySelectorAll(':scope .o_notebook_headers .nav-item > .nav-link');
+            state[name] = [...navs].findIndex(
+                nav => nav.classList.contains('active')
+            );
+        }
         return state;
     },
     /**
@@ -240,23 +233,42 @@ var FormRenderer = BasicRenderer.extend({
         this.lastActivatedFieldIndex = -1;
     },
     /**
-     * restore active tab pages for each notebook
-     *
-     * @todo make sure this method is called
+     * Restore active tab pages for each notebook. It relies on the implicit fact
+     * that each nav header corresponds to a tab page.
      *
      * @param {Object} state the result from a getLocalState call
      */
     setLocalState: function (state) {
-        this.$('div.o_notebook').each(function () {
-            var $notebook = $(this);
-            var name = $notebook.data('name');
+        for (const notebook of this.el.querySelectorAll(':scope div.o_notebook')) {
+            const name = notebook.dataset.name;
             if (name in state) {
+<<<<<<< HEAD
                 var $page = $notebook.find('> .o_notebook_headers > .nav-tabs > .nav-item').eq(state[name]);
                 if (!$page.hasClass('o_invisible_modifier')) {
                     $page.find('a[data-toggle="tab"]').click();
+=======
+                const navs = notebook.querySelectorAll(':scope .o_notebook_headers .nav-item');
+                const pages = notebook.querySelectorAll(':scope .tab-content > .tab-pane');
+                // We can't base the amount on the 'navs' length since some overrides
+                // are adding pageless nav items.
+                const validTabsAmount = pages.length;
+                let activeIndex = state[name];
+                if (navs[activeIndex].classList.contains('o_invisible_modifier')) {
+                    activeIndex = [...navs].findIndex(
+                        nav => !nav.classList.contains('o_invisible_modifier')
+                    );
                 }
+                if (activeIndex <= 0) {
+                    continue; // No visible tab OR first tab = active tab (no change to make).
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
+                }
+                for (let i = 0; i < validTabsAmount; i++) {
+                    navs[i].querySelector('.nav-link').classList.toggle('active', activeIndex === i);
+                    pages[i].classList.toggle('active', activeIndex === i);
+                }
+                core.bus.trigger('DOM_updated');
             }
-        });
+        }
     },
     /**
      * @override method from AbstractRenderer
@@ -331,7 +343,7 @@ var FormRenderer = BasicRenderer.extend({
     _addOnClickAction: function ($el, node) {
         if (node.attrs.special || node.attrs.confirm || node.attrs.type || $el.hasClass('oe_stat_button')) {
             var self = this;
-            $el.click(function () {
+            $el.on("click", function () {
                 self.trigger_up('button_clicked', {
                     attrs: node.attrs,
                     record: self.state,
@@ -611,6 +623,14 @@ var FormRenderer = BasicRenderer.extend({
         if (node.attrs.nolabel !== '1') {
             var $labelTd = this._renderInnerGroupLabel(node);
             $tds = $labelTd.add($tds);
+
+            // apply the oe_(edit|read)_only className on the label as well
+            if (/\boe_edit_only\b/.test(node.attrs.class)) {
+                $tds.addClass('oe_edit_only');
+            }
+            if (/\boe_read_only\b/.test(node.attrs.class)) {
+                $tds.addClass('oe_read_only');
+            }
         }
 
         return $tds;
@@ -820,6 +840,13 @@ var FormRenderer = BasicRenderer.extend({
             for: this._getIDForLabel(fieldName),
             text: text,
         });
+        const field = this.state.fields[fieldName];
+        if (field && field.company_dependent) {
+            $result.append($('<span>', {
+                class: 'fa fa-sm fa-building-o ml-2',
+                title: _t("Values set here are company-specific"),
+            }));
+        }
         if (node.tag === 'label') {
             this._handleAttributes($result, node);
         }
@@ -903,9 +930,14 @@ var FormRenderer = BasicRenderer.extend({
             });
         });
         var $notebookHeaders = $('<div class="o_notebook_headers">').append($headers);
+<<<<<<< HEAD
         var $notebook = $('<div class="o_notebook">')
                 .data('name', node.attrs.name || '_default_')
                 .append($notebookHeaders, $pages);
+=======
+        var $notebook = $('<div class="o_notebook">').append($notebookHeaders, $pages);
+        $notebook[0].dataset.name = node.attrs.name || '_default_';
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         this._registerModifiers(node, this.state, $notebook);
         this._handleAttributes($notebook, node);
         return $notebook;
@@ -1061,12 +1093,23 @@ var FormRenderer = BasicRenderer.extend({
      */
     _onNavigationMove: function (ev) {
         ev.stopPropagation();
+        // We prevent the default behaviour and stop the propagation of the
+        // originalEvent when the originalEvent is a tab keydown to not let
+        // the browser do it. The action is done by this renderer.
+        if (ev.data.originalEvent && ['next', 'previous'].includes(ev.data.direction)) {
+            ev.data.originalEvent.preventDefault();
+            ev.data.originalEvent.stopPropagation();
+        }
         var index;
+        let target = ev.data.target || ev.target;
+        if (target.__owl__) {
+            target = target.__owl__.parent; // Owl fields are wrapped by the FieldWrapper
+        }
         if (ev.data.direction === "next") {
-            index = this.allFieldWidgets[this.state.id].indexOf(ev.data.target || ev.target);
+            index = this.allFieldWidgets[this.state.id].indexOf(target);
             this._activateNextFieldWidget(this.state, index);
         } else if (ev.data.direction === "previous") {
-            index = this.allFieldWidgets[this.state.id].indexOf(ev.data.target);
+            index = this.allFieldWidgets[this.state.id].indexOf(target);
             this._activatePreviousFieldWidget(this.state, index);
         }
     },

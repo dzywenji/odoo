@@ -430,18 +430,17 @@ registry.slider = publicWidget.Widget.extend({
     selector: '.carousel',
     disabledInEditableMode: false,
     edit_events: {
-        'slid.bs.carousel': '_onEditionSlide',
+        'content_changed': '_onContentChanged',
     },
 
     /**
      * @override
      */
     start: function () {
-        if (!this.editableMode) {
-            this.$('img').on('load.slider', this._onImageLoaded.bind(this));
-            this._computeHeights();
-        }
-        this.$target.carousel();
+        this.$('img').on('load.slider', () => this._computeHeights());
+        this._computeHeights();
+        // Initialize carousel and pause if in edit mode.
+        this.$target.carousel(this.editableMode ? 'pause' : undefined);
         return this._super.apply(this, arguments);
     },
     /**
@@ -467,6 +466,7 @@ registry.slider = publicWidget.Widget.extend({
     _computeHeights: function () {
         var maxHeight = 0;
         var $items = this.$('.carousel-item');
+        $items.css('min-height', '');
         _.each($items, function (el) {
             var $item = $(el);
             var isActive = $item.hasClass('active');
@@ -477,9 +477,7 @@ registry.slider = publicWidget.Widget.extend({
             }
             $item.toggleClass('active', isActive);
         });
-        _.each($items, function (el) {
-            $(el).css('min-height', maxHeight);
-        });
+        $items.css('min-height', maxHeight);
     },
 
     //--------------------------------------------------------------------------
@@ -489,13 +487,7 @@ registry.slider = publicWidget.Widget.extend({
     /**
      * @private
      */
-    _onEditionSlide: function () {
-        this._computeHeights();
-    },
-    /**
-     * @private
-     */
-    _onImageLoaded: function () {
+    _onContentChanged: function (ev) {
         this._computeHeights();
     },
 });
@@ -540,7 +532,7 @@ registry.parallax = Animation.extend({
             this.$bg = this.$('> .s_parallax_bg');
             if (!this.$bg.length) {
                 this.$bg = $('<span/>', {
-                    class: 's_parallax_bg' + (this.$target.hasClass('oe_custom_bg') ? ' oe_custom_bg' : ''),
+                    class: 's_parallax_bg',
                 }).prependTo(this.$target);
             }
         }
@@ -608,38 +600,6 @@ registry.parallax = Animation.extend({
             // Normalize accordingly to current options
             return Math.round(this.ratio * (2 * r - 1));
         }
-    },
-});
-
-registry.share = publicWidget.Widget.extend({
-    selector: '.s_share, .oe_share', // oe_share for compatibility
-
-    /**
-     * @override
-     */
-    start: function () {
-        var urlRegex = /(\?(?:|.*&)(?:u|url|body)=)(.*?)(&|#|$)/;
-        var titleRegex = /(\?(?:|.*&)(?:title|text|subject)=)(.*?)(&|#|$)/;
-        var url = encodeURIComponent(window.location.href);
-        var title = encodeURIComponent($('title').text());
-        this.$('a').each(function () {
-            var $a = $(this);
-            $a.attr('href', function (i, href) {
-                return href.replace(urlRegex, function (match, a, b, c) {
-                    return a + url + c;
-                }).replace(titleRegex, function (match, a, b, c) {
-                    return a + title + c;
-                });
-            });
-            if ($a.attr('target') && $a.attr('target').match(/_blank/i) && !$a.closest('.o_editable').length) {
-                $a.on('click', function () {
-                    window.open(this.href, '', 'menubar=no,toolbar=no,resizable=yes,scrollbars=yes,height=550,width=600');
-                    return false;
-                });
-            }
-        });
-
-        return this._super.apply(this, arguments);
     },
 });
 
@@ -853,162 +813,6 @@ registry.ul = publicWidget.Widget.extend({
     },
 });
 
-registry.gallery = publicWidget.Widget.extend({
-    selector: '.o_gallery:not(.o_slideshow)',
-    xmlDependencies: ['/website/static/src/xml/website.gallery.xml'],
-    events: {
-        'click img': '_onClickImg',
-    },
-
-    //--------------------------------------------------------------------------
-    // Handlers
-    //--------------------------------------------------------------------------
-
-    /**
-     * Called when an image is clicked. Opens a dialog to browse all the images
-     * with a bigger size.
-     *
-     * @private
-     * @param {Event} ev
-     */
-    _onClickImg: function (ev) {
-        var self = this;
-        var $cur = $(ev.currentTarget);
-
-        var urls = [];
-        var idx = undefined;
-        var milliseconds = undefined;
-        var params = undefined;
-        var $images = $cur.closest('.o_gallery').find('img');
-        var size = 0.8;
-        var dimensions = {
-            min_width: Math.round(window.innerWidth * size * 0.9),
-            min_height: Math.round(window.innerHeight * size),
-            max_width: Math.round(window.innerWidth * size * 0.9),
-            max_height: Math.round(window.innerHeight * size),
-            width: Math.round(window.innerWidth * size * 0.9),
-            height: Math.round(window.innerHeight * size)
-        };
-
-        $images.each(function () {
-            urls.push($(this).attr('src'));
-        });
-        var $img = ($cur.is('img') === true) ? $cur : $cur.closest('img');
-        idx = urls.indexOf($img.attr('src'));
-
-        milliseconds = $cur.closest('.o_gallery').data('interval') || false;
-        var $modal = $(qweb.render('website.gallery.slideshow.lightbox', {
-            srcs: urls,
-            index: idx,
-            dim: dimensions,
-            interval: milliseconds,
-            id: _.uniqueId('slideshow_'),
-        }));
-        $modal.modal({
-            keyboard: true,
-            backdrop: true,
-        });
-        $modal.on('hidden.bs.modal', function () {
-            $(this).hide();
-            $(this).siblings().filter('.modal-backdrop').remove(); // bootstrap leaves a modal-backdrop
-            $(this).remove();
-        });
-        $modal.find('.modal-content, .modal-body.o_slideshow').css('height', '100%');
-        $modal.appendTo(document.body);
-
-        $modal.one('shown.bs.modal', function () {
-            self.trigger_up('widgets_start_request', {
-                editableMode: false,
-                $target: $modal.find('.modal-body.o_slideshow'),
-            });
-        });
-    },
-});
-
-registry.gallerySlider = publicWidget.Widget.extend({
-    selector: '.o_slideshow',
-    xmlDependencies: ['/website/static/src/xml/website.gallery.xml'],
-    disabledInEditableMode: false,
-
-    /**
-     * @override
-     */
-    start: function () {
-        var self = this;
-        this.$carousel = this.$target.is('.carousel') ? this.$target : this.$target.find('.carousel');
-        this.$indicator = this.$carousel.find('.carousel-indicators');
-        this.$prev = this.$indicator.find('li.o_indicators_left').css('visibility', ''); // force visibility as some databases have it hidden
-        this.$next = this.$indicator.find('li.o_indicators_right').css('visibility', '');
-        var $lis = this.$indicator.find('li[data-slide-to]');
-        var nbPerPage = Math.floor(this.$indicator.width() / $lis.first().outerWidth(true)) - 3; // - navigator - 1 to leave some space
-        var realNbPerPage = nbPerPage || 1;
-        var nbPages = Math.ceil($lis.length / realNbPerPage);
-
-        var index;
-        var page;
-        update();
-
-        function hide() {
-            $lis.each(function (i) {
-                $(this).toggleClass('d-none', i < page * nbPerPage || i >= (page + 1) * nbPerPage);
-            });
-            if (self.editableMode) { // do not remove DOM in edit mode
-                return;
-            }
-            if (page <= 0) {
-                self.$prev.detach();
-            } else {
-                self.$prev.prependTo(self.$indicator);
-            }
-            if (page >= nbPages - 1) {
-                self.$next.detach();
-            } else {
-                self.$next.appendTo(self.$indicator);
-            }
-        }
-
-        function update() {
-            index = $lis.index($lis.filter('.active')) || 0;
-            page = Math.floor(index / realNbPerPage);
-            hide();
-        }
-
-        this.$carousel.on('slide.bs.carousel.gallery_slider', function () {
-            setTimeout(function () {
-                var $item = self.$carousel.find('.carousel-inner .carousel-item-prev, .carousel-inner .carousel-item-next');
-                var index = $item.index();
-                $lis.removeClass('active')
-                    .filter('[data-slide-to="' + index + '"]')
-                    .addClass('active');
-            }, 0);
-        });
-        this.$indicator.on('click.gallery_slider', '> li:not([data-slide-to])', function () {
-            page += ($(this).hasClass('o_indicators_left') ? -1 : 1);
-            page = Math.max(0, Math.min(nbPages - 1, page)); // should not be necessary
-            self.$carousel.carousel(page * realNbPerPage);
-            hide();
-        });
-        this.$carousel.on('slid.bs.carousel.gallery_slider', update);
-
-        return this._super.apply(this, arguments);
-    },
-    /**
-     * @override
-     */
-    destroy: function () {
-        this._super.apply(this, arguments);
-
-        if (!this.$indicator) {
-            return;
-        }
-
-        this.$prev.prependTo(this.$indicator);
-        this.$next.appendTo(this.$indicator);
-        this.$carousel.off('.gallery_slider');
-        this.$indicator.off('.gallery_slider');
-    },
-});
-
 registry.socialShare = publicWidget.Widget.extend({
     selector: '.oe_social_share',
     xmlDependencies: ['/website/static/src/xml/website.share.xml'],
@@ -1091,13 +895,22 @@ registry.socialShare = publicWidget.Widget.extend({
     },
 });
 
-registry.facebookPage = publicWidget.Widget.extend({
-    selector: '.o_facebook_page',
-    disabledInEditableMode: false,
+registry.anchorSlide = publicWidget.Widget.extend({
+    selector: 'a[href^="/"][href*="#"], a[href^="#"]',
+    events: {
+        'click': '_onAnimateClick',
+    },
+
+    //--------------------------------------------------------------------------
+    // Private
+    //--------------------------------------------------------------------------
 
     /**
-     * @override
+     * @private
+     * @param {jQuery} $el the element to scroll to.
+     * @param {string} [scrollValue='true'] scroll value
      */
+<<<<<<< HEAD
     start: function () {
         var def = this._super.apply(this, arguments);
 
@@ -1124,23 +937,22 @@ registry.facebookPage = publicWidget.Widget.extend({
         this.$el.append(this.$iframe);
 
         return def;
+=======
+    _scrollTo: function ($el, scrollValue = 'true') {
+        const headerHeight = this._computeHeaderHeight();
+        $('html, body').animate({
+            scrollTop: $el.offset().top - headerHeight,
+        }, scrollValue === 'true' ? 500 : 0);
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     },
     /**
-     * @override
+     * @private
      */
-    destroy: function () {
-        this._super.apply(this, arguments);
-
-        if (this.$iframe) {
-            this.$iframe.remove();
-        }
-    },
-});
-
-registry.anchorSlide = publicWidget.Widget.extend({
-    selector: 'a[href^="/"][href*="#"], a[href^="#"]',
-    events: {
-        'click': '_onAnimateClick',
+    _computeHeaderHeight: function () {
+        let headerHeight = 0;
+        const $navbarFixed = $('.o_top_fixed_element');
+        _.each($navbarFixed, el => headerHeight += $(el).outerHeight());
+        return headerHeight;
     },
 
     //--------------------------------------------------------------------------
@@ -1159,13 +971,27 @@ registry.anchorSlide = publicWidget.Widget.extend({
             return;
         }
         var $anchor = $(hash);
-        if (!$anchor.length || !$anchor.attr('data-anchor')) {
+        const scrollValue = $anchor.attr('data-anchor');
+        if (!$anchor.length || !scrollValue) {
             return;
         }
         ev.preventDefault();
-        $('html, body').animate({
-            scrollTop: $anchor.offset().top,
-        }, 500);
+        this._scrollTo($anchor, scrollValue);
+    },
+});
+
+registry.ScrollButton = registry.anchorSlide.extend({
+    selector: '.o_scroll_button',
+
+    /**
+     * @override
+     */
+    _onAnimateClick: function (ev) {
+        ev.preventDefault();
+        const $nextSection = this.$el.closest('section').next('section');
+        if ($nextSection.length) {
+            this._scrollTo($nextSection);
+        }
     },
 });
 

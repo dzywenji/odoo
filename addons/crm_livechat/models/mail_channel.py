@@ -31,7 +31,11 @@ class MailChannel(models.Model):
             for message in self.channel_message_ids.sorted('id')
         )
         utm_source = self.env.ref('crm_livechat.utm_source_livechat', raise_if_not_found=False)
+<<<<<<< HEAD
         lead = self.env['crm.lead'].create({
+=======
+        return self.env['crm.lead'].create({
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'name': html2plaintext(key[5:]),
             'partner_id': channel_partners.partner_id.id,
             'user_id': None,
@@ -40,5 +44,8 @@ class MailChannel(models.Model):
             'referred': partner.name,
             'source_id': utm_source and utm_source.id,
         })
+<<<<<<< HEAD
         lead._onchange_partner_id()
         return lead
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

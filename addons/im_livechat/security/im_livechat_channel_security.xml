@@ -20,6 +20,7 @@
             <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
         </record>
 
+<<<<<<< HEAD
         <record id="im_livechat_rule_manager_read_all_mail_channel" model="ir.rule">
             <field name="name">Livechat: Administrator: read all livechat channel</field>
             <field name="model_id" ref="model_mail_channel"/>
@@ -31,7 +32,21 @@
             <field name="perm_unlink" eval="False"/>
         </record>
 
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     <data noupdate="1">
+        <record id="im_livechat_rule_manager_read_all_mail_channel" model="ir.rule">
+            <field name="name">Livechat: Administrator: read all livechat channel</field>
+            <field name="model_id" ref="model_mail_channel"/>
+            <field name="groups" eval="[(4, ref('im_livechat_group_manager'))]"/>
+            <field name="domain_force">[('channel_type', '=', 'livechat')]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+
         <record id="base.default_user" model="res.users">
             <field name="groups_id" eval="[(4,ref('im_livechat.im_livechat_group_manager'))]"/>
         </record>

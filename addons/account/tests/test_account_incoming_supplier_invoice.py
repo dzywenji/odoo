@@ -1,11 +1,19 @@
 import json
 
+<<<<<<< HEAD
 from odoo.addons.account.tests.account_test_classes import AccountingTestCase
+=======
+from odoo.addons.account.tests.common import AccountTestCommon
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 from odoo.tests import tagged
 
 
 @tagged('post_install', '-at_install')
+<<<<<<< HEAD
 class TestAccountIncomingSupplierInvoice(AccountingTestCase):
+=======
+class TestAccountIncomingSupplierInvoice(AccountTestCommon):
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     def setUp(self):
         super(TestAccountIncomingSupplierInvoice, self).setUp()
@@ -34,7 +42,11 @@ class TestAccountIncomingSupplierInvoice(AccountingTestCase):
             'alias_name': 'test-bill',
             'alias_model_id': self.env.ref('account.model_account_move').id,
             'alias_defaults': json.dumps({
+<<<<<<< HEAD
                 'type': 'in_invoice',
+=======
+                'move_type': 'in_invoice',
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 'company_id': self.env.user.company_id.id,
                 'journal_id': self.journal.id,
             }),
@@ -53,7 +65,11 @@ class TestAccountIncomingSupplierInvoice(AccountingTestCase):
             'attachments': [b'Hello, invoice'],
         }
 
+<<<<<<< HEAD
         invoice = self.env['account.move'].message_new(message_parsed, {'type': 'in_invoice', 'journal_id': self.journal.id})
+=======
+        invoice = self.env['account.move'].message_new(message_parsed, {'move_type': 'in_invoice', 'journal_id': self.journal.id})
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         message_ids = invoice.message_ids
         self.assertEqual(len(message_ids), 1, 'Only one message should be posted in the chatter')
@@ -74,7 +90,11 @@ class TestAccountIncomingSupplierInvoice(AccountingTestCase):
             'attachments': [b'Hello, invoice'],
         }
 
+<<<<<<< HEAD
         invoice = self.env['account.move'].message_new(message_parsed, {'type': 'in_invoice', 'journal_id': self.journal.id})
+=======
+        invoice = self.env['account.move'].message_new(message_parsed, {'move_type': 'in_invoice', 'journal_id': self.journal.id})
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         message_ids = invoice.message_ids
         self.assertEqual(len(message_ids), 1, 'Only one message should be posted in the chatter')
@@ -95,7 +115,11 @@ class TestAccountIncomingSupplierInvoice(AccountingTestCase):
             'attachments': [b'Hello, invoice'],
         }
 
+<<<<<<< HEAD
         invoice = self.env['account.move'].message_new(message_parsed, {'type': 'in_invoice', 'journal_id': self.journal.id})
+=======
+        invoice = self.env['account.move'].message_new(message_parsed, {'move_type': 'in_invoice', 'journal_id': self.journal.id})
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         message_ids = invoice.message_ids
         self.assertEqual(len(message_ids), 1, 'Only one message should be posted in the chatter')
@@ -116,7 +140,11 @@ class TestAccountIncomingSupplierInvoice(AccountingTestCase):
             'attachments': [b'Hello, invoice'],
         }
 
+<<<<<<< HEAD
         invoice = self.env['account.move'].message_new(message_parsed, {'type': 'in_invoice', 'journal_id': self.journal.id})
+=======
+        invoice = self.env['account.move'].message_new(message_parsed, {'move_type': 'in_invoice', 'journal_id': self.journal.id})
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         message_ids = invoice.message_ids
         self.assertEqual(len(message_ids), 1, 'Only one message should be posted in the chatter')

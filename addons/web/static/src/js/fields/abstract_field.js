@@ -259,6 +259,16 @@ var AbstractField = Widget.extend({
         return $();
     },
     /**
+     * Returns whether or not the field is empty and can thus be hidden. This
+     * method is typically called when the widget is in readonly, to hide it
+     * (and its label) if it is empty.
+     *
+     * @returns {boolean}
+     */
+    isEmpty: function () {
+        return !this.isSet();
+    },
+    /**
      * Returns true iff the widget has a visible element that can take the focus
      *
      * @returns {boolean}
@@ -281,7 +291,7 @@ var AbstractField = Widget.extend({
      * value was changed by the user. This is checked before saving a record, by
      * the view.
      *
-     * Note: this is the responsability of the view to check that required
+     * Note: this is the responsibility of the view to check that required
      * fields have a set value.
      *
      * @returns {boolean} true/false if the widget is valid

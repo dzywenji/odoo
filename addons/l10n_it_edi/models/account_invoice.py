@@ -111,6 +111,9 @@ class AccountMove(models.Model):
         if not seller.country_id:
             raise UserError(_("%s must have a country.") % (seller.display_name))
 
+        if seller.l10n_it_has_tax_representative and not seller.l10n_it_tax_representative_partner_id.vat:
+            raise UserError(_("Tax representative partner %s of %s must have a tax number.") % (seller.l10n_it_tax_representative_partner_id.display_name, seller.display_name))
+
         # <1.4.1>
         if not buyer.vat and not buyer.l10n_it_codice_fiscale and buyer.country_id.code == 'IT':
             raise UserError(_("The buyer, %s, or his company must have either a VAT number either a tax code (Codice Fiscale).") % (buyer.display_name))
@@ -158,12 +161,12 @@ class AccountMove(models.Model):
             invoice.l10n_it_einvoice_name = report_name
 
             data = b"<?xml version='1.0' encoding='UTF-8'?>" + invoice._export_as_xml()
-            description = _('Italian invoice: %s') % invoice.type
+            description = _('Italian invoice: %s') % invoice.move_type
             invoice.l10n_it_einvoice_id = self.env['ir.attachment'].create({
                 'name': report_name,
                 'res_id': invoice.id,
                 'res_model': invoice._name,
-                'datas': base64.encodestring(data),
+                'datas': base64.encodebytes(data),
                 'description': description,
                 'type': 'binary',
                 })
@@ -223,9 +226,9 @@ class AccountMove(models.Model):
         if len(self.commercial_partner_id.l10n_it_pa_index or '1') == 6:
             formato_trasmissione = "FPA12"
 
-        if self.type == 'out_invoice':
+        if self.move_type == 'out_invoice':
             document_type = 'TD01'
-        elif self.type == 'out_refund':
+        elif self.move_type == 'out_refund':
             document_type = 'TD04'
         else:
             document_type = 'TD0X'
@@ -282,7 +285,11 @@ class AccountMove(models.Model):
             'attachment_ids': [(6, 0, self.l10n_it_einvoice_id.ids)],
         })
 
+<<<<<<< HEAD
         mail_fattura = self.env['mail.mail'].with_context(wo_bounce_return_path=True).create({
+=======
+        mail_fattura = self.env['mail.mail'].sudo().with_context(wo_bounce_return_path=True).create({
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'mail_message_id': message.id,
             'email_to': self.env.company.l10n_it_address_recipient_fatturapa,
         })
@@ -317,9 +324,9 @@ class AccountMove(models.Model):
 
             elements = tree.xpath('//DatiGeneraliDocumento/TipoDocumento')
             if elements and elements[0].text and elements[0].text == 'TD01':
-                self_ctx = self.with_context(default_type='in_invoice')
+                self_ctx = self.with_context(default_move_type='in_invoice')
             elif elements and elements[0].text and elements[0].text == 'TD04':
-                self_ctx = self.with_context(default_type='in_refund')
+                self_ctx = self.with_context(default_move_type='in_refund')
             else:
                 _logger.info(_('Document type not managed: %s.') % (elements[0].text))
 
@@ -358,7 +365,11 @@ class AccountMove(models.Model):
             elif elements and elements[0].text and elements[0].text == 'TD04':
                 type = 'in_refund'
             # self could be a single record (editing) or be empty (new).
+<<<<<<< HEAD
             with Form(self.with_context(default_type=type)) as invoice_form:
+=======
+            with Form(self.with_context(default_move_type=type)) as invoice_form:
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 message_to_log = []
 
                 # Partner (first step to avoid warning 'Warning! You must first select a partner.'). <1.2>
@@ -381,7 +392,7 @@ class AccountMove(models.Model):
                 # Numbering attributed by the transmitter. <1.1.2>
                 elements = tree.xpath('//ProgressivoInvio')
                 if elements:
-                    invoice_form.invoice_payment_ref = elements[0].text
+                    invoice_form.payment_reference = elements[0].text
 
                 elements = body_tree.xpath('.//DatiGeneraliDocumento//Numero')
                 if elements:
@@ -487,7 +498,7 @@ class AccountMove(models.Model):
                     else:
                         bank = self.env['res.partner.bank'].search([('acc_number', '=', elements[0].text)])
                     if bank:
-                        invoice_form.invoice_partner_bank_id = bank
+                        invoice_form.partner_bank_id = bank
                     else:
                         message_to_log.append("%s<br/>%s" % (
                             _("Bank account not found, useful informations from XML file:"),

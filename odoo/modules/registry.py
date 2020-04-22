@@ -4,7 +4,8 @@
 """ Models registries.
 
 """
-from collections import Mapping, defaultdict, deque
+from collections import defaultdict, deque
+from collections.abc import Mapping
 from contextlib import closing, contextmanager
 from functools import partial
 from operator import attrgetter
@@ -13,11 +14,17 @@ import logging
 import os
 import threading
 
+import psycopg2
+
 import odoo
 from .. import SUPERUSER_ID
 from odoo.sql_db import TestCursor
 from odoo.tools import (assertion_report, config, existing_tables, ignore,
+<<<<<<< HEAD
                         lazy_classproperty, lazy_property, OrderedSet)
+=======
+                        lazy_classproperty, lazy_property, sql, OrderedSet)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 from odoo.tools.lru import LRU
 
 _logger = logging.getLogger(__name__)
@@ -88,7 +95,7 @@ class Registry(Mapping):
                         odoo.modules.reset_modules_state(db_name)
                         raise
                 except Exception:
-                    _logger.exception('Failed to load registry')
+                    _logger.error('Failed to load registry')
                     del cls.registries[db_name]
                     raise
 
@@ -109,7 +116,11 @@ class Registry(Mapping):
         self._init = True
         self._assertion_report = assertion_report.assertion_report()
         self._fields_by_model = None
+<<<<<<< HEAD
         self._post_init_queue = deque()
+=======
+        self._ordinary_tables = None
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         self._constraint_queue = deque()
 
         # modules fully loaded (maintained during init phase by `loading` module)
@@ -141,24 +152,20 @@ class Registry(Mapping):
         self.cache_invalidated = False
 
         with closing(self.cursor()) as cr:
-            has_unaccent = odoo.modules.db.has_unaccent(cr)
-            if odoo.tools.config['unaccent'] and not has_unaccent:
-                _logger.warning("The option --unaccent was given but no unaccent() function was found in database.")
-            self.has_unaccent = odoo.tools.config['unaccent'] and has_unaccent
+            self.has_unaccent = odoo.modules.db.has_unaccent(cr)
 
     @classmethod
     def delete(cls, db_name):
         """ Delete the registry linked to a given database. """
         with cls._lock:
             if db_name in cls.registries:
-                cls.registries.pop(db_name)
+                del cls.registries[db_name]
 
     @classmethod
     def delete_all(cls):
         """ Delete all the registries. """
         with cls._lock:
-            for db_name in list(cls.registries.keys()):
-                cls.delete(db_name)
+            cls.registries.clear()
 
     #
     # Mapping abstract methods implementation
@@ -183,6 +190,13 @@ class Registry(Mapping):
     def __setitem__(self, model_name, model):
         """ Add or replace a model in the registry."""
         self.models[model_name] = model
+
+    def __delitem__(self, model_name):
+        """ Remove a (custom) model from the registry. """
+        del self.models[model_name]
+        # the custom model can inherit from mixins ('mail.thread', ...)
+        for Model in self.models.values():
+            Model._inherit_children.discard(model_name)
 
     def descendants(self, model_names, *kinds):
         """ Return the models corresponding to ``model_names`` and all those
@@ -229,6 +243,7 @@ class Registry(Mapping):
             This must be called after loading modules and before using the ORM.
         """
         lazy_property.reset_all(self)
+        self.registry_invalidated = True
         env = odoo.api.Environment(cr, SUPERUSER_ID, {})
 
         if env.all.tocompute:
@@ -254,8 +269,32 @@ class Registry(Mapping):
         for model in models:
             model._setup_fields()
 
+        for model in models:
+            model._setup_complete()
+
+        self.registry_invalidated = True
+
+    @lazy_property
+    def field_computed(self):
+        """ Return a dict mapping each field to the fields computed by the same method. """
+        computed = {}
+        for Model in self.models.values():
+            groups = defaultdict(list)
+            for field in Model._fields.values():
+                if field.compute:
+                    computed[field] = group = groups[field.compute]
+                    group.append(field)
+            for fields in groups.values():
+                if len({field.compute_sudo for field in fields}) > 1:
+                    _logger.warning("%s: inconsistent 'compute_sudo' for computed fields: %s",
+                                    self._name, ", ".join(field.name for field in fields))
+        return computed
+
+    @lazy_property
+    def field_triggers(self):
         # determine field dependencies
         dependencies = {}
+<<<<<<< HEAD
         for model in models:
             if model._abstract:
                 continue
@@ -264,6 +303,16 @@ class Registry(Mapping):
                 exceptions = (Exception,) if field.base_field.manual else ()
                 with ignore(*exceptions):
                     dependencies[field] = set(field.resolve_depends(model))
+=======
+        for Model in self.models.values():
+            if Model._abstract:
+                continue
+            for field in Model._fields.values():
+                # dependencies of custom fields may not exist; ignore that case
+                exceptions = (Exception,) if field.base_field.manual else ()
+                with ignore(*exceptions):
+                    dependencies[field] = set(field.resolve_depends(self))
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         # determine transitive dependencies
         def transitive_dependencies(field, seen=[]):
@@ -292,12 +341,7 @@ class Registry(Mapping):
                         tree = tree.setdefault(label, {})
                     tree.setdefault(None, set()).add(field)
 
-        self.field_triggers = triggers
-
-        for model in models:
-            model._setup_complete()
-
-        self.registry_invalidated = True
+        return triggers
 
     def post_init(self, func, *args, **kwargs):
         """ Register a function to call at the end of :meth:`~.init_models`. """
@@ -332,6 +376,9 @@ class Registry(Mapping):
              - ``module``: the name of the module being installed/updated, if any;
              - ``update_custom_fields``: whether custom fields should be updated.
         """
+        if not model_names:
+            return
+
         if 'module' in context:
             _logger.info('module %s: creating or updating database tables', context['module'])
         elif context.get('models_to_check', False):
@@ -340,6 +387,7 @@ class Registry(Mapping):
         env = odoo.api.Environment(cr, SUPERUSER_ID, context)
         models = [env[model_name] for model_name in model_names]
 
+<<<<<<< HEAD
         # make sure the queue does not contain some leftover from a former call
         self._post_init_queue.clear()
         self._is_install = install
@@ -347,15 +395,113 @@ class Registry(Mapping):
         for model in models:
             model._auto_init()
             model.init()
+=======
+        try:
+            self._post_init_queue = deque()
+            self._foreign_keys = {}
+            self._is_install = install
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
-        while self._post_init_queue:
-            func = self._post_init_queue.popleft()
-            func()
+            for model in models:
+                model._auto_init()
+                model.init()
 
-        env['base'].flush()
+            env['ir.model']._reflect_models(model_names)
+            env['ir.model.fields']._reflect_fields(model_names)
+            env['ir.model.fields.selection']._reflect_selections(model_names)
+            env['ir.model.constraint']._reflect_constraints(model_names)
 
-        # make sure all tables are present
-        self.check_tables_exist(cr)
+            self._ordinary_tables = None
+
+            while self._post_init_queue:
+                func = self._post_init_queue.popleft()
+                func()
+
+            self.check_indexes(cr, model_names)
+            self.check_foreign_keys(cr)
+
+            env['base'].flush()
+
+            # make sure all tables are present
+            self.check_tables_exist(cr)
+
+        finally:
+            del self._post_init_queue
+            del self._foreign_keys
+            del self._is_install
+
+    def check_indexes(self, cr, model_names):
+        """ Create or drop column indexes for the given models. """
+        expected = [
+            ("%s_%s_index" % (Model._table, field.name), Model._table, field.name, field.index)
+            for model_name in model_names
+            for Model in [self.models[model_name]]
+            if Model._auto and not Model._abstract
+            for field in Model._fields.values()
+            if field.column_type and field.store
+        ]
+        if not expected:
+            return
+
+        cr.execute("SELECT indexname FROM pg_indexes WHERE indexname IN %s",
+                   [tuple(row[0] for row in expected)])
+        existing = {row[0] for row in cr.fetchall()}
+
+        for indexname, tablename, columnname, index in expected:
+            if index and indexname not in existing:
+                try:
+                    with cr.savepoint(flush=False):
+                        sql.create_index(cr, indexname, tablename, ['"%s"' % columnname])
+                except psycopg2.OperationalError:
+                    _schema.error("Unable to add index for %s", self)
+            elif not index and indexname in existing:
+                sql.drop_index(cr, indexname, tablename)
+
+    def add_foreign_key(self, table1, column1, table2, column2, ondelete,
+                        model, module, force=True):
+        """ Specify an expected foreign key. """
+        key = (table1, column1)
+        val = (table2, column2, ondelete, model, module)
+        if force:
+            self._foreign_keys[key] = val
+        else:
+            self._foreign_keys.setdefault(key, val)
+
+    def check_foreign_keys(self, cr):
+        """ Create or update the expected foreign keys. """
+        if not self._foreign_keys:
+            return
+
+        # determine existing foreign keys on the tables
+        query = """
+            SELECT fk.conname, c1.relname, a1.attname, c2.relname, a2.attname, fk.confdeltype
+            FROM pg_constraint AS fk
+            JOIN pg_class AS c1 ON fk.conrelid = c1.oid
+            JOIN pg_class AS c2 ON fk.confrelid = c2.oid
+            JOIN pg_attribute AS a1 ON a1.attrelid = c1.oid AND fk.conkey[1] = a1.attnum
+            JOIN pg_attribute AS a2 ON a2.attrelid = c2.oid AND fk.confkey[1] = a2.attnum
+            WHERE fk.contype = 'f' AND c1.relname IN %s
+        """
+        cr.execute(query, [tuple({table for table, column in self._foreign_keys})])
+        existing = {
+            (table1, column1): (name, table2, column2, deltype)
+            for name, table1, column1, table2, column2, deltype in cr.fetchall()
+        }
+
+        # create or update foreign keys
+        for key, val in self._foreign_keys.items():
+            table1, column1 = key
+            table2, column2, ondelete, model, module = val
+            conname = '%s_%s_fkey' % key
+            deltype = sql._CONFDELTYPES[ondelete.upper()]
+            spec = existing.get(key)
+            if spec is None:
+                sql.add_foreign_key(cr, table1, column1, table2, column2, ondelete)
+                model.env['ir.model.constraint']._reflect_constraint(model, conname, 'f', None, module)
+            elif spec != (conname, table2, column2, deltype):
+                sql.drop_constraint(cr, table1, spec[0])
+                sql.add_foreign_key(cr, table1, column1, table2, column2, ondelete)
+                model.env['ir.model.constraint']._reflect_constraint(model, conname, 'f', None, module)
 
     def check_tables_exist(self, cr):
         """
@@ -395,6 +541,24 @@ class Registry(Mapping):
         """
         for model in self.models.values():
             model.clear_caches()
+
+    def is_an_ordinary_table(self, model):
+        """ Return whether the given model has an ordinary table. """
+        if self._ordinary_tables is None:
+            cr = model.env.cr
+            query = """
+                SELECT c.relname
+                  FROM pg_class c
+                  JOIN pg_namespace n ON (n.oid = c.relnamespace)
+                 WHERE c.relname IN %s
+                   AND c.relkind = 'r'
+                   AND n.nspname = 'public'
+            """
+            tables = tuple(m._table for m in self.models.values())
+            cr.execute(query, [tables])
+            self._ordinary_tables = {row[0] for row in cr.fetchall()}
+
+        return model._table in self._ordinary_tables
 
     def setup_signaling(self):
         """ Setup the inter-process signaling on this registry. """

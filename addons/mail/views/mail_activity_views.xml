@@ -15,7 +15,7 @@
                         <group name="activity_details">
                             <field name="active" invisible="1"/>
                             <field name="category"/>
-                            <field name="default_user_id" widget="selection"/>
+                            <field name="default_user_id" widget="selection" domain="[('share', '=', False)]"/>
                             <field name="res_model_id" groups="base.group_no_one"/>
                             <field name="res_model_change" invisible="1"/>
                             <field name="initial_res_model_id" invisible="1"/>
@@ -32,8 +32,11 @@
                                 domain="[('model_id', '=', res_model_id)]"
                                 attrs="{'invisible': [('res_model_id', '=', False)]}"
                                 context="{'default_model_id': res_model_id}"/>
+<<<<<<< HEAD
                         </group>
                         <group>
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                             <label for="delay_count"/>
                             <div>
                                 <div class="o_row">
@@ -44,8 +47,14 @@
                             </div>
                         </group>
                     </group>
+<<<<<<< HEAD
                     <label for="default_description"/>
                     <field name="default_description"/>
+=======
+                    <group>
+                        <field name="default_description"/>
+                    </group>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                     <p class="alert alert-info" role="alert" attrs="{'invisible': [('res_model_change', '=', False)]}">Modifying the model can have an impact on existing activities using this activity type, be careful.</p>
                 </sheet>
             </form>
@@ -89,7 +98,8 @@
     <menuitem
       id="menu_mail_activity_type"
       action="mail_activity_type_action"
-      parent="base.menu_email"
+      parent="mail.mail_menu_technical"
+      sequence="10"
     />
 
     <record id="mail_activity_action" model="ir.actions.act_window">
@@ -101,7 +111,8 @@
     <menuitem
       id="menu_mail_activities"
       action="mail_activity_action"
-      parent="base.menu_email"
+      parent="mail.mail_menu_technical"
+      sequence="11"
     />
 
     <record id="mail_activity_view_form_popup" model="ir.ui.view">
@@ -212,6 +223,7 @@
                 <field name="res_name"/>
                 <field name="date_deadline"/>
                 <field name="summary"/>
+                <field name="activity_type_id" filters="1" invisible="1"/>
             </calendar>
         </field>
     </record>

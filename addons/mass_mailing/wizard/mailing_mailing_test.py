@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
-from odoo import api, fields, models, tools
+from odoo import fields, models, tools
 
 
 class TestMassMailing(models.TransientModel):
@@ -9,7 +9,7 @@ class TestMassMailing(models.TransientModel):
     _description = 'Sample Mail Wizard'
 
     email_to = fields.Char(string='Recipients', required=True,
-                           help='Comma-separated list of email addresses.', default=lambda self: self.env['mail.message']._get_default_from())
+                           help='Comma-separated list of email addresses.', default=lambda self: self.env.user.email_formatted)
     mass_mailing_id = fields.Many2one('mailing.mailing', string='Mailing', required=True, ondelete='cascade')
 
     def send_mail_test(self):
@@ -18,13 +18,21 @@ class TestMassMailing(models.TransientModel):
         ctx.pop('default_state', None)
         self = self.with_context(ctx)
 
+<<<<<<< HEAD
         mails = self.env['mail.mail']
+=======
+        mails_sudo = self.env['mail.mail'].sudo()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         mailing = self.mass_mailing_id
         test_emails = tools.email_split(self.email_to)
         mass_mail_layout = self.env.ref('mass_mailing.mass_mailing_mail_layout')
         for test_mail in test_emails:
             # Convert links in absolute URLs before the application of the shortener
+<<<<<<< HEAD
             body = self.env['mail.thread']._replace_local_links(mailing.body_html)
+=======
+            body = self.env['mail.render.mixin']._replace_local_links(mailing.body_html)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             body = tools.html_sanitize(body, sanitize_attributes=True, sanitize_style=True)
             mail_values = {
                 'email_from': mailing.email_from,
@@ -37,7 +45,7 @@ class TestMassMailing(models.TransientModel):
                 'attachment_ids': [(4, attachment.id) for attachment in mailing.attachment_ids],
                 'auto_delete': True,
             }
-            mail = self.env['mail.mail'].create(mail_values)
-            mails |= mail
-        mails.send()
+            mail = self.env['mail.mail'].sudo().create(mail_values)
+            mails_sudo |= mail
+        mails_sudo.send()
         return True

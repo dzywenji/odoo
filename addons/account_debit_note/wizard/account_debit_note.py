@@ -39,6 +39,7 @@ class AccountDebitNote(models.TransientModel):
     def _compute_from_moves(self):
         for record in self:
             move_ids = record.move_ids
+<<<<<<< HEAD
             record.move_type = move_ids[0].type if len(move_ids) == 1 or not any(m.type != move_ids[0].type for m in move_ids) else False
             record.journal_type = record.move_type in ['in_refund', 'in_invoice'] and 'purchase' or 'sale'
 
@@ -47,6 +48,16 @@ class AccountDebitNote(models.TransientModel):
             type = 'in_invoice' if move.type == 'in_refund' else 'out_invoice'
         else:
             type = move.type
+=======
+            record.move_type = move_ids[0].move_type if len(move_ids) == 1 or not any(m.move_type != move_ids[0].move_type for m in move_ids) else False
+            record.journal_type = record.move_type in ['in_refund', 'in_invoice'] and 'purchase' or 'sale'
+
+    def _prepare_default_values(self, move):
+        if move.move_type in ('in_refund', 'out_refund'):
+            type = 'in_invoice' if move.move_type == 'in_refund' else 'out_invoice'
+        else:
+            type = move.move_type
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         default_values = {
                 'ref': '%s, %s' % (move.name, self.reason) if self.reason else move.name,
                 'date': self.date or move.date,
@@ -54,9 +65,15 @@ class AccountDebitNote(models.TransientModel):
                 'journal_id': self.journal_id and self.journal_id.id or move.journal_id.id,
                 'invoice_payment_term_id': None,
                 'debit_origin_id': move.id,
+<<<<<<< HEAD
                 'type': type,
             }
         if not self.copy_lines or move.type in [('in_refund', 'out_refund')]:
+=======
+                'move_type': type,
+            }
+        if not self.copy_lines or move.move_type in [('in_refund', 'out_refund')]:
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             default_values['line_ids'] = [(5, 0, 0)]
         return default_values
 

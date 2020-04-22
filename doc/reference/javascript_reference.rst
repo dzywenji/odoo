@@ -1570,6 +1570,15 @@ order.
 
         <field name="int_value" options='{"type": "number", "step": 100}'/>
 
+    - format: should the number be formatted. (true by default)
+
+    By default, numbers are formatted according to locale parameters.
+        This option will prevent the field's value from being formatted.
+
+    .. code-block:: xml
+
+        <field name="int_value" options='{"format": false}'/>
+
 - float (FieldFloat)
     This is the default field type for fields of type *float*.
 
@@ -1601,6 +1610,15 @@ order.
     .. code-block:: xml
 
         <field name="int_value" options='{"type": "number", "step": 0.1}'/>
+
+    - format: should the number be formatted. (true by default)
+
+    By default, numbers are formatted according to locale parameters.
+        This option will prevent the field's value from being formatted.
+
+    .. code-block:: xml
+
+        <field name="int_value" options='{"format": false}'/>
 
 - float_time (FieldFloatTime)
     The goal of this widget is to display properly a float value that represents
@@ -1733,8 +1751,6 @@ order.
     This field displays an url (in readonly mode). The main reason to use it is
     that it is rendered as an anchor tag with the proper css classes and href.
 
-    - Supported field types: *char*
-
     Also, the text of the anchor tag can be customized with the *text* attribute
     (it won't change the href value).
 
@@ -1742,6 +1758,13 @@ order.
 
         <field name="foo" widget="url" text="Some URL"/>
 
+    Options:
+
+    - website_path: (default:false) by default, the widget forces (if not already
+    the case) the href value to begin with http:// except if this option is set
+    to true, thus allowing redirections to the database's own website.
+
+    - Supported field types: *char*
 
 - domain (FieldDomain)
     The "Domain" field allows the user to construct a technical-prefix domain
@@ -1777,6 +1800,9 @@ order.
       option is useful to inform the web client that the default field name is
       not the name of the current field, but the name of another field.
 
+    - accepted_file_extensions: the file extension the user can pick from the file input dialog box (default value is `image/\*`)
+      (cf: ``accept`` attribute on <input type="file"/>)
+
     .. code-block:: xml
 
         <field name="image" widget='image' options='{"preview_image":"image_128"}'/>
@@ -1785,6 +1811,11 @@ order.
     Generic widget to allow saving/downloading a binary file.
 
     - Supported field types: *binary*
+
+    Options:
+
+    - accepted_file_extensions: the file extension the user can pick from the file input dialog box
+      (cf: ``accept`` attribute on <input type="file"/>)
 
     Attribute:
 
@@ -2049,7 +2080,7 @@ Relational fields
 
     - can_create: allow the creation of related records (take precedence over no_create
       option)
-    - can_write: allow the edition of related records (default: true)
+    - can_write: allow the editing of related records (default: true)
 
     Options:
 
@@ -2090,7 +2121,7 @@ Relational fields
 
 - kanban.many2one (KanbanFieldMany2One)
     Default widget for many2one fields (in kanban view). We need to disable all
-    edition in kanban views.
+    editing in kanban views.
 
     - Supported field types: *many2one*
 
@@ -2117,12 +2148,23 @@ Relational fields
 
     - Supported field types: *many2many*
 
+    Options:
+
+    - accepted_file_extensions: the file extension the user can pick from the file input dialog box
+      (cf: ``accept`` attribute on <input type="file"/>)
+
 - many2many_tags (FieldMany2ManyTags)
     Display many2many as a list of tags.
 
     - Supported field types: *many2many*
 
     Options:
+
+    - create: domain determining whether or not new tags can be created (default: True).
+
+    .. code-block:: xml
+
+        <field name="category_id" widget="many2many_tags" options="{'create': [['some_other_field', '>', 24]]}"/>
 
     - color_field: the name of a numeric field, which should be present in the
       view.  A color will be chosen depending on its value.
@@ -2162,6 +2204,14 @@ Relational fields
     - Supported field types: *one2many*
 
     Options:
+
+    - create: domain determining whether or not related records can be created (default: True).
+
+    - delete: domain determining whether or not related records can be deleted (default: True).
+
+    .. code-block:: xml
+
+        <field name="turtles" options="{'create': [['some_other_field', '>', 24]]}"/>
 
     - create_text: a string that is used to customize the 'Add' label/text.
 

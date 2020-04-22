@@ -12,7 +12,7 @@
                         <img t-att-src="'/logo.png?company=%s' % res_company.id" t-att-alt="'Logo of %s' % res_company.name" t-att-title="res_company.name"/>
                     </a>
                     <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#top_menu_collapse">
-                        <span class="navbar-toggler-icon"/>
+                        <span class="navbar-toggler-icon o_not_editable"/>
                     </button>
                     <div class="collapse navbar-collapse" id="top_menu_collapse">
                         <!-- FIXME We want menu to open to the right by default (except cases handled in JS) -->
@@ -492,14 +492,5 @@
                 <div class="oe_structure mb32" id="oe_structure_portal_sidebar_1"/>
             </body>
         </t>
-    </template>
-
-    <template id="portal_404" inherit_id="http_routing.404">
-        <xpath expr="//p" position="after">
-            <p>Maybe you were looking for one of these popular pages ?</p>
-            <ul>
-                <li><a href="/my">Documents</a></li>
-            </ul>
-        </xpath>
     </template>
 </odoo>

@@ -87,7 +87,11 @@ an impact on all view types.
 
 * ``edit`` (``form`` & ``list`` & ``gantt``)
 
+<<<<<<< HEAD
   Disable/enable record edition on the view.
+=======
+  Disable/enable record editing on the view.
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 * ``delete`` (``form`` & ``list``)
 
@@ -180,7 +184,11 @@ inherited views.
 
 * ``mode`` :class:`~odoo.fields.Selection`: `extension / primary`
 
+<<<<<<< HEAD
   inheritance mode, ``extension``: by default if ``inherit_id`` is set,
+=======
+  inheritance mode, ``extension`` by default if ``inherit_id`` is set,
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
   ``primary`` otherwise.
 
 View matching
@@ -274,6 +282,15 @@ how the matched node should be altered:
           {'invisible': [('sale_ok', '=', False)], 'readonly': [('editable', '=', False)]}
         </attribute>
       </field>
+<<<<<<< HEAD
+
+``move``
+  can be used as a direct child of a inheritance spec
+  with a ``inside``, ``replace``, ``after`` or ``before`` ``position`` attribute
+  to move a node.
+
+  .. code-block:: xml
+=======
 
 ``move``
   can be used as a direct child of a inheritance spec
@@ -289,7 +306,17 @@ how the matched node should be altered:
       <field name="target_field" position="after">
           <field name="my_field" position="move"/>
       </field>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
+      <xpath expr="//@target" position="after">
+          <xpath expr="//@node" position="move"/>
+      </xpath>
+
+      <field name="target_field" position="after">
+          <field name="my_field" position="move"/>
+      </field>
+
+<<<<<<< HEAD
 
 A view's specs are applied sequentially.
 
@@ -410,6 +437,130 @@ calendar view are:
   * ``write_model`` and ``write_field``
     you can add a filter and save the result in the defined model, the
     filter is added in the sidebar
+=======
+.. [#hasclass] an extension function is added for simpler matching in QWeb
+               views: ``hasclass(*classes)`` matches if the context node has
+               all the specified classes
+
+.. _reference/views/types:
+
+View types
+==========
+
+.. _reference/views/activity:
+
+Activity
+--------
+
+The Activity view is used to display the activities linked to the records. The
+data are displayed in a chart with the records forming the rows and the activity
+types the columns. The first cell of each row displays a (customizable, see
+``templates``, quite similarly to :ref:`reference/views/kanban`) card representing
+the corresponding record. When clicking on others cells, a detailed description
+of all activities of the same type for the record is displayed.
+
+.. warning::
+
+   The Activity view is only available when the ``mail`` module is installed,
+   and for the models that inherit from the ``mail.activity.mixin``.
+
+The root element of the Activity view is ``<activity>``, it accepts the following
+attributes:
+
+- ``string`` (mandatory)
+    A title, which should describe the view
+
+Possible children of the view element are:
+
+``field``
+  declares fields to use in activity *logic*. If the field is simply displayed
+  in the activity view, it does not need to be pre-declared.
+
+  Possible attributes are:
+
+  ``name`` (required)
+    the name of the field to fetch
+
+``templates``
+  defines the :ref:`reference/qweb` templates. Cards definition may be
+  split into multiple templates for clarity, but activity views *must* define at
+  least one root template ``activity-box``, which will be rendered once for each
+  record.
+
+  The activity view uses mostly-standard :ref:`javascript qweb
+  <reference/qweb/javascript>` and provides the following context variables
+  (see :ref:`reference/views/kanban` for more details):
+
+  ``widget``
+    the current :js:class:`ActivityRecord`, can be used to fetch some
+    meta-information. These methods are also available directly in the
+    template context and don't need to be accessed via ``widget``
+  ``record``
+    an object with all the requested fields as its attributes. Each field has
+    two attributes ``value`` and ``raw_value``
+
+.. _reference/views/calendar:
+
+Calendar
+--------
+
+Calendar views display records as events in a daily, weekly or monthly
+calendar. Their root element is ``<calendar>``. Available attributes on the
+calendar view are:
+
+``date_start`` (required)
+    name of the record's field holding the start date for the event
+``date_stop``
+    name of the record's field holding the end date for the event, if
+    ``date_stop`` is provided records become movable (via drag and drop)
+    directly in the calendar
+``date_delay``
+    alternative to ``date_stop``, provides the duration of the event instead of
+    its end date (unit: day)
+``color``
+    name of a record field to use for *color segmentation*. Records in the
+    same color segment are allocated the same highlight color in the calendar,
+    colors are allocated semi-randomly.
+    Displayed the display_name/avatar of the visible record in the sidebar
+``form_view_id``
+    view to open when the user create or edit an event. Note that if this attribute
+    is not set, the calendar view will fall back to the id of the form view in the
+    current action, if any.
+``event_open_popup``
+    If the option 'event_open_popup' is set to true, then the calendar view will
+    open events (or records) in a FormViewDialog. Otherwise, it will open events
+    in a new form view (with a do_action)
+``quick_add``
+    enables quick-event creation on click: only asks the user for a ``name``
+    and tries to create a new event with just that and the clicked event
+    time. Falls back to a full form dialog if the quick creation fails
+``all_day``
+    name of a boolean field on the record indicating whether the corresponding
+    event is flagged as day-long (and duration is irrelevant)
+``mode``
+    Default display mode when loading the calendar.
+    Possible attributes are: ``day``, ``week``, ``month``
+
+``<field>``
+  declares fields to aggregate or to use in kanban *logic*. If the field is
+  simply displayed in the calendar cards.
+
+  Fields can have additional attributes:
+
+  * ``invisible``
+    use "True" to hide the value in the cards
+  * ``avatar_field``
+    only for x2many field, to display the avatar instead of the display_name
+    in the cards
+  * ``write_model`` and ``write_field``
+
+    you can add a filter and save the result in the defined model, the
+    filter is added in the sidebar
+  * ``filter`` and ``color``
+
+    use "True" to add this field in filter in the sidebar. You can specify
+    a ``color`` field used to colorize the checkbox.
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 ``templates``
   defines the :ref:`reference/qweb` template ``calendar-box``. Cards definition
@@ -510,6 +661,7 @@ Dashboard
 ---------
 
 .. raw:: html
+<<<<<<< HEAD
 
    <span class="badge" style="background-color:#AD5E99">Enterprise feature</span>
 
@@ -746,6 +898,228 @@ Possible children of the diagram view are:
     Explanatory note for the diagram, the ``string`` attribute defines the
     note's content. Each ``label`` is output as a paragraph in the diagram
     header, easily visible but without any special emphasis.
+=======
+
+   <span class="badge" style="background-color:#AD5E99">Enterprise feature</span>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
+
+Like pivot and graph view, The dashboard view is used to display aggregate data.
+However, the dashboard can embed sub views, which makes it possible to have a
+more complete and interesting look on a given dataset.
+
+<<<<<<< HEAD
+Form
+----
+=======
+The dashboard view can display sub views, aggregates for some fields (over a
+domain), or even *formulas* (expressions which involves one or more aggregates).
+For example, here is a very simple dashboard:
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
+
+.. code-block:: xml
+
+<<<<<<< HEAD
+Structural components
+~~~~~~~~~~~~~~~~~~~~~
+=======
+    <dashboard>
+        <view type="graph" ref="sale_report.view_order_product_graph"/>
+        <group string="Sale">
+            <aggregate name="price_total" field="price_total" widget="monetary"/>
+            <aggregate name="order_id" field="order_id" string="Orders"/>
+            <formula name="price_average" string="Price Average"
+                value="record.price_total / record.order_id" widget="percentage"/>
+        </group>
+        <view type="pivot" ref="sale_report.view_order_product_pivot"/>
+    </dashboard>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
+
+The root element of the Dashboard view is <dashboard>, it does not accept any
+attributes.
+
+There are 5 possible type of tags in a dashboard view:
+
+<<<<<<< HEAD
+  * ``string`` (required)
+    the title of the tab
+  * ``accesskey``
+    an HTML accesskey_
+  * ``attrs``
+    standard dynamic attributes based on record values
+
+  .. note:: Note that ``notebook`` should not be placed within ``group``
+
+``group``
+  used to define column layouts in forms. By default, groups define 2 columns
+  and most direct children of groups take a single column. ``field`` direct
+  children of groups display a label by default, and the label and the field
+  itself have a colspan of 1 each.
+=======
+``view``
+    declares a sub view.
+
+    Admissible attributes are:
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
+
+    - ``type`` (mandatory)
+        The type of the sub view.  For example, *graph* or *pivot*.
+
+    - ``ref`` (optional)
+        An xml id for a view. If not given, the default view for the model will
+        be used.
+
+    - ``name`` (optional)
+        A string which identifies this element.  It is mostly
+        useful to be used as a target for an xpath.
+
+<<<<<<< HEAD
+Semantic components
+~~~~~~~~~~~~~~~~~~~
+=======
+``group``
+    defines a column layout.  This is actually very similar to the group element
+    in a form view.
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
+
+    Admissible attributes are:
+
+    - ``string`` (optional)
+        A description which will be displayed as a group title.
+
+    - ``colspan`` (optional)
+        The number of subcolumns in this group tag. By default, 6.
+
+    - ``col`` (optional)
+        The number of columns spanned by this group tag (only makes sense inside
+        another group). By default, 6.
+
+
+``aggregate``
+    declares an aggregate.  This is the value of an aggregate for a given field
+    over the current domain.
+
+    Note that aggregates are supposed to be used inside a group tag (otherwise
+    the style will not be properly applied).
+
+    Admissible attributes are:
+
+    - ``field`` (mandatory)
+        The field name to use for computing the aggregate. Possible field types
+        are:
+
+        - ``integer`` (default group operator is sum)
+        - ``float``  (default group operator is sum)
+        - ``many2one`` (default group operator is count distinct)
+
+    - ``name`` (mandatory)
+        A string to identify this aggregate (useful for formulas)
+
+    - ``string`` (optional)
+        A short description that will be displayed above the value. If not
+        given, it will fall back to the field string.
+
+    - ``domain`` (optional)
+        An additional restriction on the set of records that we want to aggregate.
+        This domain will be combined with the current domain.
+
+    - ``domain_label`` (optional)
+        When the user clicks on an aggregate with a domain, it will be added to
+        the search view as a facet.  The string displayed for this facet can
+        be customized with this attribute.
+
+    - ``group_operator`` (optional)
+        A valid postgreSQL aggregate function identifier to use when aggregating
+        values (see https://www.postgresql.org/docs/9.5/static/functions-aggregate.html).
+        If not provided, By default, the group_operator from the field definition is used.
+        Note that no aggregation of field values is achieved if the group_operator value is "".
+
+        .. note:: The special aggregate function ``count_distinct`` (defined in odoo) can also be used here
+
+        .. code-block:: xml
+
+          <aggregate name="price_total_max" field="price_total" group_operator="max"/>
+
+
+
+    - ``col`` (optional)
+        The number of columns spanned by this tag (only makes sense inside a
+        group). By default, 1.
+
+    - ``widget`` (optional)
+        A widget to format the value (like the widget attribute for fields).
+        For example, monetary.
+
+    - ``help`` (optional)
+        A help message to dipslay in a tooltip (equivalent of help for a field in python)
+
+    - ``measure`` (optional)
+        This attribute is the name of a field describing the measure that has to be used
+        in the graph and pivot views when clicking on the aggregate.
+        The special value __count__ can be used to use the count measure.
+
+        .. code-block:: xml
+
+          <aggregate name="total_ojects" string="Total Objects" field="id" group_operator="count" measure="__count__"/>
+
+    - ``clickable`` (optional)
+        A boolean indicating if this aggregate should be clickable or not (default to true).
+        Clicking on a clickable aggregate will change the measures used by the subviews
+        and add the value of the domain attribute (if any) to the search view.
+
+    - ``value_label`` (optional)
+        A string put on the right of the aggregate value.
+        For example, it can be useful to indicate the unit of measure
+        of the aggregate value.
+
+``formula``
+    declares a derived value.  Formulas are values computed from aggregates.
+
+    Note that like aggregates, formulas are supposed to be used inside a group
+    tag (otherwise the style will not be properly applied).
+
+    Admissible attributes are:
+
+    - ``value`` (mandatory)
+        A string expression that will be evaluated, with the builtin python
+        evaluator (in the web client).  Every aggregate can be used in the
+        context, in the ``record`` variable.  For example,
+        ``record.price_total / record.order_id``.
+
+    - ``name`` (optional)
+        A string to identify this formula
+
+    - ``string`` (optional)
+        A short description that will be displayed above the formula.
+
+    - ``col`` (optional)
+        The number of columns spanned by this tag (only makes sense inside a
+        group). By default, 1.
+
+    - ``widget`` (optional)
+        A widget to format the value (like the widget attribute for fields).
+        For example, monetary. By default, it is 'float'.
+
+    - ``help`` (optional)
+        A help message to dipslay in a tooltip (equivalent of help for a field in python)
+
+    - ``value_label`` (optional)
+        A string put on the right of the formula value.
+        For example, it can be useful to indicate the unit of measure
+        of the formula value.
+
+``widget``
+    Declares a specialized widget to be used to display the information. This is
+    a mechanism similar to the widgets in the form view.
+
+    Admissible attributes are:
+
+    - ``name`` (mandatory)
+        A string to identify which widget should be instantiated. The view will
+        look into the ``widget_registry`` to get the proper class.
+
+    - ``col`` (optional)
+        The number of columns spanned by this tag (only makes sense inside a
+        group). By default, 1.
 
 .. _reference/views/form:
 
@@ -820,7 +1194,7 @@ system. Available semantic components are:
     dialog, ``cancel`` to close the dialog without saving.
 
 ``field``
-  renders (and allow edition of, possibly) a single field of the current
+  renders (and allow editing of, possibly) a single field of the current
   record. Using several times a field in a form view is supported and the fields
   can receive different values for modifiers 'invisible' and 'readonly'. However,
   the behavior is not guaranteed when several fields exist with different values
@@ -871,7 +1245,7 @@ system. Available semantic components are:
   ``context``
     for relational fields only, context to pass when fetching possible values
   ``readonly``
-    display the field in both readonly and edition mode, but never make it
+    display the field in both readonly and edit mode, but never make it
     editable
   ``required``
     generates an error and prevents saving the record if the field doesn't
@@ -982,6 +1356,7 @@ take the following attributes:
   name of the field that describes if the task has to be excluded
   from the consolidation
   if set to true it displays a striped zone in the consolidation line
+<<<<<<< HEAD
 ``create``, ``edit``, ``plan``
     allows *dis*\ abling the corresponding action in the view by setting the
     corresponding attribute to ``false``.
@@ -989,6 +1364,17 @@ take the following attributes:
     * ``create``: If enabled, a "**+**" button will be displayed while hovering on a time slot
       to create a new record in that slot, and if
     * ``edit``: If enabled, the opened records will be in edit mode (thus editable)
+=======
+``create``, ``cell_create``, ``edit``, ``delete``, ``plan``
+    allows *dis*\ abling the corresponding action in the view by setting the
+    corresponding attribute to ``false`` (default: ``true``).
+
+    * ``create``: If enabled, an ``Add`` button will be available in the control
+      panel to create records.
+    * ``cell_create``: If enabled and ``create`` enabled, a "**+**" button will be
+      displayed while hovering on a time slot cell to create a new record on that slot.
+    * ``edit``: If enabled, the opened records will be in edit mode (thus editable).
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     * ``plan``: If enabled and ``edit`` enabled, a "magnifying glass" button will be displayed
       on time slots to plan unassigned records into that time slot.
 
@@ -1013,6 +1399,70 @@ take the following attributes:
   * Possible values for scale ``day`` are (default: ``hour``):
 
     ``hour``: records times snap to full hours (ex: 7:12 becomes 8:00)
+<<<<<<< HEAD
+
+    ``hour:half``: records times snap to half hours (ex: 7:12 becomes 7:30)
+
+    ``hour:quarter``: records times snap to half hours (ex: 7:12 becomes 7:15)
+
+  * Possible values for scale ``week`` are (default: ``day:half``):
+
+    ``day``: records times snap to full days (ex: 7:28 AM becomes 11:59:59 PM of the previous day, 10:32 PM becomes 12:00 PM of the current day)
+
+    ``day:half``: records times snap to half hours (ex: 7:28 AM becomes 12:00 PM)
+
+  * Possible values for scale ``month`` are (default: ``day:half``):
+
+    ``day``: records times snap to full days (ex: 7:28 AM becomes 11:59:59 PM of the previous day, 10:32 PM becomes 12:00 PM of the current day)
+
+    ``day:half``: records times snap to half hours (ex: 7:28 AM becomes 12:00 PM)
+
+  * Scale ``year`` always snap to full day.
+
+  Example of precision attribute: ``{"day": "hour:quarter", "week": "day:half", "month": "day"}``
+``total_row``
+  boolean to control whether the row containing the total count of records should
+  be displayed. (default: ``false``)
+``collapse_first_level``
+  boolean to control whether it is possible to collapse each row if grouped by
+  one field. (default: ``false``, the collapse starts when grouping by two fields)
+``display_unavailability``
+  boolean to mark the dates returned by the ``gantt_unavailability`` function of
+  the model as available inside the gantt view. Records can still be scheduled
+  in them, but their unavailability is visually displayed. (default: ``false``)
+``default_scale``
+  default scale when rendering the view. Possible values are (default: ``month``):
+
+  * ``day``
+  * ``week``
+  * ``month``
+  * ``year``
+
+``scales``
+  comma-separated list of allowed scales for this view. By default, all scales
+  are allowed. For possible scale values to use in this list, see ``default_scale``.
+
+``templates``
+  defines the :ref:`reference/qweb` template ``gantt-popover`` which is used
+  when the user hovers over one of the records in the gantt view.
+
+  The gantt view uses mostly-standard :ref:`javascript qweb
+  <reference/qweb/javascript>` and provides the following context variables:
+
+  ``widget``
+    the current :js:class:`GanttRow`, can be used to fetch some
+    meta-information. The ``getColor`` method to convert in a color integer is
+    also available directly in the template context without using ``widget``.
+
+  ``on_create``
+  If specified when clicking the add button on the view, instead of opening a generic dialog, launch a client action.
+  this should hold the xmlid of the action (eg: ``on_create="%(my_module.my_wizard)d"``
+
+``form_view_id``
+  view to open when the user create or edit a record. Note that if this attribute
+  is not set, the gantt view will fall back to the id of the form view in the
+  current action, if any.
+=======
 
     ``hour:half``: records times snap to half hours (ex: 7:12 becomes 7:30)
 
@@ -1076,6 +1526,11 @@ take the following attributes:
   is not set, the gantt view will fall back to the id of the form view in the
   current action, if any.
 
+``dynamic_range``
+  if set to true, the gantt view will start at the first record,
+  instead of starting at the beginning of the year/month/day.
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
+
 ``thumbnails``
   This allows to display a thumbnail next to groups name if the group is a relationnal field.
   This expects a python dict which keys are the name of the field on the active model.
@@ -1109,6 +1564,11 @@ attributes:
 ``stacked``
   only used for ``bar`` charts. If present and set to ``True``, stacks bars
   within a group
+<<<<<<< HEAD
+=======
+``disable_linking``
+  set to ``True`` to prevent from redirecting clicks on graph to list view
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 The only allowed element within a graph view is ``field`` which can have the
 following attributes:
@@ -1297,6 +1757,55 @@ Possible children of the view element are:
 
 If you need to extend the Kanban view, see :js:class::`the JS API <KanbanRecord>`.
 
+<<<<<<< HEAD
+=======
+Calendar
+~~~~~~~~
+
+Calendar views display records as events in a daily, weekly or monthly
+calendar. Their root element is ``<calendar>``. Available attributes on the
+calendar view are:
+
+``date_start`` (required)
+    name of the record's field holding the start date for the event
+``date_stop``
+    name of the record's field holding the end date for the event, if
+    ``date_stop`` is provided records become movable (via drag and drop)
+    directly in the calendar
+``date_delay``
+    alternative to ``date_stop``, provides the duration of the event instead of
+    its end date (unit: day)
+``color``
+    name of a record field to use for *color segmentation*. Records in the
+    same color segment are allocated the same highlight color in the calendar,
+    colors are allocated semi-randomly.
+    Displayed the display_name/avatar of the visible record in the sidebar
+``form_view_id``
+    view to open when the user create or edit an event. Note that if this attribute
+    is not set, the calendar view will fall back to the id of the form view in the
+    current action, if any.
+``event_open_popup``
+    If the option 'event_open_popup' is set to true, then the calendar view will
+    open events (or records) in a FormViewDialog. Otherwise, it will open events
+    in a new form view (with a do_action)
+``quick_add``
+    enables quick-event creation on click: only asks the user for a ``name``
+    and tries to create a new event with just that and the clicked event
+    time. Falls back to a full form dialog if the quick creation fails
+``all_day``
+    name of a boolean field on the record indicating whether the corresponding
+    event is flagged as day-long (and duration is irrelevant)
+``mode``
+    Default display mode when loading the calendar.
+    Possible attributes are: ``day``, ``week``, ``month``
+``create``, ``delete``
+    allows *dis*\ abling the corresponding action in the view by setting the
+    corresponding attribute to ``false``
+``<field>``
+  declares fields to aggregate or to use in kanban *logic*. If the field is
+  simply displayed in the calendar cards.
+
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 .. _reference/views/list:
 
 List
@@ -1312,6 +1821,7 @@ root can have the following attributes:
 
     Valid values are ``top`` and ``bottom``, making *new* records appear
     respectively at the top or bottom of the list.
+<<<<<<< HEAD
 
     The architecture for the inline :ref:`form view <reference/views/form>` is
     derived from the list view. Most attributes valid on a :ref:`form view
@@ -1353,6 +1863,49 @@ root can have the following attributes:
     when the list view is grouped, automatically open the first level of groups
     if set to true (default: false)
 
+=======
+
+    The architecture for the inline :ref:`form view <reference/views/form>` is
+    derived from the list view. Most attributes valid on a :ref:`form view
+    <reference/views/form>`'s fields and buttons are thus accepted by list
+    views although they may not have any meaning if the list view is
+    non-editable
+
+    .. note:: if the ``edit`` attribute is set to ``false``, the ``editable`` option will be ignored.
+
+``multi_edit``
+    editable or not editable list can activate the multi-editing feature by defining
+    the `multi_edit=1`
+
+``default_order``
+    overrides the ordering of the view, replacing the model's order (:attr:`~odoo.models.BaseModel._order` model attribute).
+    The value is a comma-separated list of fields, postfixed by ``desc`` to
+    sort in reverse order:
+
+    .. code-block:: xml
+
+        <tree default_order="sequence,name desc">
+
+``decoration-{$name}``
+    allow changing the style of a row's text based on the corresponding
+    record's attributes.
+
+    ``{$name}`` can be ``bf`` (``font-weight: bold``), ``it``
+    (``font-style: italic``), or any `bootstrap contextual color`_ (``danger``,
+    ``info``, ``muted``, ``primary``, ``success`` or ``warning``).
+``create``, ``edit``, ``delete``, ``duplicate``, ``import``, ``export_xlsx``
+    allows *dis*\ abling the corresponding action in the view by setting the
+    corresponding attribute to ``false``
+``limit``
+    the default size of a page. It must be a positive integer
+``groups_limit``
+    when the list view is grouped, the default number of groups of a page. It
+    must be a position integer
+``expand``
+    when the list view is grouped, automatically open the first level of groups
+    if set to true (default: false)
+
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 Possible children elements of the list view are:
 
 .. _reference/views/list/button:
@@ -1594,8 +2147,17 @@ The view's root element is ``<map>`` multiple attributes are allowed
     If a field is provided the view will override the model's default order. The field must be part of the model on which the view is applied not from res.partner
 ``routing``
     if ``true`` the routes between the records will be shown. The view still needs a valid MapBox token and at least two located records. (i.e the records has a res.partner many2one and the partner has a address or valid coordinates)
+<<<<<<< HEAD
 
 The only element allowed within the ``<map>`` element is the ``<marker-popup>``. This element is able to contain multiple ``<field>`` elements. Each of these elements will be interpreted as a line in the marker's popup. The field's attributes are the following:
+=======
+``hide_name``
+    if ``true`` hide a name from the marker's popup (default: false)
+``hide_address``
+    if ``true`` hide a address from the marker's popup (default: false)
+
+The ``<map>`` element can contain multiple ``<field>`` elements. Each ``<field>`` element will be interpreted as a line in the marker's popup. The field's attributes are the following:
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 ``name``
     The field to display.
@@ -1607,10 +2169,15 @@ No attribute or element is mandatory but as stated above if no res.partner many2
 For example here is a map:
     .. code-block:: xml
 
+<<<<<<< HEAD
         <map res_partner="partner_id" default_order="date_begin" routing="true">
             <marker-popup>
                 <field name="name" string="Task: "/>
             </marker-popup>
+=======
+        <map res_partner="partner_id" default_order="date_begin" routing="true" hide_name="true">
+            <field name="partner_id" string="Customer Name"/>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         </map>
 
 .. _reference/views/pivot:
@@ -2026,7 +2593,10 @@ For instance if ``foo`` and ``bar`` refer to two groupbys
 
 has the effect to activate first ``bar`` then ``foo``.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 .. todo:: View Grid
 
 .. _bootstrap contextual color: https://getbootstrap.com/docs/3.3/components/#available-variations

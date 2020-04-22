@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
+import json
 import logging
 
 
@@ -41,10 +42,8 @@ class SeoMetadata(models.AbstractModel):
         title = (request.website or company).name
         if 'name' in self:
             title = '%s | %s' % (self.name, title)
-        if request.website.social_default_image:
-            img = request.website.image_url(request.website, 'social_default_image')
-        else:
-            img = request.website.image_url(company, 'logo')
+        img_field = 'social_default_image' if request.website.has_social_default_image else 'logo'
+        img = request.website.image_url(request.website, img_field)
         # Default meta for OpenGraph
         default_opengraph = {
             'og:type': 'website',
@@ -94,6 +93,22 @@ class SeoMetadata(models.AbstractModel):
             'opengraph_meta': opengraph_meta,
             'twitter_meta': twitter_meta,
             'meta_description': default_meta.get('default_meta_description')
+        }
+
+
+class WebsiteCoverPropertiesMixin(models.AbstractModel):
+
+    _name = 'website.cover_properties.mixin'
+    _description = 'Cover Properties Website Mixin'
+
+    cover_properties = fields.Text('Cover Properties', default=lambda s: json.dumps(s._default_cover_properties()))
+
+    def _default_cover_properties(self):
+        return {
+            "background_color_class": "bg-secondary",
+            "background-image": "none",
+            "opacity": "0.2",
+            "resize_class": "o_half_screen_height",
         }
 
 

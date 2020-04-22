@@ -5,19 +5,6 @@
         <field name="name">stock.inventory.line.tree</field>
         <field name="model">stock.inventory.line</field>
         <field name="arch" type="xml">
-            <tree string="Stock Inventory Lines">
-                <field name="product_id"/>
-                <field name="product_qty"/>
-                <field name="product_uom_id" groups="uom.group_uom"/>
-                <field name="location_id" options="{'no_create': True}" groups="stock.group_stock_multi_locations"/>
-            </tree>
-        </field>
-    </record>
-
-    <record id="stock_inventory_line_tree2" model="ir.ui.view">
-        <field name="name">stock.inventory.line.tree2</field>
-        <field name="model">stock.inventory.line</field>
-        <field name="arch" type="xml">
             <tree default_order="location_id,product_id" editable="top" string="Inventory Details" js_class="inventory_validate_button"
                   decoration-danger="product_qty != theoretical_qty"
                   decoration-muted="product_qty == theoretical_qty"
@@ -59,8 +46,7 @@
                 <button name="action_refresh_quantity" string="Refresh quantity" title="Refresh quantity"
                         icon="fa-refresh" type="object"
                         attrs="{'invisible': [('outdated', '=', False)]}"/>
-                <field name="product_qty" attrs="{'readonly': [('state', '!=', 'confirm')]}"
-                       width="0.5" string="Counted"/>
+                <field name="product_qty" width="0.5" string="Counted"/>
                 <field name="difference_qty" optional="show" width="0.5"/>
                 <field name="product_uom_id" string="UoM" groups="uom.group_uom"
                        width="0.3" force_save="1"/>
@@ -148,7 +134,9 @@
                             </div>
                             <div class="o_kanban_record_bottom">
                                 <div class="oe_kanban_bottom_left">
-                                    <i class="fa fa-clock-o" role="img" aria-label="Date" title="Date"/> <t t-esc="record.date.value"/>
+                                </div>
+                                <div class="oe_kanban_bottom_right">
+                                    <field name="date" widget="date"/>
                                 </div>
                             </div>
                         </div>
@@ -194,6 +182,7 @@
                                groups="stock.group_stock_multi_locations"/>
                         <field name="product_ids" options="{'no_create': True}"
                                widget="many2many_tags"/>
+                        <field name="exhausted"/>
                     </group>
                     <group>
                         <field name="company_id" groups="base.group_multi_company" options="{'no_create': True}"/>

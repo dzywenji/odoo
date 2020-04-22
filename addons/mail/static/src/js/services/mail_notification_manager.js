@@ -97,9 +97,14 @@ MailManager.include({
     _handleChannelMessageNotification: function (messageData) {
         var self = this;
         var def;
-        var channelAlreadyInCache = true;
+        let notify = true;
         if (messageData.channel_ids.length === 1) {
-            channelAlreadyInCache = !!this.getChannel(messageData.channel_ids[0]);
+            const channel = this.getChannel(messageData.channel_ids[0]);
+            // Message from mailing channel should not make a notification in Odoo for users
+            // with notification "Handled by Email", but web client should receive the message.
+            // Channel has been marked as read server-side in this case, so it should not display
+            // a notification by incrementing the unread counter.
+            notify = channel && (!channel.isMassMailing() || session.notification_type !== 'email');
             def = this.joinChannel(messageData.channel_ids[0], { autoswitch: false });
         } else {
             def = Promise.resolve();
@@ -109,7 +114,7 @@ MailManager.include({
             // its unread counter has just been fetched
             return self.addMessage(messageData, {
                 showNotification: true,
-                incrementUnread: channelAlreadyInCache
+                incrementUnread: notify,
             });
         });
     },
@@ -294,7 +299,7 @@ MailManager.include({
      * @param {string} datas.elements[].notifications[0] sending state of a mail
      *   failure (e.g. 'exception').
      */
-    _handlePartnerMailFailureNotification: function (datas) {
+    _handlePartnerMessageNotificationUpdateNotification(datas) {
         var self = this;
         _.each(datas.elements, function (data) {
             var isNewFailure = _.some(data.notifications, function (notif) {
@@ -317,12 +322,7 @@ MailManager.include({
                 return msg.getID() === data.message_id;
             });
             if (message) {
-                if (isNewFailure) {
-                    message.updateCustomerEmailStatus('exception');
-                } else {
-                    message.updateCustomerEmailStatus('sent');
-                }
-                self._updateMessageNotificationStatus(data, message);
+                message.setNotifications(data.notifications);
                 self._mailBus.trigger('update_message', message);
             }
         });
@@ -433,8 +433,8 @@ MailManager.include({
             this._handlePartnerTransientMessageNotification(data);
         } else if (data.type === 'activity_updated') {
             this._handlePartnerActivityUpdateNotification(data);
-        } else if (data.type === 'mail_failure') {
-            this._handlePartnerMailFailureNotification(data);
+        } else if (data.type === 'message_notification_update') {
+            this._handlePartnerMessageNotificationUpdateNotification(data);
         } else if (data.type === 'user_connection') {
             this._handlePartnerUserConnectionNotification(data);
         } else if (data.info === 'channel_seen') {
@@ -556,28 +556,6 @@ MailManager.include({
     _listenOnBuses: function () {
         this._super.apply(this, arguments);
         this.call('bus_service', 'onNotification', this, this._onNotification);
-    },
-    /**
-     * Update the message notification status of message based on update_message
-     *
-     * @private
-     * @param {Object} data
-     * @param {Object[]} data.notifications
-     * @param {mail.model.Message} message
-     */
-    _updateMessageNotificationStatus: function (data, message) {
-        _.each(data.notifications, function (notif, id) {
-            var partnerName = notif[1];
-            var notifStatus = notif[0];
-            var res = _.find(message.getCustomerEmailData(), function (entry) {
-                return entry[0] === parseInt(id);
-            });
-            if (res) {
-                res[2] = notifStatus;
-            } else {
-                message.addCustomerEmailData([parseInt(id), partnerName, notifStatus]);
-            }
-        });
     },
 
     //--------------------------------------------------------------------------

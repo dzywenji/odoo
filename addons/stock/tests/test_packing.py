@@ -7,10 +7,11 @@ from odoo.tools import float_round
 from odoo.exceptions import UserError
 
 
-class TestPacking(SavepointCase):
+class TestPackingCommon(SavepointCase):
+
     @classmethod
     def setUpClass(cls):
-        super(TestPacking, cls).setUpClass()
+        super(TestPackingCommon, cls).setUpClass()
         cls.stock_location = cls.env.ref('stock.stock_location_stock')
         cls.warehouse = cls.env['stock.warehouse'].search([('lot_stock_id', '=', cls.stock_location.id)], limit=1)
         cls.warehouse.write({'delivery_steps': 'pick_pack_ship'})
@@ -20,6 +21,9 @@ class TestPacking(SavepointCase):
 
         cls.productA = cls.env['product.product'].create({'name': 'Product A', 'type': 'product'})
         cls.productB = cls.env['product.product'].create({'name': 'Product B', 'type': 'product'})
+
+
+class TestPacking(TestPackingCommon):
 
     def test_put_in_pack(self):
         """ In a pick pack ship scenario, create two packs in pick and check that
@@ -76,8 +80,8 @@ class TestPacking(SavepointCase):
         pick_picking.move_line_ids.filtered(lambda ml: ml.product_id == self.productB).qty_done = 2.0
 
         first_pack = pick_picking.put_in_pack()
-        self.assertEquals(len(pick_picking.package_level_ids), 1, 'Put some products in pack should create a package_level')
-        self.assertEquals(pick_picking.package_level_ids[0].state, 'new', 'A new pack should be in state "new"')
+        self.assertEqual(len(pick_picking.package_level_ids), 1, 'Put some products in pack should create a package_level')
+        self.assertEqual(pick_picking.package_level_ids[0].state, 'new', 'A new pack should be in state "new"')
         pick_picking.move_line_ids.filtered(lambda ml: ml.product_id == self.productA and ml.qty_done == 0.0).qty_done = 4.0
         pick_picking.move_line_ids.filtered(lambda ml: ml.product_id == self.productB and ml.qty_done == 0.0).qty_done = 3.0
         second_pack = pick_picking.put_in_pack()
@@ -90,7 +94,7 @@ class TestPacking(SavepointCase):
         packing_picking.action_assign()
         self.assertEqual(len(packing_picking.package_level_ids), 2, 'Two package levels must be created after assigning picking')
         packing_picking.package_level_ids.write({'is_done': True})
-        packing_picking.action_done()
+        packing_picking._action_done()
 
     def test_pick_a_pack_confirm(self):
         pack = self.env['stock.quant.package'].create({'name': 'The pack to pick'})
@@ -108,42 +112,42 @@ class TestPacking(SavepointCase):
             'location_dest_id': self.stock_location.id,
             'company_id': picking.company_id.id,
         })
-        self.assertEquals(package_level.state, 'draft',
+        self.assertEqual(package_level.state, 'draft',
                           'The package_level should be in draft as it has no moves, move lines and is not confirmed')
         picking.action_confirm()
         self.assertEqual(len(picking.move_ids_without_package), 0)
         self.assertEqual(len(picking.move_lines), 1,
                          'One move should be created when the package_level has been confirmed')
-        self.assertEquals(len(package_level.move_ids), 1,
+        self.assertEqual(len(package_level.move_ids), 1,
                           'The move should be in the package level')
-        self.assertEquals(package_level.state, 'confirmed',
+        self.assertEqual(package_level.state, 'confirmed',
                           'The package level must be state confirmed when picking is confirmed')
         picking.action_assign()
         self.assertEqual(len(picking.move_lines), 1,
                          'You still have only one move when the picking is assigned')
         self.assertEqual(len(picking.move_lines.move_line_ids), 1,
                          'The move  should have one move line which is the reservation')
-        self.assertEquals(picking.move_line_ids.package_level_id.id, package_level.id,
+        self.assertEqual(picking.move_line_ids.package_level_id.id, package_level.id,
                           'The move line created should be linked to the package level')
-        self.assertEquals(picking.move_line_ids.package_id.id, pack.id,
+        self.assertEqual(picking.move_line_ids.package_id.id, pack.id,
                           'The move line must have been reserved on the package of the package_level')
-        self.assertEquals(picking.move_line_ids.result_package_id.id, pack.id,
+        self.assertEqual(picking.move_line_ids.result_package_id.id, pack.id,
                           'The move line must have the same package as result package')
-        self.assertEquals(package_level.state, 'assigned', 'The package level must be in state assigned')
+        self.assertEqual(package_level.state, 'assigned', 'The package level must be in state assigned')
         package_level.write({'is_done': True})
-        self.assertEquals(len(package_level.move_line_ids), 1,
+        self.assertEqual(len(package_level.move_line_ids), 1,
                           'The package level should still keep one move line after have been set to "done"')
-        self.assertEquals(package_level.move_line_ids[0].qty_done, 20.0,
+        self.assertEqual(package_level.move_line_ids[0].qty_done, 20.0,
                           'All quantity in package must be procesed in move line')
         picking.button_validate()
         self.assertEqual(len(picking.move_lines), 1,
                          'You still have only one move when the picking is assigned')
         self.assertEqual(len(picking.move_lines.move_line_ids), 1,
                          'The move  should have one move line which is the reservation')
-        self.assertEquals(package_level.state, 'done', 'The package level must be in state done')
-        self.assertEquals(pack.location_id.id, picking.location_dest_id.id,
+        self.assertEqual(package_level.state, 'done', 'The package level must be in state done')
+        self.assertEqual(pack.location_id.id, picking.location_dest_id.id,
                           'The quant package must be in the destination location')
-        self.assertEquals(pack.quant_ids[0].location_id.id, picking.location_dest_id.id,
+        self.assertEqual(pack.quant_ids[0].location_id.id, picking.location_dest_id.id,
                           'The quant must be in the destination location')
 
     def test_multi_pack_reservation(self):
@@ -261,7 +265,7 @@ class TestPacking(SavepointCase):
         wizard = self.env[(wizard_values.get('res_model'))].browse(wizard_values.get('res_id'))
         wizard.location_dest_id = shelf2_location.id
         wizard.action_done()
-        picking.action_done()
+        picking._action_done()
         pack2 = self.env['stock.quant.package'].search([])[-1]
         self.assertEqual(pack2.location_id.id, shelf2_location.id, 'The package must be stored  in shelf2')
         self.assertEqual(pack1.location_id.id, shelf1_location.id, 'The package must be stored  in shelf1')
@@ -311,7 +315,7 @@ class TestPacking(SavepointCase):
         picking.action_confirm()
         picking.action_assign()
         move.quantity_done = move.reserved_availability
-        picking.action_done()
+        picking._action_done()
         # if we managed to get there, there was not any exception
         # complaining that 355.4 is not 355.40000000000003. Good job!
 
@@ -355,7 +359,11 @@ class TestPacking(SavepointCase):
         })
         picking.action_confirm()
         with self.assertRaises(UserError):
+<<<<<<< HEAD
             picking.action_done()
+=======
+            picking._action_done()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     def test_pack_in_receipt_two_step_single_putway(self):
         """ Checks all works right in the following specific corner case:

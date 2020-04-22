@@ -31,6 +31,7 @@ class L10nLatamDocumentType(models.Model):
             ('X', 'X'),
             ('I', 'I'),  # used for mapping of imports
         ]
+<<<<<<< HEAD
 
     def _get_document_sequence_vals(self, journal):
         """ Values to create the sequences """
@@ -47,6 +48,8 @@ class L10nLatamDocumentType(models.Model):
             values.update({'name': '%s - %s' % (journal.name, self.name), 'l10n_latam_document_type_id': self.id})
         return values
 
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     def _filter_taxes_included(self, taxes):
         """ In argentina we include taxes depending on document letter """
         self.ensure_one()

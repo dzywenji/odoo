@@ -11,6 +11,7 @@ class PosOrderLine(models.Model):
 
     note = fields.Char('Note added by the waiter.')
     mp_skip = fields.Boolean('Skip line when sending ticket to kitchen printers.')
+    mp_dirty = fields.Boolean()
 
 
 class PosOrder(models.Model):
@@ -18,6 +19,7 @@ class PosOrder(models.Model):
 
     table_id = fields.Many2one('restaurant.table', string='Table', help='The table where this order was served', index=True)
     customer_count = fields.Integer(string='Guests', help='The amount of customers that have been served by this order.')
+    multiprint_resume = fields.Char()
 
     def _get_pack_lot_lines(self, order_lines):
         """Add pack_lot_lines to the order_lines.
@@ -54,6 +56,10 @@ class PosOrder(models.Model):
             'qty',
             'note',
             'mp_skip',
+<<<<<<< HEAD
+=======
+            'mp_dirty',
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         ]
 
     def _get_order_lines(self, orders):
@@ -84,6 +90,17 @@ class PosOrder(models.Model):
         for order_id, order_lines in groupby(extended_order_lines, key=lambda x:x[2]['order_id']):
             next(order for order in orders if order['id'] == order_id[0])['lines'] = list(order_lines)
 
+    def _get_fields_for_payment_lines(self):
+        return [
+            'id',
+            'amount',
+            'pos_order_id',
+            'payment_method_id',
+            'card_type',
+            'transaction_id',
+            'payment_status'
+            ]
+
     def _get_payment_lines(self, orders):
         """Add account_bank_statement_lines to the orders.
 
@@ -94,12 +111,7 @@ class PosOrder(models.Model):
         """
         payment_lines = self.env['pos.payment'].search_read(
                 domain = [('pos_order_id', 'in', [po['id'] for po in orders])],
-                fields = [
-                    'id',
-                    'amount',
-                    'pos_order_id',
-                    'payment_method_id',
-                    ])
+                fields = self._get_fields_for_payment_lines())
 
         extended_payment_lines = []
         for payment_line in payment_lines:
@@ -125,13 +137,21 @@ class PosOrder(models.Model):
                     'fiscal_position_id',
                     'table_id',
                     'to_invoice',
+<<<<<<< HEAD
+=======
+                    'multiprint_resume',
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                     ]
 
     @api.model
     def get_table_draft_orders(self, table_id):
         """Generate an object of all draft orders for the given table.
 
+<<<<<<< HEAD
         Generate and return an JSON object with all draft orders for the given table, to send to the 
+=======
+        Generate and return an JSON object with all draft orders for the given table, to send to the
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         front end application.
 
         :param table_id: Id of the selected table.
@@ -177,4 +197,5 @@ class PosOrder(models.Model):
         order_fields = super(PosOrder, self)._order_fields(ui_order)
         order_fields['table_id'] = ui_order.get('table_id', False)
         order_fields['customer_count'] = ui_order.get('customer_count', 0)
+        order_fields['multiprint_resume'] = ui_order.get('multiprint_resume', False)
         return order_fields

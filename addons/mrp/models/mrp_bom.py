@@ -46,7 +46,7 @@ class MrpBom(models.Model):
         'uom.uom', 'Unit of Measure',
         default=_get_default_product_uom_id, required=True,
         help="Unit of Measure (Unit of Measure) is the unit of measurement for the inventory control", domain="[('category_id', '=', product_uom_category_id)]")
-    product_uom_category_id = fields.Many2one(related='product_id.uom_id.category_id')
+    product_uom_category_id = fields.Many2one(related='product_tmpl_id.uom_id.category_id')
     sequence = fields.Integer('Sequence', help="Gives the sequence order when displaying a list of bills of material.")
     routing_id = fields.Many2one(
         'mrp.routing', 'Routing', check_company=True,
@@ -70,8 +70,13 @@ class MrpBom(models.Model):
         ('flexible', 'Flexible')],
         help="Defines if you can consume more or less components than the quantity defined on the BoM.",
         default='strict',
-        string='Consumption'
+        string='Consumption',
+        required=True
     )
+
+    _sql_constraints = [
+        ('qty_positive', 'check (product_qty > 0)', 'The quantity to produce must be positive!'),
+    ]
 
     @api.onchange('product_id')
     def onchange_product_id(self):
@@ -119,6 +124,7 @@ class MrpBom(models.Model):
         for line in self.bom_line_ids:
             line.operation_id = False
 
+<<<<<<< HEAD
     @api.model_create_multi
     def create(self, vals_list):
         res = super().create(vals_list)
@@ -134,6 +140,8 @@ class MrpBom(models.Model):
                 raise UserError(_('The quantity to produce must be positive!'))
         return res
 
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     @api.model
     def name_create(self, name):
         # prevent to use string as product_tmpl_id
@@ -436,4 +444,3 @@ class MrpByProduct(models.Model):
             }
             self.product_uom_id = self.product_id.uom_id.id
         return res
-

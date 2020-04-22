@@ -8,17 +8,10 @@ from odoo.http import request
 class website_form_config(models.Model):
     _inherit = 'website'
 
-    website_form_enable_metadata = fields.Boolean('Technical data on contact form', help="You can choose to log technical data like IP, User Agent ,...")
-
     def _website_form_last_record(self):
         if request and request.session.form_builder_model_model:
             return request.env[request.session.form_builder_model_model].browse(request.session.form_builder_id)
         return False
-
-
-class ResConfigSettings(models.TransientModel):
-    _inherit = 'res.config.settings'
-    website_form_enable_metadata = fields.Boolean(related="website_id.website_form_enable_metadata", readonly=False)
 
 
 class website_form_model(models.Model):
@@ -71,7 +64,11 @@ class website_form_model(models.Model):
         for field in list(fields_get):
             if 'domain' in fields_get[field] and isinstance(fields_get[field]['domain'], str):
                 del fields_get[field]['domain']
+<<<<<<< HEAD
             if fields_get[field]['readonly'] or field in MAGIC_FIELDS:
+=======
+            if fields_get[field]['readonly'] or field in MAGIC_FIELDS or fields_get[field]['type'] == 'many2one_reference':
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 del fields_get[field]
 
         return fields_get

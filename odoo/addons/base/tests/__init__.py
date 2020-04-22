@@ -1,4 +1,10 @@
 # -*- coding: utf-8 -*-
+<<<<<<< HEAD
+=======
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
+
+from . import common
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 from . import test_acl
 from . import test_api
 from . import test_base
@@ -8,6 +14,7 @@ from . import test_db_cursor
 from . import test_expression
 from . import test_float
 from . import test_func
+from . import test_http_case
 from . import test_image
 from . import test_ir_actions
 from . import test_ir_attachment
@@ -31,7 +38,6 @@ from . import test_search
 from . import test_translate
 #import test_uninstall  # loop
 from . import test_user_has_group
-from . import test_view_validation
 from . import test_views
 from . import test_xmlrpc
 from . import test_res_partner

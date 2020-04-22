@@ -109,6 +109,7 @@ class IrActions(models.Model):
                     WHERE a.binding_model_id=m.id AND m.model=%s
                     ORDER BY a.id """
         cr.execute(query, [model_name])
+        IrModelAccess = self.env['ir.model.access']
 
         # discard unauthorized actions, and read action definitions
         result = defaultdict(list)
@@ -117,13 +118,20 @@ class IrActions(models.Model):
             try:
                 action = self.env[action_model].browse(action_id)
                 action_groups = getattr(action, 'groups_id', ())
+                action_model = getattr(action, 'res_model', False)
                 if action_groups and not action_groups & user_groups:
                     # the user may not perform this action
+                    continue
+                if action_model and not IrModelAccess.check(action_model, mode='read', raise_exception=False):
+                    # the user won't be able to read records
                     continue
                 result[binding_type].append(action.read()[0])
             except (AccessError, MissingError):
                 continue
 
+        # sort actions by their sequence if sequence available
+        if result.get('action'):
+            result['action'] = sorted(result['action'], key=lambda vals: vals.get('sequence', 0))
         return result
 
 
@@ -381,12 +389,12 @@ class IrActionsServer(models.Model):
     child_ids = fields.Many2many('ir.actions.server', 'rel_server_actions', 'server_id', 'action_id',
                                  string='Child Actions', help='Child server actions that will be executed. Note that the last return returned action value will be used as global return value.')
     # Create
-    crud_model_id = fields.Many2one('ir.model', string='Create/Write Target Model',
+    crud_model_id = fields.Many2one('ir.model', string='Target Model',
                                     help="Model for record creation / update. Set this field only to specify a different model than the base model.")
-    crud_model_name = fields.Char(related='crud_model_id.model', string='Target Model', readonly=True)
-    link_field_id = fields.Many2one('ir.model.fields', string='Link using field',
+    crud_model_name = fields.Char(related='crud_model_id.model', string='Target Model Name', readonly=True)
+    link_field_id = fields.Many2one('ir.model.fields', string='Link Field',
                                     help="Provide the field used to link the newly created record "
-                                         "on the record on used by the server action.")
+                                         "on the record used by the server action.")
     fields_lines = fields.One2many('ir.server.object.lines', 'server_id', string='Value Mapping', copy=True)
     groups_id = fields.Many2many('res.groups', 'ir_act_server_group_rel',
                                  'act_id', 'gid', string='Groups')
@@ -406,11 +414,6 @@ class IrActionsServer(models.Model):
     @api.onchange('crud_model_id')
     def _onchange_crud_model_id(self):
         self.link_field_id = False
-        self.crud_model_name = self.crud_model_id.model
-
-    @api.onchange('model_id')
-    def _onchange_model_id(self):
-        self.model_name = self.model_id.model
 
     def create_action(self):
         """ Create a contextual action for each server action. """
@@ -505,6 +508,7 @@ class IrActionsServer(models.Model):
             'model': model,
             # Exceptions
             'Warning': odoo.exceptions.Warning,
+            'UserError': odoo.exceptions.UserError,
             # record
             'record': record,
             'records': records,
@@ -576,7 +580,7 @@ class IrServerObjectLines(models.Model):
     _sequence = 'ir_actions_id_seq'
 
     server_id = fields.Many2one('ir.actions.server', string='Related Server Action', ondelete='cascade')
-    col1 = fields.Many2one('ir.model.fields', string='Field', required=True)
+    col1 = fields.Many2one('ir.model.fields', string='Field', required=True, ondelete='cascade')
     value = fields.Text(required=True, help="Expression containing a value specification. \n"
                                             "When Formula type is selected, this field may be a Python expression "
                                             " that can use the same values as for the code field on the server action.\n"

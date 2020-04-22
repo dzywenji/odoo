@@ -2,7 +2,11 @@ odoo.define('web.GraphModel', function (require) {
 "use strict";
 
 var core = require('web.core');
+<<<<<<< HEAD
 const { DEFAULT_INTERVAL, rank } = require('web.controlPanelViewParameters');
+=======
+const { DEFAULT_INTERVAL, rankInterval } = require('web.searchUtils');
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 var _t = core._t;
 
@@ -35,10 +39,7 @@ return AbstractModel.extend({
      * @returns {Object}
      */
     get: function () {
-        var self = this;
-        return _.extend({}, this.chart, {
-            comparisonFieldIndex: self._getComparisonFieldIndex(),
-        });
+        return _.extend({}, this.chart);
     },
     /**
      * Initial loading.
@@ -47,21 +48,16 @@ return AbstractModel.extend({
      * should be done by the graphView I think.
      *
      * @param {Object} params
-     * @param {boolean} params.compare
      * @param {Object} params.context
      * @param {Object} params.fields
-     * @param {string[]} params.comparisonTimeRange
      * @param {string[]} params.domain
      * @param {string[]} params.groupBys a list of valid field names
      * @param {string[]} params.groupedBy a list of valid field names
      * @param {boolean} params.stacked
-     * @param {string[]} params.timeRange
-     * @param {string} params.comparisonField
-     * @param {string} params.comparisonTimeRangeDescription
      * @param {string} params.measure a valid field name
      * @param {'pie'|'bar'|'line'} params.mode
      * @param {string} params.modelName
-     * @param {string} params.timeRangeDescription
+     * @param {Object} params.timeRanges
      * @returns {Promise} The promise does not return a handle, we don't need
      *   to keep track of various entities.
      */
@@ -70,11 +66,7 @@ return AbstractModel.extend({
         this.initialGroupBys = groupBys;
         this.fields = params.fields;
         this.modelName = params.modelName;
-        this.chart = {
-            comparisonField: params.comparisonField,
-            comparisonTimeRange: params.comparisonTimeRange,
-            comparisonTimeRangeDescription: params.comparisonTimeRangeDescription,
-            compare: params.compare,
+        this.chart = Object.assign({
             context: params.context,
             dataPoints: [],
             domain: params.domain,
@@ -83,11 +75,20 @@ return AbstractModel.extend({
             mode: params.context.graph_mode || params.mode,
             origins: [],
             stacked: params.stacked,
+<<<<<<< HEAD
             timeRange: params.timeRange,
             timeRangeDescription: params.timeRangeDescription,
         };
         this.chart.processedGroupBy = this._processGroupBy(this.chart.groupBy);
         return this._loadGraph(this._getDomains());
+=======
+            timeRanges: params.timeRanges,
+        });
+
+        this._computeDerivedParams();
+
+        return this._loadGraph();
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     },
     /**
      * Reload data.  It is similar to the load function. Note that we ignore the
@@ -104,6 +105,7 @@ return AbstractModel.extend({
      * @param {string[]} [params.groupBy]
      * @param {string} [params.measure] a valid field name
      * @param {string} [params.mode] one of 'bar', 'pie', 'line'
+     * @param {Object} [params.timeRanges]
      * @returns {Promise}
      */
     reload: function (handle, params) {
@@ -112,22 +114,6 @@ return AbstractModel.extend({
             this.chart.groupBy = params.context.graph_groupbys || this.chart.groupBy;
             this.chart.measure = params.context.graph_measure || this.chart.measure;
             this.chart.mode = params.context.graph_mode || this.chart.mode;
-            var timeRangeMenuData = params.context.timeRangeMenuData;
-            if (timeRangeMenuData) {
-                this.chart.comparisonField = timeRangeMenuData.comparisonField || undefined;
-                this.chart.comparisonTimeRange = timeRangeMenuData.comparisonTimeRange || [];
-                this.chart.compare = this.chart.comparisonTimeRange.length > 0;
-                this.chart.comparisonTimeRangeDescription = timeRangeMenuData.comparisonTimeRangeDescription;
-                this.chart.timeRange = timeRangeMenuData.timeRange || [];
-                this.chart.timeRangeDescription = timeRangeMenuData.timeRangeDescription;
-            } else {
-                this.chart.comparisonField = undefined;
-                this.chart.comparisonTimeRange = [];
-                this.chart.compare = false;
-                this.chart.comparisonTimeRangeDescription = undefined;
-                this.chart.timeRange = [];
-                this.chart.timeRangeDescription = undefined;
-            }
         }
         if ('domain' in params) {
             this.chart.domain = params.domain;
@@ -138,7 +124,16 @@ return AbstractModel.extend({
         if ('measure' in params) {
             this.chart.measure = params.measure;
         }
+<<<<<<< HEAD
         this.chart.processedGroupBy = this._processGroupBy(this.chart.groupBy);
+=======
+        if ('timeRanges' in params) {
+            this.chart.timeRanges = params.timeRanges;
+        }
+
+        this._computeDerivedParams();
+
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         if ('mode' in params) {
             this.chart.mode = params.mode;
             return Promise.resolve();
@@ -147,7 +142,7 @@ return AbstractModel.extend({
             this.chart.stacked = params.stacked;
             return Promise.resolve();
         }
-        return this._loadGraph(this._getDomains());
+        return this._loadGraph();
     },
 
     //--------------------------------------------------------------------------
@@ -155,7 +150,12 @@ return AbstractModel.extend({
     //--------------------------------------------------------------------------
 
     /**
+     * Compute this.chart.processedGroupBy, this.chart.domains, this.chart.origins,
+     * and this.chart.comparisonFieldIndex.
+     * Those parameters are determined by this.chart.timeRanges, this.chart.groupBy, and this.chart.domain.
+     *
      * @private
+<<<<<<< HEAD
      * @returns {number}
      */
     _getComparisonFieldIndex: function () {
@@ -167,16 +167,31 @@ return AbstractModel.extend({
     /**
      * @private
      * @returns {Array[]}
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
      */
-    _getDomains: function () {
-        var domains = [this.chart.domain.concat(this.chart.timeRange)];
-        this.chart.origins = [this.chart.timeRangeDescription || ""];
-        if (this.chart.compare) {
-            domains.push(this.chart.domain.concat(this.chart.comparisonTimeRange));
-            this.chart.origins.push(this.chart.comparisonTimeRangeDescription);
+    _computeDerivedParams: function () {
+        this.chart.processedGroupBy = this._processGroupBy(this.chart.groupBy);
+
+        const { range, rangeDescription, comparisonRange, comparisonRangeDescription, fieldName } = this.chart.timeRanges;
+        if (range) {
+            this.chart.domains = [this.chart.domain.concat(range)];
+            this.chart.origins = [rangeDescription];
+            if (comparisonRange) {
+                this.chart.domains.push(this.chart.domain.concat(comparisonRange));
+                this.chart.origins.push(comparisonRangeDescription);
+            }
+            const groupBys = this.chart.processedGroupBy.map(function (gb) {
+                return gb.split(":")[0];
+            });
+            this.chart.comparisonFieldIndex = groupBys.indexOf(fieldName);
+        } else {
+            this.chart.domains = [this.chart.domain];
+            this.chart.origins = [""];
+            this.chart.comparisonFieldIndex = -1;
         }
-        return domains;
     },
+
     /**
      * Fetch and process graph data.  It is basically a(some) read_group(s)
      * with correct fields for each domain.  We have to do some light processing
@@ -184,10 +199,9 @@ return AbstractModel.extend({
      * with an aggregation function, such as my_date:week.
      *
      * @private
-     * @param {Array[]} domains
      * @returns {Promise}
      */
-    _loadGraph: function (domains) {
+    _loadGraph: function () {
         var self = this;
         this.chart.dataPoints = [];
         var groupBy = this.chart.processedGroupBy;
@@ -205,10 +219,10 @@ return AbstractModel.extend({
         }
 
         var context = _.extend({fill_temporal: true}, this.chart.context);
-        var defs = [];
 
-        domains.forEach(function (domain, originIndex) {
-            defs.push(self._rpc({
+        var proms = [];
+        this.chart.domains.forEach(function (domain, originIndex) {
+            proms.push(self._rpc({
                 model: self.modelName,
                 method: 'read_group',
                 context: context,
@@ -218,7 +232,7 @@ return AbstractModel.extend({
                 lazy: false,
             }).then(self._processData.bind(self, originIndex)));
         });
-        return Promise.all(defs);
+        return Promise.all(proms);
     },
     /**
      * Since read_group is insane and returns its result on different keys
@@ -260,6 +274,7 @@ return AbstractModel.extend({
             self.chart.dataPoints.push({
                 resId: dataPt[self.chart.groupBy[0]] instanceof Array ? dataPt[self.chart.groupBy[0]][0] : -1,
                 count: count,
+                domain: dataPt.__domain,
                 value: value,
                 labels: labels,
                 originIndex: originIndex,
@@ -287,7 +302,11 @@ return AbstractModel.extend({
             }
             if (groupBysMap.has(fieldName)) {
                 const registeredInterval = groupBysMap.get(fieldName);
+<<<<<<< HEAD
                 if (rank(registeredInterval) < rank(interval)) {
+=======
+                if (rankInterval(registeredInterval) < rankInterval(interval)) {
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                     groupBysMap.set(fieldName, interval);
                 }
             } else {

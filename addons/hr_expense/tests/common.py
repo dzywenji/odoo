@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
+<<<<<<< HEAD
 from odoo.addons.account.tests.account_test_no_chart import TestAccountNoChartCommon
 from odoo.addons.account.tests.account_test_multi_company_no_chart import TestAccountMultiCompanyNoChartCommon
+=======
+from odoo.addons.account.tests.common import AccountTestNoChartCommon, AccountTestNoChartCommonMultiCompany
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 
-class TestExpenseCommon(TestAccountNoChartCommon):
+class TestExpenseCommon(AccountTestNoChartCommon):
 
     @classmethod
     def setUpClass(cls):
@@ -123,7 +127,11 @@ class TestExpenseCommon(TestAccountNoChartCommon):
         })
 
 
+<<<<<<< HEAD
 class TestExpenseMultiCompanyCommon(TestAccountMultiCompanyNoChartCommon):
+=======
+class TestExpenseMultiCompanyCommon(AccountTestNoChartCommonMultiCompany):
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     @classmethod
     def setUpClass(cls):

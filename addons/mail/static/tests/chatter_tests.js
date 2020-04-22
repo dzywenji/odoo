@@ -1008,8 +1008,8 @@ QUnit.test('chatter: post, receive and star messages', async function (assert) {
                     body: args.kwargs.body,
                     date: "2016-12-20 10:35:40",
                     id: messageID,
-                    is_note: args.kwargs.subtype === 'mail.mt_note',
-                    is_discussion: args.kwargs.subtype === 'mail.mt_comment',
+                    is_note: args.kwargs.subtype_xmlid === 'mail.mt_note',
+                    is_discussion: args.kwargs.subtype_xmlid === 'mail.mt_comment',
                     is_notification: false,
                     is_starred: false,
                     model: 'partner',
@@ -1403,8 +1403,8 @@ QUnit.test('chatter: post a message and switch in edit mode', async function (as
                     body: args.kwargs.body,
                     date: "2016-12-20 10:35:40",
                     id: 42,
-                    is_note: args.kwargs.subtype === 'mail.mt_note',
-                    is_discussion: args.kwargs.subtype === 'mail.mt_comment',
+                    is_note: args.kwargs.subtype_xmlid === 'mail.mt_note',
+                    is_discussion: args.kwargs.subtype_xmlid === 'mail.mt_comment',
                     is_starred: false,
                     model: 'partner',
                     res_id: 2,
@@ -1775,21 +1775,21 @@ QUnit.test('chatter: Attachment viewer', async function (assert) {
         attachment_ids: [{
             filename: 'image1.jpg',
             id:1,
-            checksum: 999,
+            checksum: '123456789abc',
             mimetype: 'image/jpeg',
             name: 'Test Image 1',
             url: '/web/content/1?download=true'
         },{
             filename: 'image2.jpg',
             id:2,
-            checksum: 999,
+            checksum: '123456789abc',
             mimetype: 'image/jpeg',
             name: 'Test Image 2',
             url: '/web/content/2?download=true'
         },{
             filename: 'image3.jpg',
             id:3,
-            checksum: 999,
+            checksum: '123456789abc',
             mimetype: 'image/jpeg',
             name: 'Test Image 3',
             url: '/web/content/3?download=true'
@@ -1840,11 +1840,11 @@ QUnit.test('chatter: Attachment viewer', async function (assert) {
         "image caption should have correct download link");
     // click on first image attachement
     await testUtils.dom.click(form.$('.o_thread_message .o_attachment .o_image_box .o_image_overlay').first());
-    assert.strictEqual($('.o_modal_fullscreen img.o_viewer_img[data-src="/web/image/1?unique=1&signature=999&model=ir.attachment"]').length, 1,
+    assert.strictEqual($('.o_modal_fullscreen img.o_viewer_img[data-src="/web/image/1?unique=56789abc&model=ir.attachment"]').length, 1,
         "Modal popup should open with first image src");
     //  click on next button
     await testUtils.dom.click($('.modal .arrow.arrow-right.move_next span'));
-    assert.strictEqual($('.o_modal_fullscreen img.o_viewer_img[data-src="/web/image/2?unique=1&signature=999&model=ir.attachment"]').length, 1,
+    assert.strictEqual($('.o_modal_fullscreen img.o_viewer_img[data-src="/web/image/2?unique=56789abc&model=ir.attachment"]').length, 1,
         "Modal popup should have now second image src");
     assert.strictEqual($('.o_modal_fullscreen .o_viewer_toolbar .o_download_btn').length, 1,
         "Modal popup should have download button");
@@ -2448,7 +2448,7 @@ QUnit.test('form activity widget: mark as done and remove', async function (asse
 });
 
 QUnit.test('followers widget: follow/unfollow, edit subtypes', async function (assert) {
-    assert.expect(14);
+    assert.expect(16);
 
     var resID = 2;
     var partnerID = 2;
@@ -2490,11 +2490,11 @@ QUnit.test('followers widget: follow/unfollow, edit subtypes', async function (a
                     this.data.partner.records[0].message_follower_ids = [1];
                     followers.push({
                         id: 1,
-                        is_uid: true,
                         name: "Admin",
                         email: "admin@example.com",
-                        res_id: resID,
-                        res_model: 'partner',
+                        partner_id: partnerID,
+                        channel_id: null,
+                        is_active: true
                     });
                 }
                 return Promise.resolve(true);
@@ -2516,8 +2516,9 @@ QUnit.test('followers widget: follow/unfollow, edit subtypes', async function (a
             if (route === '/web/dataset/call_kw/partner/read') {
                 nbReads++;
                 if (nbReads === 1) { // first read: should read all fields
-                    assert.strictEqual(args.args[1].length, 3,
-                        'should read "foo", "message_follower_ids" and "display_name"');
+                    assert.ok(args.args[1].includes('foo'), 'should read "foo"');
+                    assert.ok(args.args[1].includes('message_follower_ids'), 'should read "message_follower_ids"');
+                    assert.ok(args.args[1].includes('display_name'), 'should read "display_name"');
                 } else { // three next reads: only read 'message_follower_ids' field
                     assert.deepEqual(args.args[1], ['message_follower_ids', 'display_name'],
                         'should only read "message_follower_ids" and "display_name"');
@@ -2557,18 +2558,18 @@ QUnit.test('followers widget: follow/unfollow confirmation dialog', async functi
     var partnerID = 2;
     var followers = [{
         id: 1,
-        is_uid: true,
         name: "Admin",
         email: "admin@example.com",
-        res_id: resID,
-        res_model: 'res.partner',
+        partner_id: partnerID,
+        channel_id: null,
+        is_active: true   
     }, {
         id: 2,
-        is_uid: true,
         name: "Demo",
         email: "demo@example.com",
-        res_id: 3,
-        res_model: 'res.partner',
+        partner_id: 1,
+        channel_id: null,
+        is_active: true
     }];
 
     var form = await createView({
@@ -2623,12 +2624,14 @@ QUnit.test('followers widget: do not display follower duplications', async funct
 
     this.data.partner.records[0].message_follower_ids = [1];
     var resID = 2;
+    var partnerID = 1;
     var followers = [{
         id: 1,
         name: "Admin",
         email: "admin@example.com",
-        res_id: resID,
-        res_model: 'partner',
+        partner_id: partnerID,
+        channel_id: null,
+        is_active: true   
     }];
     var def;
     var form = await createView({
@@ -2656,17 +2659,18 @@ QUnit.test('followers widget: do not display follower duplications', async funct
             return this._super.apply(this, arguments);
         },
         res_id: resID,
-        session: {partner_id: 1},
+        session: {partner_id: partnerID},
     });
 
 
     followers.push({
         id: 2,
-        is_uid: false,
         name: "A follower",
         email: "follower@example.com",
         res_id: resID,
-        res_model: 'partner',
+        partner_id: 555,
+        channel_id: null,
+        is_active: true
     });
     this.data.partner.records[0].message_follower_ids.push(2);
 
@@ -2694,23 +2698,23 @@ QUnit.test('followers widget: display inactive followers with a different style'
         id: 1,
         name: "Admin",
         email: "admin@example.com",
-        res_id: 101,
-        res_model: 'partner',
-        active: true,
+        partner_id: 101,
+        channel_id: false,
+        is_active: true,
     },{
         id: 2,
         name: "Active_partner",
         email: "active_partner@example.com",
-        res_id: 102,
-        res_model: 'partner',
-        active: true,
+        partner_id: 102,
+        channel_id: false,
+        is_active: true,
     },{
         id: 3,
         name: "Inactive_partner",
         email: "inactive_partner@example.com",
-        res_id: 103,
-        res_model: 'partner',
-        active: false,
+        partner_id: 103,
+        channel_id: false,
+        is_active: false,
     }];
 
     var form = await createView({
@@ -3001,11 +3005,9 @@ QUnit.test('chatter: suggested partner auto-follow on message post', async funct
     var followers = [];
     followers.push({
         id: 1,
-        is_uid: true,
         name: "Admin",
         email: "admin@example.com",
-        res_id: 5,
-        res_model: 'partner',
+        partner_id: 5,
     });
 
     var form = await createView({
@@ -3044,11 +3046,11 @@ QUnit.test('chatter: suggested partner auto-follow on message post', async funct
                 self.data.partner.records[0].message_follower_ids.push(2);
                 followers.push({
                     id: 2,
-                    is_uid: true,
                     name: "Demo User",
                     email: "demo-user@example.com",
-                    res_id: 8,
-                    res_model: 'partner',
+                    partner_id: 8,
+                    channel_id: false,
+                    is_active: true
                 });
 
                 // post a legit message so that it does not crashes
@@ -3061,8 +3063,8 @@ QUnit.test('chatter: suggested partner auto-follow on message post', async funct
                     body: args.kwargs.body,
                     date: "2016-12-20 10:35:40",
                     id: messageID,
-                    is_note: args.kwargs.subtype === 'mail.mt_note',
-                    is_discussion: args.kwargs.subtype === 'mail.mt_comment',
+                    is_note: args.kwargs.subtype_xmlid === 'mail.mt_note',
+                    is_discussion: args.kwargs.subtype_xmlid === 'mail.mt_comment',
                     is_notification: false,
                     is_starred: false,
                     model: 'partner',
@@ -3186,14 +3188,16 @@ QUnit.test('chatter: mention prefetched partners (followers & employees)', async
                         id: 10,
                         name: 'FollowerUser1',
                         email: 'follower-user1@example.com',
-                        res_model: 'res.partner',
-                        res_id: 1,
+                        partner_id: 1,
+                        channel_id: null,
+                        is_active: true
                     }, {
                         id: 20,
                         name: 'FollowerUser2',
                         email: 'follower-user2@example.com',
-                        res_model: 'res.partner',
-                        res_id: 2,
+                        partner_id: 2,
+                        channel_id: null,
+                        is_active: true,
                     }],
                     subtypes: [],
                 });
@@ -3321,6 +3325,62 @@ QUnit.test('chatter: display suggested partners only once', async function (asse
         form,
         'div.o_composer_suggested_partners input',
         "should no longer show the suggested recipient");
+
+    form.destroy();
+});
+
+QUnit.test('chatter: suggested recipients reflect saved changes', async function (assert) {
+    assert.expect(6);
+
+    this.data.partner.records[0].foo = "Marc";
+
+    let suggestedRecipients = { 2: [[2, "Marc"]] };
+
+    const form = await createView({
+        View: FormView,
+        model: 'partner',
+        res_id: 2,
+        data: this.data,
+        services: this.services,
+        arch: `
+            <form string="Partners">
+                <sheet>
+                    <field name="foo"/>
+                </sheet>
+                <div class="oe_chatter">
+                    <field name="message_ids" widget="mail_thread"/>
+                </div>
+            </form>`,
+        viewOptions: { mode: 'edit' },
+        async mockRPC(route, args) {
+            if (args.model === 'partner' && args.method === 'write') {
+                const partnerName = args.args[1].foo;
+                suggestedRecipients = { 2: [[2, partnerName]] };
+            }
+            if (route === '/mail/get_suggested_recipients') {
+                assert.step('get_suggested_recipients');
+                return Promise.resolve(suggestedRecipients);
+            }
+            return this._super(route, args);
+        },
+    });
+
+    await testUtils.dom.click(form.$('.o_chatter_button_new_message'));
+    assert.strictEqual(
+        form.$('div.o_composer_suggested_partners label').text().replace(/\s+/g, ''),
+        "Marc",
+        "should have the correct original recipient name");
+    assert.verifySteps(['get_suggested_recipients'],
+        'get_suggested_recipients route should be called');
+
+    await testUtils.fields.editInput(form.$('.o_field_char'), 'Bob');
+    await testUtils.dom.click(form.$('.o_form_button_save'));
+    assert.verifySteps(['get_suggested_recipients'],
+        'get_suggested_recipients route should be called');
+    assert.strictEqual(
+        form.$('div.o_composer_suggested_partners label').text().replace(/\s+/g, ''),
+        "Bob",
+        "should have the correct modified recipient name");
 
     form.destroy();
 });

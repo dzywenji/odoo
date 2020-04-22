@@ -2,7 +2,7 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from odoo import fields, models
-from odoo.addons.base.models.res_partner import WARNING_MESSAGE, WARNING_HELP
+from odoo.addons.base.models.res_partner import WARNING_HELP, WARNING_MESSAGE
 
 
 class Partner(models.Model):
@@ -19,4 +19,3 @@ class Partner(models.Model):
         help="The stock location used as source when receiving goods from this contact.")
     picking_warn = fields.Selection(WARNING_MESSAGE, 'Stock Picking', help=WARNING_HELP, default='no-message')
     picking_warn_msg = fields.Text('Message for Stock Picking')
-

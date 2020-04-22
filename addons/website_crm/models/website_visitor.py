@@ -31,6 +31,7 @@ class WebsiteVisitor(models.Model):
             if not visitor.mobile:
                 visitor.mobile = next((lead.mobile or lead.phone for lead in visitor_leads if lead.mobile or lead.phone), False)
 
+<<<<<<< HEAD
     def _prepare_visitor_send_mail_values(self):
         visitor_mail_values = super(WebsiteVisitor, self)._prepare_visitor_send_mail_values()
         if self.lead_ids:
@@ -47,3 +48,29 @@ class WebsiteVisitor(models.Model):
                 'partner_ids': [partner_id],
             }
         return visitor_mail_values
+=======
+    def _check_for_message_composer(self):
+        check = super(WebsiteVisitor, self)._check_for_message_composer()
+        if not check and self.lead_ids:
+            sorted_leads = self.lead_ids._sort_by_confidence_level(reverse=True)
+            partners = sorted_leads.mapped('partner_id')
+            if not partners:
+                main_lead = self.lead_ids[0]
+                main_lead.handle_partner_assignment(create_missing=True)
+                self.partner_id = main_lead.partner_id.id
+            return True
+        return check
+
+    def _prepare_message_composer_context(self):
+        if not self.partner_id and self.lead_ids:
+            sorted_leads = self.lead_ids._sort_by_confidence_level(reverse=True)
+            lead_partners = sorted_leads.mapped('partner_id')
+            partner = lead_partners[0] if lead_partners else False
+            if partner:
+                return {
+                    'default_model': 'crm.lead',
+                    'default_res_id': sorted_leads[0].id,
+                    'default_partner_ids': partner.ids,
+                }
+        return super(WebsiteVisitor, self)._prepare_message_composer_context()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

@@ -10,14 +10,16 @@ odoo.define('web.test_utils_mock', function (require) {
  * testUtils file.
  */
 
-var basic_fields = require('web.basic_fields');
-var config = require('web.config');
-var core = require('web.core');
-var dom = require('web.dom');
-var MockServer = require('web.MockServer');
-var session = require('web.session');
+const basic_fields = require('web.basic_fields');
+const config = require('web.config');
+const core = require('web.core');
+const dom = require('web.dom');
+const makeTestEnvironment = require('web.test_env');
+const MockServer = require('web.MockServer');
+const session = require('web.session');
 
-var DebouncedField = basic_fields.DebouncedField;
+const DebouncedField = basic_fields.DebouncedField;
+
 
 //------------------------------------------------------------------------------
 // Private functions
@@ -45,7 +47,7 @@ function _observe(widget) {
  * and optionally triggers an rpc with the src url as route on a widget.
  * This method is critical and must be fastest (=> no jQuery, no underscore)
  *
- * @param {DOM Node} el
+ * @param {HTMLElement} el
  * @param {[Widget]} widget the widget on which the rpc should be performed
  */
 function removeSrcAttribute(el, widget) {
@@ -123,11 +125,11 @@ function removeSrcAttribute(el, widget) {
  * @param {boolean} [throttle=false] set to true to keep the throttling, which
  *   is completely removed by default.
  *
- * @returns {MockServer} the instance of the mock server, created by this
+ * @returns {Promise<MockServer>} the instance of the mock server, created by this
  *   function. It is necessary for createView so that method can call some
  *   other methods on it.
  */
-function addMockEnvironment(widget, params) {
+async function addMockEnvironment(widget, params) {
     var Server = MockServer;
     params.services = params.services || {};
     if (params.mockRPC) {
@@ -262,10 +264,8 @@ function addMockEnvironment(widget, params) {
 
     intercept(widget, 'load_action', function (event) {
         mockServer.performRpc('/web/action/load', {
-            kwargs: {
-                action_id: event.data.actionID,
-                additional_context: event.data.context,
-            },
+            action_id: event.data.actionID,
+            additional_context: event.data.context,
         }).then(function (action) {
             event.data.on_success(action);
         });
@@ -285,6 +285,9 @@ function addMockEnvironment(widget, params) {
             views = _.mapObject(views, function (viewParams) {
                 return fieldsViewGet(mockServer, viewParams);
             });
+            if ('search' in views && params.favoriteFilters) {
+                views.search.favoriteFilters = params.favoriteFilters;
+            }
             event.data.on_success(views);
         });
     });
@@ -327,7 +330,6 @@ function addMockEnvironment(widget, params) {
             intercept(service, "get_session", function (event) {
                 event.data.callback(session);
             });
-
             service.start();
         } else {
             var serviceNames = _.keys(servicesToDeploy);
@@ -337,6 +339,9 @@ function addMockEnvironment(widget, params) {
             done = true;
         }
     }
+
+    // Wait for asynchronous services to properly start
+    await new Promise(setTimeout);
 
     return mockServer;
 }
@@ -356,6 +361,73 @@ function fieldsViewGet(server, params) {
     fieldsView.viewFields = fieldsView.fields;
     fieldsView.fields = server.fieldsGet(params.model);
     return fieldsView;
+}
+
+/**
+ * Returns a mocked environment to be used by OWL components in tests.
+ *
+ * @param {Object} [params]
+ * @param {Object} [params.actions] the actions given to the mock server
+ * @param {Object} [params.archs] this archs given to the mock server
+ * @param {Object} [params.data] the business data given to the mock server
+ * @param {boolean} [params.debug]
+ * @param {Object} [params.env]
+ * @param {function} [params.mockRPC]
+ * @param {function} [params.server] an already instantiated server to avoid
+ *      creating another one.
+ * @returns {Object}
+ */
+function getMockedOwlEnv(params = {}) {
+    let server;
+    if (params.server) {
+        server = params.server;
+    } else {
+        let Server = MockServer;
+        if (params.mockRPC) {
+            Server = MockServer.extend({ _performRpc: params.mockRPC });
+        }
+        server = new Server(params.data, {
+            actions: params.actions,
+            archs: params.archs,
+            debug: params.debug,
+        });
+    }
+    const env = Object.assign({
+        dataManager: {
+            load_action: (actionID, context) => {
+                return server.performRpc('/web/action/load', {
+                    kwargs: {
+                        action_id: actionID,
+                        additional_context: context,
+                    },
+                });
+            },
+            load_views: (params, options) => {
+                return server.performRpc('/web/dataset/call_kw/' + params.model, {
+                    args: [],
+                    kwargs: {
+                        context: params.context,
+                        options: options,
+                        views: params.views_descr,
+                    },
+                    method: 'load_views',
+                    model: params.model,
+                }).then(function (views) {
+                    return _.mapObject(views, viewParams => {
+                        return fieldsViewGet(server, viewParams);
+                    });
+                });
+            },
+            load_filters: params => {
+                if (params.debug) {
+                    console.log('[mock] load_filters', params);
+                }
+                return Promise.resolve([]);
+            },
+        },
+        session: params.session || {},
+    }, params.env);
+    return makeTestEnvironment(env, server.performRpc.bind(server));
 }
 
 /**
@@ -403,7 +475,7 @@ function intercept(widget, eventName, fn, propagate) {
  * @param {integer} hours the digits for hours (24h)
  * @param {integer} minutes
  * @param {integer} seconds
- * @returns {function} a callback to unpatch window.Date.
+ * @returns {Function} a callback to unpatch window.Date.
  */
 function patchDate(year, month, day, hours, minutes, seconds) {
     var RealDate = window.Date;
@@ -569,10 +641,10 @@ function patchSetTimeout() {
     };
 }
 
-
 return {
     addMockEnvironment: addMockEnvironment,
     fieldsViewGet: fieldsViewGet,
+    getMockedOwlEnv: getMockedOwlEnv,
     intercept: intercept,
     patchDate: patchDate,
     patch: patch,

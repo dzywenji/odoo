@@ -8,7 +8,7 @@
             <field name="inherit_id" ref="stock.view_move_form"/>
             <field name="arch" type="xml">
                 <xpath expr="//div[@name='button_box']" position="inside" >
-                    <button name="action_get_account_moves" icon="fa-usd" class="oe_stat_button" string="Accounting Entries" type="object" groups="account.group_account_user"/>
+                    <button name="action_get_account_moves" icon="fa-usd" class="oe_stat_button" string="Accounting Entries" type="object" groups="account.group_account_readonly"/>
                 </xpath>
             </field>
         </record>
@@ -66,6 +66,7 @@
             </field>
         </record>
 
+<<<<<<< HEAD
         <record id="view_inventory_valuation_search" model="ir.ui.view">
             <field name="name">Inventory Valuation</field>
             <field name="model">stock.valuation.layer</field>
@@ -93,5 +94,7 @@
         </record>
         <menuitem id="menu_valuation" name="Inventory Valuation" parent="stock.menu_warehouse_report" sequence="110" action="action_stock_inventory_valuation"/>
 
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     </data>
 </odoo>

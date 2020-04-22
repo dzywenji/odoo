@@ -19,7 +19,7 @@ import werkzeug.utils
 
 import odoo
 from odoo import api, http, models, tools, SUPERUSER_ID
-from odoo.exceptions import AccessDenied, AccessError
+from odoo.exceptions import AccessDenied, AccessError, MissingError
 from odoo.http import request, content_disposition
 from odoo.tools import consteq, pycompat
 from odoo.tools.mimetypes import guess_mimetype
@@ -152,7 +152,7 @@ class IrHttp(models.AbstractModel):
             wdate = attach[0]['__last_update']
             datas = attach[0]['datas'] or b''
             name = attach[0]['name']
-            checksum = attach[0]['checksum'] or hashlib.sha1(datas).hexdigest()
+            checksum = attach[0]['checksum'] or hashlib.sha512(datas).hexdigest()[:64]  # sha512/256
 
             if (not datas and name != request.httprequest.path and
                     name.startswith(('http://', 'https://', '/'))):
@@ -250,9 +250,11 @@ class IrHttp(models.AbstractModel):
 
     @classmethod
     def routing_map(cls, key=None):
+
         if not hasattr(cls, '_routing_map'):
             cls._routing_map = {}
             cls._rewrite_len = {}
+
         if key not in cls._routing_map:
             _logger.info("Generating routing map for key %s" % str(key))
             installed = request.registry._init_modules | set(odoo.conf.server_wide_modules)
@@ -294,9 +296,10 @@ class IrHttp(models.AbstractModel):
             record = self.env[model].browse(int(id))
 
         # obj exists
-        if not record or not record.exists() or field not in record:
+        if not record or field not in record:
             return None, 404
 
+<<<<<<< HEAD
         if model == 'ir.attachment':
             record_sudo = record.sudo()
             if access_token and not consteq(record_sudo.access_token or '', access_token):
@@ -320,8 +323,37 @@ class IrHttp(models.AbstractModel):
             record['__last_update']
         except AccessError:
             return None, 403
+=======
+        try:
+            if model == 'ir.attachment':
+                record_sudo = record.sudo()
+                if access_token and not consteq(record_sudo.access_token or '', access_token):
+                    return None, 403
+                elif (access_token and consteq(record_sudo.access_token or '', access_token)):
+                    record = record_sudo
+                elif record_sudo.public:
+                    record = record_sudo
+                elif self.env.user.has_group('base.group_portal'):
+                    # Check the read access on the record linked to the attachment
+                    # eg: Allow to download an attachment on a task from /my/task/task_id
+                    record.check('read')
+                    record = record_sudo
 
-        return record, 200
+            # check read access
+            try:
+                # We have prefetched some fields of record, among which the field
+                # 'write_date' used by '__last_update' below. In order to check
+                # access on record, we have to invalidate its cache first.
+                if not record.env.su:
+                    record._cache.clear()
+                record['__last_update']
+            except AccessError:
+                return None, 403
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
+
+            return record, 200
+        except MissingError:
+            return None, 404
 
     @classmethod
     def _binary_ir_attachment_redirect_content(cls, record, default_mimetype='application/octet-stream'):
@@ -364,11 +396,16 @@ class IrHttp(models.AbstractModel):
 
         field_def = record._fields[field]
         if field_def.type == 'binary' and field_def.attachment:
-            field_attachment = self.env['ir.attachment'].sudo().search_read(domain=[('res_model', '=', model), ('res_id', '=', record.id), ('res_field', '=', field)], fields=['datas', 'mimetype', 'checksum'], limit=1)
-            if field_attachment:
-                mimetype = field_attachment[0]['mimetype']
-                content = field_attachment[0]['datas']
-                filehash = field_attachment[0]['checksum']
+            if model != 'ir.attachment':
+                field_attachment = self.env['ir.attachment'].sudo().search_read(domain=[('res_model', '=', model), ('res_id', '=', record.id), ('res_field', '=', field)], fields=['datas', 'mimetype', 'checksum'], limit=1)
+                if field_attachment:
+                    mimetype = field_attachment[0]['mimetype']
+                    content = field_attachment[0]['datas']
+                    filehash = field_attachment[0]['checksum']
+            else:
+                mimetype = record['mimetype']
+                content = record['datas']
+                filehash = record['checksum']
 
         if not content:
             content = record[field] or ''

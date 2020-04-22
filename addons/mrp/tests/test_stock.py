@@ -2,7 +2,7 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from . import common
-from odoo.exceptions import except_orm
+from odoo.exceptions import UserError
 from odoo.tests import Form
 
 
@@ -10,6 +10,7 @@ class TestWarehouse(common.TestMrpCommon):
     def setUp(self):
         super(TestWarehouse, self).setUp()
 
+        unit = self.env.ref("uom.product_uom_unit")
         self.stock_location = self.env.ref('stock.stock_location_stock')
         self.depot_location = self.env['stock.location'].create({
             'name': 'Depot',
@@ -21,18 +22,35 @@ class TestWarehouse(common.TestMrpCommon):
             "location_out_id": self.depot_location.id,
             'category_id': self.env.ref('product.product_category_all').id,
         })
-
-        self.laptop = self.env.ref("product.product_product_25")
-        graphics_card = self.env.ref("product.product_product_24")
-        unit = self.env.ref("uom.product_uom_unit")
-        mrp_routing = self.env.ref("mrp.mrp_routing_0")
+        mrp_workcenter = self.env['mrp.workcenter'].create({
+            'name': 'Assembly Line 1',
+            'resource_calendar_id': self.env.ref('resource.resource_calendar_std').id,
+        })
+        mrp_routing = self.env['mrp.routing'].create({
+            'name': 'Primary Assembly',
+            'operation_ids': [(0, 0, {
+                'workcenter_id': mrp_workcenter.id,
+                'name': 'Manual Assembly',
+            })]
+        })
+        inventory = self.env['stock.inventory'].create({
+            'name': 'Initial inventory',
+            'line_ids': [(0, 0, {
+                'product_id': self.graphics_card.id,
+                'product_uom_id': self.graphics_card.uom_id.id,
+                'product_qty': 16.0,
+                'location_id': self.stock_location_14.id,
+            })]
+        })
+        inventory.action_start()
+        inventory.action_validate()
 
         self.bom_laptop = self.env['mrp.bom'].create({
             'product_tmpl_id': self.laptop.product_tmpl_id.id,
             'product_qty': 1,
             'product_uom_id': unit.id,
             'bom_line_ids': [(0, 0, {
-                'product_id': graphics_card.id,
+                'product_id': self.graphics_card.id,
                 'product_qty': 1,
                 'product_uom_id': unit.id
             })],
@@ -102,14 +120,14 @@ class TestWarehouse(common.TestMrpCommon):
             'name': 'Stock Inventory for Stick',
             'product_ids': [(4, self.product_4.id)],
             'line_ids': [
-                (0, 0, {'product_id': self.product_4.id, 'product_uom_id': self.product_4.uom_id.id, 'product_qty': 8, 'prod_lot_id': lot_product_4.id, 'location_id': self.ref('stock.stock_location_14')}),
+                (0, 0, {'product_id': self.product_4.id, 'product_uom_id': self.product_4.uom_id.id, 'product_qty': 8, 'prod_lot_id': lot_product_4.id, 'location_id': self.stock_location_14.id}),
             ]})
 
         stock_inv_product_2 = self.env['stock.inventory'].create({
             'name': 'Stock Inventory for Stone Tools',
             'product_ids': [(4, self.product_2.id)],
             'line_ids': [
-                (0, 0, {'product_id': self.product_2.id, 'product_uom_id': self.product_2.uom_id.id, 'product_qty': 12, 'prod_lot_id': lot_product_2.id, 'location_id': self.ref('stock.stock_location_14')})
+                (0, 0, {'product_id': self.product_2.id, 'product_uom_id': self.product_2.uom_id.id, 'product_qty': 12, 'prod_lot_id': lot_product_2.id, 'location_id': self.stock_location_14.id})
             ]})
         (stock_inv_product_4 | stock_inv_product_2)._action_start()
         stock_inv_product_2.action_validate()
@@ -132,7 +150,7 @@ class TestWarehouse(common.TestMrpCommon):
 
         # Scrap Product Wood without lot to check assert raise ?.
         scrap_id = self.env['stock.scrap'].with_context(active_model='mrp.production', active_id=production_3.id).create({'product_id': self.product_2.id, 'scrap_qty': 1.0, 'product_uom_id': self.product_2.uom_id.id, 'location_id': location_id, 'production_id': production_3.id})
-        with self.assertRaises(except_orm):
+        with self.assertRaises(UserError):
             scrap_id.do_scrap()
 
         # Scrap Product Wood with lot.
@@ -348,9 +366,9 @@ class TestKitPicking(common.TestMrpCommon):
         picking.button_validate()
 
         # We check that the picking has the correct quantities after its move were splitted.
-        self.assertEquals(len(picking.move_lines), 7)
+        self.assertEqual(len(picking.move_lines), 7)
         for move_line in picking.move_lines:
-            self.assertEquals(move_line.quantity_done, self.expected_quantities[move_line.product_id])
+            self.assertEqual(move_line.quantity_done, self.expected_quantities[move_line.product_id])
 
     def test_kit_planned_transfer(self):
         """ Make sure a kit is split in the corrects product_qty by components in case of a
@@ -376,6 +394,6 @@ class TestKitPicking(common.TestMrpCommon):
         picking.action_confirm()
 
         # We check that the picking has the correct quantities after its move were splitted.
-        self.assertEquals(len(picking.move_lines), 7)
+        self.assertEqual(len(picking.move_lines), 7)
         for move_line in picking.move_lines:
-            self.assertEquals(move_line.product_qty, self.expected_quantities[move_line.product_id])
+            self.assertEqual(move_line.product_qty, self.expected_quantities[move_line.product_id])

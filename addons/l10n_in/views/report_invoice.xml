@@ -26,12 +26,21 @@
 
         <xpath expr="//h2" position="replace">
             <h2>
+<<<<<<< HEAD
                 <span t-if="o.type == 'out_invoice' and o.state == 'open'" t-field="o.journal_id.name"/>
                 <span t-if="o.type == 'out_invoice' and o.state == 'draft'">Draft <span t-field="o.journal_id.name"/></span>
                 <span t-if="o.type == 'out_invoice' and o.state == 'cancel'">Cancelled <span t-field="o.journal_id.name"/></span>
                 <span t-if="o.type == 'out_refund'">Credit Note</span>
                 <span t-if="o.type == 'in_refund'">Vendor Credit Note</span>
                 <span t-if="o.type == 'in_invoice'">Vendor Bill</span>
+=======
+                <span t-if="o.move_type == 'out_invoice' and o.state == 'open'" t-field="o.journal_id.name"/>
+                <span t-if="o.move_type == 'out_invoice' and o.state == 'draft'">Draft <span t-field="o.journal_id.name"/></span>
+                <span t-if="o.move_type == 'out_invoice' and o.state == 'cancel'">Cancelled <span t-field="o.journal_id.name"/></span>
+                <span t-if="o.move_type == 'out_refund'">Credit Note</span>
+                <span t-if="o.move_type == 'in_refund'">Vendor Credit Note</span>
+                <span t-if="o.move_type == 'in_invoice'">Vendor Bill</span>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 <span t-field="o.name"/>
             </h2>
         </xpath>

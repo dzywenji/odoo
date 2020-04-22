@@ -6,6 +6,7 @@ import pkgutil
 import re
 
 from odoo import fields
+from odoo.addons.base.tests.common import SavepointCaseWithUserDemo
 from odoo.tests import common
 from odoo.tools.misc import mute_logger
 
@@ -72,7 +73,7 @@ class ImporterCase(common.TransactionCase):
         return '__test__.' + name
 
     def add_translations(self, name, type, code, *tnx):
-        self.env['res.lang'].load_lang(code)
+        self.env['res.lang']._activate_lang(code)
         Translations = self.env['ir.translation']
         for source, value in tnx:
             Translations.create({
@@ -886,6 +887,14 @@ class test_o2m(ImporterCase):
             values(b.value.sorted(), 'str'),
             'this is the rhythm'.split())
 
+    def test_subfields_fail_by_implicit_id(self):
+        result = self.import_(['value/parent_id'], [['noxidforthat']])
+        self.assertEqual(result['messages'], [message(
+            u"No matching record found for name 'noxidforthat' in field 'Value/Parent'",
+            moreinfo=moreaction(res_model='export.one2many')
+            )])
+        self.assertIs(result['ids'], False)
+
     def test_link_inline(self):
         """ m2m-style specification for o2ms
         """
@@ -939,6 +948,35 @@ class test_o2m(ImporterCase):
         self.assertEqual(set(values(b.value)), set([1, 2]))
         self.assertEqual(values(b.value, field='parent_id'), [b, b])
 
+    def test_o2m_repeated_with_xids(self):
+        # concern: formerly this would link existing records, and fault if
+        # the records did not exist. This is more in line with other XID uses,
+        # however it does make thing work where they'd previously fail for
+        # well-defined reasons.
+        result = self.import_(['id', 'const', 'value/id', 'value/value'], [
+            ['a', '5', 'aa', '11'],
+            ['', '', 'ab', '12'],
+            ['', '', 'ac', '13'],
+            ['', '', 'ad', '14'],
+            ['b', '10', 'ba', '15'],
+            ['', '', 'bb', '16'],
+        ])
+        self.assertFalse(result['messages'])
+        result = self.import_(['id', 'const', 'value/id', 'value/value'], [
+            ['a', '5', 'aa', '11'],
+            ['', '', 'ab', '12'],
+            ['', '', 'ac', '13'],
+            ['', '', 'ad', '14'],
+            ['b', '8', 'ba', '25'],
+            ['', '', 'bb', '16'],
+        ])
+        self.assertFalse(result['messages'])
+
+        [a, b] = self.browse().sorted(lambda r: r.const)
+        self.assertEqual(len(a.value), 4)
+        self.assertEqual(len(b.value), 2)
+        self.assertEqual(b.const, 8)
+        self.assertEqual(b.value.mapped('value'), [25, 16])
 
 class test_o2m_multiple(ImporterCase):
     model_name = 'export.one2many.multiple'
@@ -992,7 +1030,13 @@ class test_o2m_multiple(ImporterCase):
         self.assertEqual(set(values(b.child2)), set([21, 22, 23]))
 
 
-class test_realworld(common.TransactionCase):
+class test_realworld(SavepointCaseWithUserDemo):
+
+    @classmethod
+    def setUpClass(cls):
+        super(test_realworld, cls).setUpClass()
+        cls._load_partners_set()
+
     def test_bigfile(self):
         data = json.loads(pkgutil.get_data(self.__module__, 'contacts_big.json').decode('utf-8'))
         result = self.env['res.partner'].load(['name', 'mobile', 'email', 'image_1920'], data)
@@ -1036,6 +1080,18 @@ class test_realworld(common.TransactionCase):
         self.assertFalse(len(b[1].child.sorted()[1].child1))
         self.assertEqual([child.value for child in b[1].child.sorted()[1].child2],
                          [12])
+
+    def test_o2m_subfields_fail_by_implicit_id(self):
+        self.env['ir.model.data'].clear_caches()
+        Model = self.env['export.one2many.recursive']
+        result = Model.load(
+            ['child/child1/parent_id'],
+            [['5'],],
+        )
+        self.assertEqual(result['messages'], [message(
+            u"No matching record found for name '5' in field 'Child/Child1/Parent'", field='child',
+            moreinfo=moreaction(res_model='export.one2many.multiple'))])
+        self.assertIs(result['ids'], False)
 
 
 class test_date(ImporterCase):

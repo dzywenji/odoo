@@ -1,11 +1,11 @@
 from unittest.mock import patch
 
-from odoo.addons.account.tests.account_test_users import AccountTestUsers
+from odoo.addons.account.tests.common import AccountTestUsersCommon
 from odoo.tests import tagged
 
 
 @tagged('post_install', '-at_install')
-class TestAccountJournalDashboard(AccountTestUsers):
+class TestAccountJournalDashboard(AccountTestUsersCommon):
     def test_customer_invoice_dashboard(self):
         def patched_today(*args, **kwargs):
             return '2019-01-22'
@@ -18,14 +18,25 @@ class TestAccountJournalDashboard(AccountTestUsers):
             'type': 'sale',
         })
 
+        res_partner_3 = self.env['res.partner'].create({
+            'name': 'Gemini Furniture',
+        })
+
+        product_product_1 = self.env['product.product'].create({
+            'name': 'Virtual Interior Design',
+            'standard_price': 20.5,
+            'list_price': 30.75,
+            'type': 'service',
+        })
+
         invoice = self.env['account.move'].create({
-            'type': 'out_invoice',
+            'move_type': 'out_invoice',
             'journal_id': journal.id,
-            'partner_id': self.env.ref('base.res_partner_3').id,
+            'partner_id': res_partner_3.id,
             'invoice_date': date_invoice,
             'date': date_invoice,
             'invoice_line_ids': [(0, 0, {
-                'product_id': self.env.ref('product.product_product_1').id,
+                'product_id': product_product_1.id,
                 'quantity': 40.0,
                 'name': 'product test 1',
                 'discount': 10.00,
@@ -33,13 +44,13 @@ class TestAccountJournalDashboard(AccountTestUsers):
             })]
         })
         refund = self.env['account.move'].create({
-            'type': 'out_refund',
+            'move_type': 'out_refund',
             'journal_id': journal.id,
-            'partner_id': self.env.ref('base.res_partner_3').id,
+            'partner_id': res_partner_3.id,
             'invoice_date': '2019-01-21',
             'date': date_invoice,
             'invoice_line_ids': [(0, 0, {
-                'product_id': self.env.ref('product.product_product_1').id,
+                'product_id': product_product_1.id,
                 'quantity': 1.0,
                 'name': 'product test 1',
                 'price_unit': 13.3,
@@ -49,30 +60,30 @@ class TestAccountJournalDashboard(AccountTestUsers):
         # Check Draft
         dashboard_data = journal.get_journal_dashboard_datas()
 
-        self.assertEquals(dashboard_data['number_draft'], 2)
+        self.assertEqual(dashboard_data['number_draft'], 2)
         self.assertIn('68.42', dashboard_data['sum_draft'])
 
-        self.assertEquals(dashboard_data['number_waiting'], 0)
+        self.assertEqual(dashboard_data['number_waiting'], 0)
         self.assertIn('0.00', dashboard_data['sum_waiting'])
 
         # Check Both
         invoice.post()
 
         dashboard_data = journal.get_journal_dashboard_datas()
-        self.assertEquals(dashboard_data['number_draft'], 1)
+        self.assertEqual(dashboard_data['number_draft'], 1)
         self.assertIn('-13.30', dashboard_data['sum_draft'])
 
-        self.assertEquals(dashboard_data['number_waiting'], 1)
+        self.assertEqual(dashboard_data['number_waiting'], 1)
         self.assertIn('81.72', dashboard_data['sum_waiting'])
 
         # Check waiting payment
         refund.post()
 
         dashboard_data = journal.get_journal_dashboard_datas()
-        self.assertEquals(dashboard_data['number_draft'], 0)
+        self.assertEqual(dashboard_data['number_draft'], 0)
         self.assertIn('0.00', dashboard_data['sum_draft'])
 
-        self.assertEquals(dashboard_data['number_waiting'], 2)
+        self.assertEqual(dashboard_data['number_waiting'], 2)
         self.assertIn('68.42', dashboard_data['sum_waiting'])
 
         # Check partial
@@ -96,13 +107,13 @@ class TestAccountJournalDashboard(AccountTestUsers):
         refund.js_assign_outstanding_line(payment_move_line.id)
 
         dashboard_data = journal.get_journal_dashboard_datas()
-        self.assertEquals(dashboard_data['number_draft'], 0)
+        self.assertEqual(dashboard_data['number_draft'], 0)
         self.assertIn('0.00', dashboard_data['sum_draft'])
 
-        self.assertEquals(dashboard_data['number_waiting'], 2)
+        self.assertEqual(dashboard_data['number_waiting'], 2)
         self.assertIn('78.42', dashboard_data['sum_waiting'])
 
         with patch('odoo.fields.Date.today', patched_today):
             dashboard_data = journal.get_journal_dashboard_datas()
-            self.assertEquals(dashboard_data['number_late'], 2)
+            self.assertEqual(dashboard_data['number_late'], 2)
             self.assertIn('78.42', dashboard_data['sum_late'])

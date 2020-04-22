@@ -39,7 +39,7 @@ class WebsiteForum(WebsiteProfile):
     # Forum
     # --------------------------------------------------
 
-    @http.route(['/forum'], type='http', auth="public", website=True)
+    @http.route(['/forum'], type='http', auth="public", website=True, sitemap=True)
     def forum(self, **kwargs):
         domain = request.website.website_domain()
         forums = request.env['forum.forum'].search(domain)
@@ -48,19 +48,35 @@ class WebsiteForum(WebsiteProfile):
         return request.render("website_forum.forum_all", {'forums': forums})
 
     @http.route('/forum/new', type='json', auth="user", methods=['POST'], website=True)
+<<<<<<< HEAD
     def forum_create(self, forum_name="New Forum", forum_mode="questions", add_menu=False):
         forum_id = request.env['forum.forum'].create({
             'name': forum_name,
             'mode': forum_mode,
             'website_id': request.website.id,
         })
+=======
+    def forum_create(self, forum_name="New Forum", forum_mode="questions", forum_privacy="public", forum_privacy_group=False, add_menu=False):
+        forum = {
+            'name': forum_name,
+            'mode': forum_mode,
+            'privacy': forum_privacy,
+            'website_id': request.website.id,
+        }
+        if forum_privacy == 'private' and forum_privacy_group:
+            forum['authorized_group_id'] = forum_privacy_group
+        forum_id = request.env['forum.forum'].create(forum)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         if add_menu:
-            request.env['website.menu'].create({
+            group = [int(forum_privacy_group)] if forum_privacy == 'private' else [request.env.ref('base.group_portal').id, request.env.ref('base.group_user').id]
+            menu_id = request.env['website.menu'].create({
                 'name': forum_name,
                 'url': "/forum/%s" % slug(forum_id),
                 'parent_id': request.website.menu_id.id,
                 'website_id': request.website.id,
+                'group_ids': [(6, 0, group)]
             })
+            forum_id.menu_id = menu_id
         return "/forum/%s" % slug(forum_id)
 
     def sitemap_forum(env, rule, qs):
@@ -152,7 +168,7 @@ class WebsiteForum(WebsiteProfile):
         })
         return request.render("website_forum.forum_index", values)
 
-    @http.route(['''/forum/<model("forum.forum", "[('website_id', 'in', (False, current_website_id))]"):forum>/faq'''], type='http', auth="public", website=True)
+    @http.route(['''/forum/<model("forum.forum"):forum>/faq'''], type='http', auth="public", website=True, sitemap=True)
     def forum_faq(self, forum, **post):
         values = self._prepare_user_values(forum=forum, searches=dict(), header={'is_guidelines': True}, **post)
         return request.render("website_forum.faq", values)
@@ -205,7 +221,8 @@ class WebsiteForum(WebsiteProfile):
         except IOError:
             return False
 
-    @http.route(['''/forum/<model("forum.forum", "[('website_id', 'in', (False, current_website_id))]"):forum>/question/<model("forum.post", "[('forum_id','=',forum[0]),('parent_id','=',False),('can_view', '=', True)]"):question>'''], type='http', auth="public", website=True)
+    @http.route(['''/forum/<model("forum.forum"):forum>/question/<model("forum.post", "[('forum_id','=',forum.id),('parent_id','=',False),('can_view', '=', True)]"):question>'''],
+                type='http', auth="public", website=True, sitemap=True)
     def question(self, forum, question, **post):
         if not forum.active:
             return request.render("website_forum.header", {'forum': forum})
@@ -334,7 +351,7 @@ class WebsiteForum(WebsiteProfile):
             post.with_context(mail_create_nosubscribe=True).message_post(
                 body=body,
                 message_type='comment',
-                subtype='mt_comment')
+                subtype_xmlid='mail.mt_comment')
         return werkzeug.utils.redirect("/forum/%s/question/%s" % (slug(forum), slug(question)))
 
     @http.route('/forum/<model("forum.forum"):forum>/post/<model("forum.post"):post>/toggle_correct', type='json', auth="public", website=True)
@@ -547,7 +564,10 @@ class WebsiteForum(WebsiteProfile):
                 forums = post['forum']
             elif post.get('forum_id'):
                 forums = request.env['forum.forum'].browse(int(post['forum_id']))
-                values.update({'edit_button_url_param': 'forum_id=' + str(post['forum_id'])})
+                values.update({
+                    'edit_button_url_param': 'forum_id=%s' %  str(post['forum_id']),
+                    'forum_filtered': forums.name,
+                })
             else:
                 forums = request.env['forum.forum'].search([])
 

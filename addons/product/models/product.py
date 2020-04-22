@@ -5,7 +5,7 @@ import logging
 import re
 
 from odoo import api, fields, models, tools, _
-from odoo.exceptions import ValidationError
+from odoo.exceptions import UserError, ValidationError
 from odoo.osv import expression
 
 
@@ -60,6 +60,11 @@ class ProductCategory(models.Model):
     @api.model
     def name_create(self, name):
         return self.create({'name': name}).name_get()[0]
+
+    def unlink(self):
+        main_category = self.env.ref('product.product_category_all')
+        if main_category in self:
+            raise UserError(_("You cannot delete this product category, it is the default generic category."))
 
 
 class ProductProduct(models.Model):
@@ -215,8 +220,7 @@ class ProductProduct(models.Model):
             product.combination_indices = product.product_template_attribute_value_ids._ids2str()
 
     def _compute_is_product_variant(self):
-        for product in self:
-            product.is_product_variant = True
+        self.is_product_variant = True
 
     @api.depends_context('pricelist', 'partner', 'quantity', 'uom', 'date', 'no_variant_attributes_price_extra')
     def _compute_product_price(self):
@@ -571,7 +575,7 @@ class ProductProduct(models.Model):
                 'res_id': self.product_tmpl_id.id,
                 'target': 'new'}
 
-    def _prepare_sellers(self, params):
+    def _prepare_sellers(self, params=False):
         return self.seller_ids.filtered(lambda s: s.name.active).sorted(lambda s: (s.sequence, -s.min_qty, s.price))
 
     def _select_seller(self, partner_id=False, quantity=0.0, date=None, uom_id=False, params=False):
@@ -582,8 +586,7 @@ class ProductProduct(models.Model):
 
         res = self.env['product.supplierinfo']
         sellers = self._prepare_sellers(params)
-        if self.env.context.get('force_company'):
-            sellers = sellers.filtered(lambda s: not s.company_id or s.company_id.id == self.env.context['force_company'])
+        sellers = sellers.filtered(lambda s: not s.company_id or s.company_id.id == self.env.company.id)
         for seller in sellers:
             # Set quantity in UoM of seller
             quantity_uom_seller = quantity
@@ -604,7 +607,7 @@ class ProductProduct(models.Model):
                 res |= seller
         return res.sorted('price')[:1]
 
-    def price_compute(self, price_type, uom=False, currency=False, company=False):
+    def price_compute(self, price_type, uom=False, currency=False, company=None):
         # TDE FIXME: delegate to template or not ? fields are reencoded here ...
         # compatibility about context keys used a bit everywhere in the code
         if not uom and self._context.get('uom'):
@@ -617,7 +620,7 @@ class ProductProduct(models.Model):
             # standard_price field can only be seen by users in base.group_user
             # Thus, in order to compute the sale price from the cost for users not in this group
             # We fetch the standard price as the superuser
-            products = self.with_context(force_company=company and company.id or self._context.get('force_company', self.env.company.id)).sudo()
+            products = self.with_company(company or self.env.company).sudo()
 
         prices = dict.fromkeys(self.ids, 0.0)
         for product in products:
@@ -680,7 +683,7 @@ class ProductProduct(models.Model):
 
     def toggle_active(self):
         """ Archiving related product.template if there is only one active product.product """
-        with_one_active = self.filtered(lambda product: len(product.product_tmpl_id.product_variant_ids) == 1)
+        with_one_active = self.filtered(lambda product: len(product.product_tmpl_id.with_context(active_test=False).product_variant_ids) == 1)
         for product in with_one_active:
             product.product_tmpl_id.toggle_active()
         return super(ProductProduct, self - with_one_active).toggle_active()
@@ -723,7 +726,7 @@ class SupplierInfo(models.Model):
         related='product_tmpl_id.uom_po_id',
         help="This comes from the product form.")
     min_qty = fields.Float(
-        'Quantity', default=0.0, required=True,
+        'Quantity', default=0.0, required=True, digits="Product Unit Of Measure",
         help="The quantity to purchase from this vendor to benefit from the price, expressed in the vendor Product Unit of Measure if not any, in the default unit of measure of the product otherwise.")
     price = fields.Float(
         'Price', default=0.0, digits='Product Price',
@@ -743,7 +746,7 @@ class SupplierInfo(models.Model):
     product_tmpl_id = fields.Many2one(
         'product.template', 'Product Template', check_company=True,
         index=True, ondelete='cascade')
-    product_variant_count = fields.Integer('Variant Count', related='product_tmpl_id.product_variant_count', readonly=False)
+    product_variant_count = fields.Integer('Variant Count', related='product_tmpl_id.product_variant_count')
     delay = fields.Integer(
         'Delivery Lead Time', default=1, required=True,
         help="Lead time in days between the confirmation of the purchase order and the receipt of the products in your warehouse. Used by the scheduler for automatic computation of the purchase order planning.")

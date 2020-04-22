@@ -18,13 +18,12 @@ class ResCompany(models.Model):
                 'name': _("Default %(currency)s pricelist") %  params,
                 'currency_id': new_company.currency_id.id,
             })
-        field = self.env['ir.model.fields']._get('res.partner', 'property_product_pricelist')
-        self.env['ir.property'].sudo().create({
-            'name': 'property_product_pricelist',
-            'value_reference': 'product.pricelist,%s' % pricelist.id,
-            'fields_id': field.id,
-            'company_id': new_company.id,
-        })
+        self.env['ir.property'].sudo().set_default(
+            'property_product_pricelist',
+            'res.partner',
+            pricelist,
+            new_company,
+        )
         return new_company
 
     def write(self, values):
@@ -39,7 +38,11 @@ class ResCompany(models.Model):
             for company in self:
                 existing_pricelist = ProductPricelist.search(
                     [('company_id', 'in', (False, company.id)),
+<<<<<<< HEAD
                      ('currency_id', 'in', (currency_id, company.currency_id.id))])
+=======
+                     ('currency_id', '=', currency_id)])
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 if existing_pricelist:
                     continue
                 if currency_id == company.currency_id.id:
@@ -55,11 +58,10 @@ class ResCompany(models.Model):
                         'name': _("Default %(currency)s pricelist") %  params,
                         'currency_id': currency_id,
                     })
-                    field = self.env['ir.model.fields'].search([('model', '=', 'res.partner'), ('name', '=', 'property_product_pricelist')])
-                    self.env['ir.property'].sudo().create({
-                        'name': 'property_product_pricelist',
-                        'company_id': company.id,
-                        'value_reference': 'product.pricelist,%s' % pricelist.id,
-                        'fields_id': field.id
-                    })
+                    self.env['ir.property'].sudo().set_default(
+                        'property_product_pricelist',
+                        'res.partner',
+                        pricelist,
+                        company,
+                    )
         return super(ResCompany, self).write(values)

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo.addons.account.tests.invoice_test_common import InvoiceTestCommon
+from odoo.addons.account.tests.common import AccountTestInvoicingCommon
 from odoo.tests.common import Form
 from odoo.tests import tagged
 from odoo import fields
@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 
 @tagged('post_install', '-at_install')
-class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
+class TestAccountMoveOutInvoiceOnchanges(AccountTestInvoicingCommon):
 
     @classmethod
     def setUpClass(cls):
@@ -123,7 +123,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
             'journal_id': cls.company_data['default_journal_sale'].id,
             'date': fields.Date.from_string('2019-01-01'),
             'fiscal_position_id': False,
-            'invoice_payment_ref': '',
+            'payment_reference': '',
             'invoice_payment_term_id': cls.pay_terms_a.id,
             'amount_untaxed': 1200.0,
             'amount_tax': 210.0,
@@ -224,7 +224,11 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
             'taxes_id': [(6, 0, tax_price_include.ids)],
         })
 
+<<<<<<< HEAD
         move_form = Form(self.env['account.move'].with_context(default_type='out_invoice'))
+=======
+        move_form = Form(self.env['account.move'].with_context(default_move_type='out_invoice'))
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         move_form.partner_id = self.partner_a
         move_form.invoice_date = fields.Date.from_string('2019-01-01')
         move_form.currency_id = self.currency_data['currency']
@@ -369,7 +373,11 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
             'taxes_id': [(6, 0, tax_price_include_1.ids)],
         })
 
+<<<<<<< HEAD
         move_form = Form(self.env['account.move'].with_context(default_type='out_invoice'))
+=======
+        move_form = Form(self.env['account.move'].with_context(default_move_type='out_invoice'))
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         move_form.partner_id = self.partner_a
         move_form.invoice_date = fields.Date.from_string('2019-01-01')
         move_form.currency_id = self.currency_data['currency']
@@ -603,7 +611,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
     def test_out_invoice_line_onchange_partner_1(self):
         move_form = Form(self.invoice)
         move_form.partner_id = self.partner_b
-        move_form.invoice_payment_ref = 'turlututu'
+        move_form.payment_reference = 'turlututu'
         move_form.save()
 
         self.assertInvoiceValues(self.invoice, [
@@ -647,7 +655,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         ], {
             **self.move_vals,
             'partner_id': self.partner_b.id,
-            'invoice_payment_ref': 'turlututu',
+            'payment_reference': 'turlututu',
             'fiscal_position_id': self.fiscal_pos_a.id,
             'invoice_payment_term_id': self.pay_terms_b.id,
             'amount_untaxed': 1200.0,
@@ -708,7 +716,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         ], {
             **self.move_vals,
             'partner_id': self.partner_b.id,
-            'invoice_payment_ref': 'turlututu',
+            'payment_reference': 'turlututu',
             'fiscal_position_id': self.fiscal_pos_a.id,
             'invoice_payment_term_id': self.pay_terms_b.id,
             'amount_untaxed': 1200.0,
@@ -851,7 +859,11 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         # == Test at the creation of the invoice ==
 
         invoice_1 = self.env['account.move'].create({
+<<<<<<< HEAD
             'type': 'out_invoice',
+=======
+            'move_type': 'out_invoice',
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'invoice_date': '2017-01-01',
             'date': '2017-01-01',
             'partner_id': self.partner_a.id,
@@ -869,7 +881,11 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         # == Test when writing on the invoice ==
 
         invoice_2 = self.env['account.move'].create({
+<<<<<<< HEAD
             'type': 'out_invoice',
+=======
+            'move_type': 'out_invoice',
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'invoice_date': '2017-01-01',
             'date': '2017-01-01',
             'partner_id': self.partner_a.id,
@@ -1317,7 +1333,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
             {
                 'name': 'add_invoice_line',
                 'product_id': False,
-                'account_id': self.cash_rounding_a.account_id.id,
+                'account_id': self.cash_rounding_a.profit_account_id.id,
                 'partner_id': self.partner_a.id,
                 'product_uom_id': False,
                 'quantity': 1.0,
@@ -1398,49 +1414,44 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         })
 
     def test_out_invoice_line_onchange_currency_1(self):
-        # New journal having a foreign currency set.
-        journal = self.company_data['default_journal_sale'].copy()
-        journal.currency_id = self.currency_data['currency']
-
-        move_form = Form(self.invoice)
-        move_form.journal_id = journal
+        move_form = Form(self.invoice.with_context(dudu=True))
+        move_form.currency_id = self.currency_data['currency']
         move_form.save()
 
         self.assertInvoiceValues(self.invoice, [
             {
                 **self.product_line_vals_1,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'amount_currency': -1000.0,
                 'credit': 500.0,
             },
             {
                 **self.product_line_vals_2,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'amount_currency': -200.0,
                 'credit': 100.0,
             },
             {
                 **self.tax_line_vals_1,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'amount_currency': -180.0,
                 'credit': 90.0,
             },
             {
                 **self.tax_line_vals_2,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'amount_currency': -30.0,
                 'credit': 15.0,
             },
             {
                 **self.term_line_vals_1,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'amount_currency': 1410.0,
                 'debit': 705.0,
             },
         ], {
             **self.move_vals,
-            'currency_id': journal.currency_id.id,
-            'journal_id': journal.id,
+            'currency_id': self.currency_data['currency'].id,
         })
 
         move_form = Form(self.invoice)
@@ -1451,38 +1462,37 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         self.assertInvoiceValues(self.invoice, [
             {
                 **self.product_line_vals_1,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'amount_currency': -1000.0,
                 'credit': 333.33,
             },
             {
                 **self.product_line_vals_2,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'amount_currency': -200.0,
                 'credit': 66.67,
             },
             {
                 **self.tax_line_vals_1,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'amount_currency': -180.0,
                 'credit': 60.0,
             },
             {
                 **self.tax_line_vals_2,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'amount_currency': -30.0,
                 'credit': 10.0,
             },
             {
                 **self.term_line_vals_1,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'amount_currency': 1410.0,
                 'debit': 470.0,
             },
         ], {
             **self.move_vals,
-            'currency_id': journal.currency_id.id,
-            'journal_id': journal.id,
+            'currency_id': self.currency_data['currency'].id,
             'date': fields.Date.from_string('2016-01-01'),
         })
 
@@ -1501,13 +1511,13 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
                 'price_unit': 0.05,
                 'price_subtotal': 0.005,
                 'price_total': 0.006,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'amount_currency': -0.005,
                 'credit': 0.0,
             },
             {
                 **self.product_line_vals_2,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'amount_currency': -200.0,
                 'credit': 66.67,
             },
@@ -1516,19 +1526,19 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
                 'price_unit': 30.0,
                 'price_subtotal': 30.001,
                 'price_total': 30.001,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'amount_currency': -30.001,
                 'credit': 10.0,
             },
             {
                 **self.tax_line_vals_2,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'amount_currency': -30.0,
                 'credit': 10.0,
             },
             {
                 **self.term_line_vals_1,
-                'currency_id': journal.currency_id.id,
+                'currency_id': self.currency_data['currency'].id,
                 'price_unit': -260.01,
                 'price_subtotal': -260.006,
                 'price_total': -260.006,
@@ -1537,14 +1547,14 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
             },
         ], {
             **self.move_vals,
-            'currency_id': journal.currency_id.id,
-            'journal_id': journal.id,
+            'currency_id': self.currency_data['currency'].id,
             'date': fields.Date.from_string('2016-01-01'),
             'amount_untaxed': 200.005,
             'amount_tax': 60.001,
             'amount_total': 260.006,
         })
 
+<<<<<<< HEAD
         # The journal forces you to provide a secondary currency.
         with self.assertRaises(UserError), self.cr.savepoint():
             move_form = Form(self.invoice)
@@ -1553,6 +1563,9 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
 
         # Exit the multi-currencies.
         journal.currency_id = False
+=======
+        # Exit the multi-currencies.
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         move_form = Form(self.invoice)
         move_form.currency_id = self.company_data['currency']
         move_form.save()
@@ -1585,13 +1598,13 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         ], {
             **self.move_vals,
             'currency_id': self.company_data['currency'].id,
-            'journal_id': journal.id,
             'date': fields.Date.from_string('2016-01-01'),
             'amount_untaxed': 200.01,
             'amount_tax': 60.0,
             'amount_total': 260.01,
         })
 
+<<<<<<< HEAD
     def test_out_invoice_onchange_sequence_number_1(self):
         self.assertRecordValues(self.invoice, [{
             'invoice_sequence_number_next': '0001',
@@ -1619,6 +1632,8 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
 
         self.assertRecordValues(invoice_copy, [{'name': 'INV/2019/0043'}])
 
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     def test_out_invoice_create_refund(self):
         self.invoice.post()
 
@@ -1630,6 +1645,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         reversal = move_reversal.reverse_moves()
         reverse_move = self.env['account.move'].browse(reversal['res_id'])
 
+        self.assertEqual(self.invoice.payment_state, 'not_paid', "Refunding with a draft credit note should keep the invoice 'not_paid'.")
         self.assertInvoiceValues(reverse_move, [
             {
                 **self.product_line_vals_1,
@@ -1661,11 +1677,11 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         ], {
             **self.move_vals,
             'invoice_payment_term_id': None,
-            'name': '/',
+            'name': 'RINV/2019/02/0001',
             'date': move_reversal.date,
             'state': 'draft',
             'ref': 'Reversal of: %s, %s' % (self.invoice.name, move_reversal.reason),
-            'invoice_payment_state': 'not_paid',
+            'payment_state': 'not_paid',
         })
 
         move_reversal = self.env['account.move.reversal'].with_context(active_model="account.move", active_ids=self.invoice.ids).create({
@@ -1676,6 +1692,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         reversal = move_reversal.reverse_moves()
         reverse_move = self.env['account.move'].browse(reversal['res_id'])
 
+        self.assertEqual(self.invoice.payment_state, 'reversed', "After cancelling it with a reverse invoice, an invoice should be in 'reversed' state.")
         self.assertInvoiceValues(reverse_move, [
             {
                 **self.product_line_vals_1,
@@ -1710,7 +1727,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
             'date': move_reversal.date,
             'state': 'posted',
             'ref': 'Reversal of: %s, %s' % (self.invoice.name, move_reversal.reason),
-            'invoice_payment_state': 'paid',
+            'payment_state': 'paid',
         })
 
     def test_out_invoice_create_refund_multi_currency(self):
@@ -1733,6 +1750,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         reversal = move_reversal.reverse_moves()
         reverse_move = self.env['account.move'].browse(reversal['res_id'])
 
+        self.assertEqual(self.invoice.payment_state, 'not_paid', "Refunding with a draft credit note should keep the invoice 'not_paid'.")
         self.assertInvoiceValues(reverse_move, [
             {
                 **self.product_line_vals_1,
@@ -1778,7 +1796,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
             'date': move_reversal.date,
             'state': 'draft',
             'ref': 'Reversal of: %s, %s' % (self.invoice.name, move_reversal.reason),
-            'invoice_payment_state': 'not_paid',
+            'payment_state': 'not_paid',
         })
 
         move_reversal = self.env['account.move.reversal'].with_context(active_model="account.move", active_ids=self.invoice.ids).create({
@@ -1789,6 +1807,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         reversal = move_reversal.reverse_moves()
         reverse_move = self.env['account.move'].browse(reversal['res_id'])
 
+        self.assertEqual(self.invoice.payment_state, 'reversed', "After cancelling it with a reverse invoice, an invoice should be in 'reversed' state.")
         self.assertInvoiceValues(reverse_move, [
             {
                 **self.product_line_vals_1,
@@ -1834,13 +1853,13 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
             'date': move_reversal.date,
             'state': 'posted',
             'ref': 'Reversal of: %s, %s' % (self.invoice.name, move_reversal.reason),
-            'invoice_payment_state': 'paid',
+            'payment_state': 'paid',
         })
 
     def test_out_invoice_create_1(self):
         # Test creating an account_move with the least information.
         move = self.env['account.move'].create({
-            'type': 'out_invoice',
+            'move_type': 'out_invoice',
             'partner_id': self.partner_a.id,
             'invoice_date': fields.Date.from_string('2019-01-01'),
             'currency_id': self.currency_data['currency'].id,
@@ -1890,7 +1909,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
     def test_out_invoice_write_1(self):
         # Test creating an account_move with the least information.
         move = self.env['account.move'].create({
-            'type': 'out_invoice',
+            'move_type': 'out_invoice',
             'partner_id': self.partner_a.id,
             'invoice_date': fields.Date.from_string('2019-01-01'),
             'currency_id': self.currency_data['currency'].id,
@@ -1944,7 +1963,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
     def test_out_invoice_write_2(self):
         ''' Ensure to not messing the invoice when writing a bad account type. '''
         move = self.env['account.move'].create({
-            'type': 'out_invoice',
+            'move_type': 'out_invoice',
             'partner_id': self.partner_a.id,
             'invoice_line_ids': [
                 (0, None, self.product_line_vals_1),
@@ -1971,7 +1990,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         with patch.object(fields.Date, 'today', lambda *args, **kwargs: frozen_today), patch.object(fields.Date, 'context_today', lambda *args, **kwargs: frozen_today):
             # Create an invoice with rate 1/3.
             move = self.env['account.move'].create({
-                'type': 'out_invoice',
+                'move_type': 'out_invoice',
                 'partner_id': self.partner_a.id,
                 'invoice_date': fields.Date.from_string('2016-01-01'),
                 'currency_id': self.currency_data['currency'].id,
@@ -2044,7 +2063,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
                 },
             ], {
                 **self.move_vals,
-                'invoice_payment_ref': move.name,
+                'payment_reference': move.name,
                 'currency_id': self.currency_data['currency'].id,
                 'date': frozen_today,
                 'invoice_date': frozen_today,
@@ -2057,7 +2076,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         ''' Check the date will be set automatically at the next available post date due to the tax lock date. '''
         # Create an invoice with rate 1/3.
         move = self.env['account.move'].create({
-            'type': 'out_invoice',
+            'move_type': 'out_invoice',
             'partner_id': self.partner_a.id,
             'invoice_date': fields.Date.from_string('2016-01-01'),
             'date': fields.Date.from_string('2015-01-01'),
@@ -2150,7 +2169,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
             },
         ], {
             **self.move_vals,
-            'invoice_payment_ref': move.name,
+            'payment_reference': move.name,
             'currency_id': self.currency_data['currency'].id,
             'date': fields.Date.from_string('2017-01-01'),
             'amount_untaxed': 1200.0,
@@ -2161,7 +2180,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
     def test_out_invoice_switch_out_refund_1(self):
         # Test creating an account_move with an out_invoice_type and switch it in an out_refund.
         move = self.env['account.move'].create({
-            'type': 'out_invoice',
+            'move_type': 'out_invoice',
             'partner_id': self.partner_a.id,
             'invoice_date': fields.Date.from_string('2019-01-01'),
             'currency_id': self.currency_data['currency'].id,
@@ -2173,7 +2192,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         })
         move.action_switch_invoice_into_refund_credit_note()
 
-        self.assertRecordValues(move, [{'type': 'out_refund'}])
+        self.assertRecordValues(move, [{'move_type': 'out_refund'}])
         self.assertInvoiceValues(move, [
             {
                 **self.product_line_vals_1,
@@ -2222,7 +2241,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         modified_product_line_vals_2 = self.product_line_vals_2.copy()
         modified_product_line_vals_2.update({'quantity': -modified_product_line_vals_2['quantity']})
         move = self.env['account.move'].create({
-            'type': 'out_invoice',
+            'move_type': 'out_invoice',
             'partner_id': self.partner_a.id,
             'invoice_date': fields.Date.from_string('2019-01-01'),
             'currency_id': self.currency_data['currency'].id,
@@ -2294,7 +2313,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
 
         move.action_switch_invoice_into_refund_credit_note()
 
-        self.assertRecordValues(move, [{'type': 'out_refund'}])
+        self.assertRecordValues(move, [{'move_type': 'out_refund'}])
         self.assertInvoiceValues(move, [
             {
                 **self.product_line_vals_1,
@@ -2341,7 +2360,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
 
     def test_out_invoice_change_period_accrual_1(self):
         move = self.env['account.move'].create({
-            'type': 'out_invoice',
+            'move_type': 'out_invoice',
             'date': '2017-01-01',
             'partner_id': self.partner_a.id,
             'invoice_date': fields.Date.from_string('2017-01-01'),
@@ -2420,7 +2439,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
             {
                 **self.term_line_vals_1,
                 'currency_id': self.currency_data['currency'].id,
-                'name': 'INV/2017/0001',
+                'name': 'INV/2017/01/0001',
                 'amount_currency': 1410.0,
                 'debit': 705.0,
                 'credit': 0.0,
@@ -2430,7 +2449,7 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
             **self.move_vals,
             'currency_id': self.currency_data['currency'].id,
             'date': fields.Date.from_string('2017-01-01'),
-            'invoice_payment_ref': 'INV/2017/0001',
+            'payment_reference': 'INV/2017/01/0001',
         })
 
         accrual_lines = self.env['account.move'].browse(wizard_res['domain'][0][2]).line_ids.sorted('date')
@@ -2473,7 +2492,11 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         })
 
         invoice = self.env['account.move'].create({
+<<<<<<< HEAD
             'type': 'out_invoice',
+=======
+            'move_type': 'out_invoice',
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'partner_id': self.partner_a.id,
             'invoice_date': fields.Date.from_string('2019-01-01'),
             'invoice_payment_term_id': zero_balance_payment_term.id,
@@ -2519,7 +2542,11 @@ class TestAccountMoveOutInvoiceOnchanges(InvoiceTestCommon):
         })
 
         invoice = self.env['account.move'].create({
+<<<<<<< HEAD
             'type': 'out_invoice',
+=======
+            'move_type': 'out_invoice',
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'invoice_date': '2019-01-01',
             'date': '2019-01-01',
             'partner_id': self.partner_a.id,

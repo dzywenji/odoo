@@ -18,7 +18,7 @@ class IrRule(models.Model):
 
     name = fields.Char(index=True)
     active = fields.Boolean(default=True, help="If you uncheck the active field, it will disable the record rule without deleting it (if you delete a native record rule, it may be re-created when you reload the module).")
-    model_id = fields.Many2one('ir.model', string='Object', index=True, required=True, ondelete="cascade")
+    model_id = fields.Many2one('ir.model', string='Model', index=True, required=True, ondelete="cascade")
     groups = fields.Many2many('res.groups', 'rule_group_rel', 'rule_group_id', 'group_id')
     domain_force = fields.Text(string='Domain')
     perm_read = fields.Boolean(string='Apply for Read', default=True)
@@ -61,11 +61,6 @@ class IrRule(models.Model):
     def _compute_global(self):
         for rule in self:
             rule['global'] = not rule.groups
-
-    @api.constrains('model_id')
-    def _check_model_transience(self):
-        if any(self.env[rule.model_id.model].is_transient() for rule in self):
-            raise ValidationError(_('Rules can not be applied on Transient models.'))
 
     @api.constrains('model_id')
     def _check_model_name(self):

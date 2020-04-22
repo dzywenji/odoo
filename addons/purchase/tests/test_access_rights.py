@@ -1,13 +1,21 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
+<<<<<<< HEAD
 from odoo.addons.account.tests.account_test_no_chart import TestAccountNoChartCommon
+=======
+from odoo.tests.common import SavepointCase
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 from odoo.exceptions import AccessError
 from odoo.tests import Form, tagged
 
 
 @tagged('post_install', '-at_install')
+<<<<<<< HEAD
 class TestPurchaseInvoice(TestAccountNoChartCommon):
+=======
+class TestPurchaseInvoice(SavepointCase):
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -23,8 +31,11 @@ class TestPurchaseInvoice(TestAccountNoChartCommon):
             'login': 'purchaseUser',
             'email': 'pu@odoo.com',
             'groups_id': [(6, 0, [group_purchase_user.id, group_employee.id])],
+<<<<<<< HEAD
             'property_account_payable_id': cls.account_payable.id,
             'property_account_receivable_id': cls.account_receivable.id,
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         })
 
         cls.vendor = cls.env['res.partner'].create({
@@ -50,9 +61,12 @@ class TestPurchaseInvoice(TestAccountNoChartCommon):
             'type': 'service',
         })
 
+<<<<<<< HEAD
         cls.setUpAdditionalAccounts()
         cls.setUpAccountJournal()
 
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     def test_create_purchase_order(self):
         """Check a purchase user can create a vendor bill from a purchase order but not post it"""
         purchase_order_form = Form(self.env['purchase.order'].with_user(self.purchase_user))
@@ -66,11 +80,17 @@ class TestPurchaseInvoice(TestAccountNoChartCommon):
         purchase_order = purchase_order_form.save()
         purchase_order.button_confirm()
 
+<<<<<<< HEAD
         action = purchase_order.with_user(self.purchase_user).action_view_invoice()
         invoice_form = Form(self.env['account.move'].with_user(self.purchase_user).with_context(
             action['context']
         ))
         invoice = invoice_form.save()
+=======
+        purchase_order.order_line.qty_received = 4
+        purchase_order.action_create_invoice()
+        invoice = purchase_order.invoice_ids
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         with self.assertRaises(AccessError):
             invoice.post()
 
@@ -91,9 +111,17 @@ class TestPurchaseInvoice(TestAccountNoChartCommon):
             line.price_unit = 5
 
         purchase_order_user2 = purchase_order_form.save()
+<<<<<<< HEAD
         action = purchase_order_user2.with_user(purchase_user_2).action_view_invoice()
         invoice_form = Form(self.env['account.move'].with_user(purchase_user_2).with_context(action['context']))
         vendor_bill_user2 = invoice_form.save()
+=======
+        purchase_order_user2.button_confirm()
+
+        purchase_order_user2.order_line.qty_received = 4
+        purchase_order_user2.action_create_invoice()
+        vendor_bill_user2 = purchase_order_user2.invoice_ids
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         # open purchase_order_user2 and vendor_bill_user2 with `self.purchase_user`
         purchase_order_user1 = Form(purchase_order_user2.with_user(self.purchase_user))
@@ -108,7 +136,11 @@ class TestPurchaseInvoice(TestAccountNoChartCommon):
         # edit the account.move record rule for purchase user in order to ensure
         # a user can only see his own invoices
         rule = self.env.ref('purchase.purchase_user_account_move_rule')
+<<<<<<< HEAD
         rule.domain_force = "['&', ('type', 'in', ('in_invoice', 'in_refund', 'in_receipt')), ('invoice_user_id', '=', user.id)]"
+=======
+        rule.domain_force = "['&', ('move_type', 'in', ('in_invoice', 'in_refund', 'in_receipt')), ('invoice_user_id', '=', user.id)]"
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         # create a purchase and make a vendor bill from it as purchase user 2
         purchase_user_2 = self.purchase_user.copy({
@@ -126,9 +158,17 @@ class TestPurchaseInvoice(TestAccountNoChartCommon):
             line.price_unit = 5
 
         purchase_order_user2 = purchase_order_form.save()
+<<<<<<< HEAD
         action = purchase_order_user2.with_user(purchase_user_2).action_view_invoice()
         invoice_form = Form(self.env['account.move'].with_user(purchase_user_2).with_context(action['context']))
         vendor_bill_user2 = invoice_form.save()
+=======
+        purchase_order_user2.button_confirm()
+
+        purchase_order_user2.order_line.qty_received = 4
+        purchase_order_user2.action_create_invoice()
+        vendor_bill_user2 = purchase_order_user2.invoice_ids
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         # check user 1 cannot read the invoice
         with self.assertRaises(AccessError):

@@ -209,7 +209,7 @@ class TestSaleOrder(TestCommonSaleNoChart):
         so.action_confirm()
         so._create_analytic_account()
 
-        inv = self.env['account.move'].with_context(default_type='in_invoice').create({
+        inv = self.env['account.move'].with_context(default_move_type='in_invoice').create({
             'partner_id': self.partner_customer_usd.id,
             'invoice_line_ids': [
                 (0, 0, {
@@ -225,7 +225,7 @@ class TestSaleOrder(TestCommonSaleNoChart):
         inv.post()
         sol = so.order_line.filtered(lambda l: l.product_id == serv_cost)
         self.assertTrue(sol, 'Sale: cost invoicing does not add lines when confirming vendor invoice')
-        self.assertEquals((sol.price_unit, sol.qty_delivered, sol.product_uom_qty, sol.qty_invoiced), (160, 2, 0, 0), 'Sale: line is wrong after confirming vendor invoice')
+        self.assertEqual((sol.price_unit, sol.qty_delivered, sol.product_uom_qty, sol.qty_invoiced), (160, 2, 0, 0), 'Sale: line is wrong after confirming vendor invoice')
 
     def test_sale_with_taxes(self):
         """ Test SO with taxes applied on its lines and check subtotal applied on its lines and total applied on the SO """
@@ -258,21 +258,47 @@ class TestSaleOrder(TestCommonSaleNoChart):
             else:
                 price = line.price_unit * line.product_uom_qty
 
-            self.assertEquals(float_compare(line.price_subtotal, price, precision_digits=2), 0)
+            self.assertEqual(float_compare(line.price_subtotal, price, precision_digits=2), 0)
 
-        self.assertEquals(self.sale_order.amount_total,
+        self.assertEqual(self.sale_order.amount_total,
                           self.sale_order.amount_untaxed + self.sale_order.amount_tax,
                           'Taxes should be applied')
 
     def test_so_create_multicompany(self):
         """Check that only taxes of the right company are applied on the lines."""
+<<<<<<< HEAD
         user_demo = self.env.ref('base.user_demo')
+=======
+
+        # Preparing test Data
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         company_1 = self.env.ref('base.main_company')
         company_2 = self.env['res.company'].create({
             'name': 'company 2',
             'parent_id': company_1.id,
         })
+<<<<<<< HEAD
         user_demo.company_ids = (company_1 | company_2).ids
+=======
+
+        user_demo = self.env['res.users'].create({
+            'login': 'zizizmyuser',
+            'password': 'zizizmyuser',
+            'email': 'test@test.com',
+            'partner_id': self.env['res.partner'].create({'name': 'Zizizmypartner'}).id,
+            'company_ids': [(6, False, [company_1.id])],
+            'company_id': company_1.id,
+            'groups_id': [(6, 0, [
+                self.env.ref('base.group_user').id,
+                self.env.ref('base.group_partner_manager').id,
+                self.env.ref('sales_team.group_sale_manager').id])]})
+
+        user_demo.company_ids = (company_1 | company_2).ids
+        so_partner = self.env['res.partner'].create({'name': 'SO Partner'})
+        so_partner.write({
+            'property_account_position_id': False,
+        })
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         tax_company_1 = self.env['account.tax'].create({
             'name': 'T1',
@@ -288,12 +314,17 @@ class TestSaleOrder(TestCommonSaleNoChart):
 
         product_shared = self.env['product.template'].create({
             'name': 'shared product',
+            'invoice_policy': 'order',
             'taxes_id': [(6, False, [tax_company_1.id, tax_company_2.id])],
             'property_account_income_id': self.account_receivable.id,
         })
 
         so_1 = self.env['sale.order'].with_user(user_demo.id).create({
+<<<<<<< HEAD
             'partner_id': self.env.ref('base.res_partner_2').id,
+=======
+            'partner_id': self.env['res.partner'].create({'name': 'A partner'}).id,
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'company_id': company_1.id,
         })
         so_1.write({
@@ -310,6 +341,7 @@ class TestSaleOrder(TestCommonSaleNoChart):
         inv=so_1.sudo().with_context(allowed_company_ids=[company_2.id, company_1.id])._create_invoices()
         self.assertEqual(inv.company_id, company_1, 'invoices should be created in the company of the SO, not the main company of the context')
 
+<<<<<<< HEAD
 
     def test_reconciliation_with_so(self):
         # create SO
@@ -383,3 +415,45 @@ class TestSaleOrder(TestCommonSaleNoChart):
         res = wiz.create_invoices()
         # Check that exactly 2 invoices are generated
         self.assertEqual(len(res['domain'][0][2]),2, "Grouping invoicing 3 orders for the same partner with 2 currencies should create exactly 2 invoices")
+=======
+    def test_group_invoice(self):
+        """ Test that invoicing multiple sales order for the same customer works. """
+        # Create 3 SOs for the same partner, one of which that uses another currency
+        eur_pricelist = self.env['product.pricelist'].create({'name': 'EUR', 'currency_id': self.env.ref('base.EUR').id})
+        so1 = self.sale_order.with_context(mail_notrack=True).copy()
+        so1.pricelist_id = eur_pricelist
+        so2 = so1.copy()
+        usd_pricelist = self.env['product.pricelist'].create({'name': 'USD', 'currency_id': self.env.ref('base.USD').id})
+        so3 = so1.copy()
+        so1.pricelist_id = usd_pricelist
+        orders = so1 | so2 | so3
+        orders.action_confirm()
+        # Create the invoicing wizard and invoice all of them at once
+        wiz = self.env['sale.advance.payment.inv'].with_context(active_ids=orders.ids, open_invoices=True).create({})
+        res = wiz.create_invoices()
+        # Check that exactly 2 invoices are generated
+        self.assertEqual(len(res['domain'][0][2]),2, "Grouping invoicing 3 orders for the same partner with 2 currencies should create exactly 2 invoices")
+
+    def test_so_note_to_invoice(self):
+        """Test that notes from SO are pushed into invoices"""
+
+        sol_note = self.env['sale.order.line'].create({
+            'name': 'This is a note',
+            'display_type': 'line_note',
+            'product_id': False,
+            'product_uom_qty': 0,
+            'product_uom': False,
+            'price_unit': 0,
+            'order_id': self.sale_order.id,
+            'tax_id': False,
+        })
+
+        # confirm quotation
+        self.sale_order.action_confirm()
+
+        # create invoice
+        invoice = self.sale_order._create_invoices()
+
+        # check note from SO has been pushed in invoice
+        self.assertEqual(len(invoice.invoice_line_ids.filtered(lambda line: line.display_type == 'line_note')), 1, 'Note SO line should have been pushed to the invoice')
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

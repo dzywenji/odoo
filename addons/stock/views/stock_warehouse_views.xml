@@ -28,7 +28,7 @@
                             </group>
                         </group>
                         <notebook colspan="4" groups="stock.group_adv_location">
-                            <page string="Warehouse Configuration" colspan="4">
+                            <page string="Warehouse Configuration" name="warehouse_config" colspan="4">
                                 <group colspan="4">
                                     <group string="Shipments">
                                         <field name="reception_steps" widget='radio'/>
@@ -41,7 +41,7 @@
                                     </group>
                                 </group>
                             </page>
-                            <page string="Technical Information" groups='base.group_no_one'>
+                            <page string="Technical Information" name="technical_info" groups='base.group_no_one'>
                                 <group>
                                     <group string="Locations">
                                         <field name="view_location_id" string="Warehouse view location" readonly="1" required="0"/>
@@ -225,6 +225,7 @@
                                 <div class="o_row">
                                     <field name="product_min_qty"/>
                                     <field name="product_uom_name"/>
+                                    <field name="json_lead_days_popover" widget="popover_widget" attrs="{'invisible': [('id', '=', False)]}"/>
                                 </div>
                                 <label for="product_max_qty"/>
                                 <div class="o_row">
@@ -242,11 +243,6 @@
                                     <field name="group_id" groups="stock.group_adv_location"/>
                                 </div>
                                 <field name="company_id" groups="base.group_multi_company" options="{'no_create': True}"/>
-                                <label for="lead_days"/>
-                                <div class="o_row">
-                                    <field name="lead_days"/>
-                                    <field name="lead_type"/>
-                                </div>
                             </group>
                         </group>
                     </sheet>

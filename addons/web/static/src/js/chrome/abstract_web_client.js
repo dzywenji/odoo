@@ -22,19 +22,19 @@ var KeyboardNavigationMixin = require('web.KeyboardNavigationMixin');
 var Loading = require('web.Loading');
 var local_storage = require('web.local_storage');
 var RainbowMan = require('web.RainbowMan');
-var ServiceProviderMixin = require('web.ServiceProviderMixin');
 var session = require('web.session');
 var utils = require('web.utils');
 var Widget = require('web.Widget');
 
+const env = require('web.env');
+
 var _t = core._t;
 
-var AbstractWebClient = Widget.extend(ServiceProviderMixin, KeyboardNavigationMixin, {
+var AbstractWebClient = Widget.extend(KeyboardNavigationMixin, {
     dependencies: ['notification'],
-    events: _.extend({}, KeyboardNavigationMixin.events, {
-        'click .o_search_options .dropdown-menu': '_onClickDropDownMenu',
-    }),
+    events: _.extend({}, KeyboardNavigationMixin.events),
     custom_events: {
+        call_service: '_onCallService',
         clear_uncommitted_changes: function (e) {
             this.clear_uncommitted_changes().then(e.data.callback);
         },
@@ -95,13 +95,14 @@ var AbstractWebClient = Widget.extend(ServiceProviderMixin, KeyboardNavigationMi
         odoo.isReady = false;
         this.client_options = {};
         this._super(parent);
-        ServiceProviderMixin.init.call(this);
         KeyboardNavigationMixin.init.call(this);
         this.origin = undefined;
         this._current_state = null;
         this.menu_dp = new concurrency.DropPrevious();
         this.action_mutex = new concurrency.Mutex();
         this.set('title_part', {"zopenerp": "Odoo"});
+        this.env = env;
+        core.bus.on('legacy_webclient_request', this, this._onLegacyWebclientRequest);
     },
     start: function () {
         var self = this;
@@ -153,8 +154,8 @@ var AbstractWebClient = Widget.extend(ServiceProviderMixin, KeyboardNavigationMi
             }).then(function () {
                 // Listen to 'scroll' event and propagate it on main bus
                 self.action_manager.$el.on('scroll', core.bus.trigger.bind(core.bus, 'scroll'));
-                core.bus.trigger('web_client_ready');
                 odoo.isReady = true;
+                core.bus.trigger('web_client_ready');
                 if (session.uid === 1) {
                     self.$el.addClass('o_is_superuser');
                 }
@@ -334,14 +335,24 @@ var AbstractWebClient = Widget.extend(ServiceProviderMixin, KeyboardNavigationMi
     //--------------------------------------------------------------------------
 
     /**
-     * When clicking inside a dropdown to modify search options
-     * prevents the bootstrap dropdown to close on itself
+     * Calls the requested service from the env.
+     *
+     * For the ajax service, the arguments are extended with the target so that
+     * it can call back the caller.
      *
      * @private
-     * @param {Event} ev
+     * @param {OdooEvent} event
      */
-    _onClickDropDownMenu: function (ev) {
-        ev.stopPropagation();
+    _onCallService: function (ev) {
+        const payload = ev.data;
+        let args = payload.args || [];
+        if (payload.service === 'ajax' && payload.method === 'rpc') {
+            // ajax service uses an extra 'target' argument for rpc
+            args = args.concat(ev.target);
+        }
+        const service = this.env.services[payload.service];
+        const result = service[payload.method].apply(service, args);
+        payload.callback(result);
     },
     /**
      * Whenever the connection is lost, we need to notify the user.
@@ -428,6 +439,23 @@ var AbstractWebClient = Widget.extend(ServiceProviderMixin, KeyboardNavigationMi
      */
     _onGetScrollPosition: function (ev) {
         ev.data.callback(this.getScrollPosition());
+<<<<<<< HEAD
+=======
+    },
+    /**
+     * Services used to trigger_up some events (e.g. do_action, get_session,
+     * set_title_part) when the webclient was still instantiating them. Now that
+     * services have been moved to the env, the webclient is no longer their
+     * parent and they can thus no longer communicate with the webclient by
+     * trigger_up. Instead, they trigger those events on the bus, and we end up
+     * in this handler. Eventually, services should stop triggering events up.
+     *
+     * @private
+     * @param {CustomEvent} ev
+     */
+    _onLegacyWebclientRequest: function (ev) {
+        this._trigger_up(ev);
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     },
     /**
      * Loads an action from the database given its ID.

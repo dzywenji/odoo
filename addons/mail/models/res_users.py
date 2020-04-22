@@ -18,13 +18,6 @@ class Users(models.Model):
     _inherit = ['res.users']
     _description = 'Users'
 
-    alias_id = fields.Many2one('mail.alias', 'Alias', ondelete="set null", required=False,
-            help="Email address internally associated with this user. Incoming "\
-                 "emails will appear in the user's notifications.", copy=False, auto_join=True)
-    alias_contact = fields.Selection([
-        ('everyone', 'Everyone'),
-        ('partners', 'Authenticated Partners'),
-        ('followers', 'Followers only')], string='Alias Contact Security', related='alias_id.alias_contact', readonly=False)
     notification_type = fields.Selection([
         ('email', 'Handle by Emails'),
         ('inbox', 'Handle in Odoo')],
@@ -38,7 +31,6 @@ class Users(models.Model):
     moderation_channel_ids = fields.Many2many(
         'mail.channel', 'mail_channel_moderator_rel',
         string='Moderated channels')
-    out_of_office_message = fields.Char(string='Chat Status')
 
     @api.depends('moderation_channel_ids.moderation', 'moderation_channel_ids.moderator_ids')
     def _compute_is_moderator(self):
@@ -67,16 +59,16 @@ GROUP BY channel_moderator.res_users_id""", [tuple(self.ids)])
 
     def __init__(self, pool, cr):
         """ Override of __init__ to add access rights on notification_email_send
-            and alias fields. Access rights are disabled by default, but allowed
-            on some specific fields defined in self.SELF_{READ/WRITE}ABLE_FIELDS.
+            fields. Access rights are disabled by default, but allowed on some
+            specific fields defined in self.SELF_{READ/WRITE}ABLE_FIELDS.
         """
         init_res = super(Users, self).__init__(pool, cr)
         # duplicate list to avoid modifying the original reference
         type(self).SELF_WRITEABLE_FIELDS = list(self.SELF_WRITEABLE_FIELDS)
-        type(self).SELF_WRITEABLE_FIELDS.extend(['notification_type', 'out_of_office_message'])
+        type(self).SELF_WRITEABLE_FIELDS.extend(['notification_type'])
         # duplicate list to avoid modifying the original reference
         type(self).SELF_READABLE_FIELDS = list(self.SELF_READABLE_FIELDS)
-        type(self).SELF_READABLE_FIELDS.extend(['notification_type', 'out_of_office_message'])
+        type(self).SELF_READABLE_FIELDS.extend(['notification_type'])
         return init_res
 
     @api.model

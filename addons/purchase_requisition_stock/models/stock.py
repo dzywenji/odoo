@@ -21,7 +21,7 @@ class StockRule(models.Model):
             else:
                 other_procurements.append((procurement, rule))
         for company_id, requisitions_values in requisitions_values_by_company.items():
-            self.env['purchase.requisition'].sudo().with_context(force_company=company_id).create(requisitions_values)
+            self.env['purchase.requisition'].sudo().with_company(company_id).create(requisitions_values)
         return super(StockRule, self)._run_buy(other_procurements)
 
     def _prepare_purchase_order(self, company_id, origins, values):
@@ -62,7 +62,7 @@ class Orderpoint(models.Model):
     def _quantity_in_progress(self):
         res = super(Orderpoint, self)._quantity_in_progress()
         for op in self:
-            for pr in self.env['purchase.requisition'].search([('state','=','draft'),('origin','=',op.name)]):
-                for prline in pr.line_ids.filtered(lambda l: l.product_id.id == op.product_id.id):
+            for pr in self.env['purchase.requisition'].search([('state', '=', 'draft'), ('origin', '=', op.name)]):
+                for prline in pr.line_ids.filtered(lambda l: l.product_id.id == op.product_id.id and not l.move_dest_id):
                     res[op.id] += prline.product_uom_id._compute_quantity(prline.product_qty, op.product_uom, round=False)
         return res

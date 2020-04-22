@@ -84,7 +84,11 @@
                                     </tr>
                                 </thead>
                                 <tbody>
+<<<<<<< HEAD
                                     <t t-foreach="o.move_ids_without_package.sorted(key=lambda m: m.product_id.id)" t-as="move">
+=======
+                                    <t t-foreach="o.move_ids_without_package" t-as="move">
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                                         <!-- In case you come accross duplicated lines, ask NIM or LAP -->
                                         <t t-foreach="move.move_line_ids.sorted(key=lambda ml: ml.location_id.id)" t-as="ml">
                                             <tr>

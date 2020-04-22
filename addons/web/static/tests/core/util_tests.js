@@ -101,6 +101,44 @@ QUnit.module('core', {}, function () {
         assert.strictEqual(human_number(-1.012e+43, 2, 2), '-1.01e+43');
     });
 
+<<<<<<< HEAD
+=======
+    QUnit.test('patch a class', function(assert) {
+        assert.expect(4);
+
+        class Parent {
+            foo() {
+                return 'Parent foo';
+            }
+        }
+
+        class Child extends Parent {
+            bar() {
+                return 'Child bar';
+            }
+        }
+
+        const removePatch = utils.patch(Child, 'patch', {
+            foo() {
+                return this._super() + ' patch foo';
+            },
+            bar() {
+                return this._super() + ' patch bar';
+            }
+        })
+
+        const child = new Child();
+
+        assert.strictEqual(child.foo(), 'Parent foo patch foo')
+        assert.strictEqual(child.bar(), 'Child bar patch bar')
+
+        removePatch();
+
+        assert.strictEqual(child.foo(), 'Parent foo');
+        assert.strictEqual(child.bar(), 'Child bar');
+    })
+
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     QUnit.test('round_decimals', function (assert) {
         assert.expect(21);
 

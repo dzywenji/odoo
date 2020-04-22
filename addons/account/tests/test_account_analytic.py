@@ -1,11 +1,19 @@
 # -*- coding: utf-8 -*-
+<<<<<<< HEAD
 from odoo.addons.account.tests.account_test_savepoint import AccountingSavepointCase
+=======
+from odoo.addons.account.tests.common import AccountTestInvoicingCommon
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 from odoo.tests import tagged
 from odoo.exceptions import UserError
 
 
 @tagged('post_install', '-at_install')
+<<<<<<< HEAD
 class TestAccountAnalyticAccount(AccountingSavepointCase):
+=======
+class TestAccountAnalyticAccount(AccountTestInvoicingCommon):
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     @classmethod
     def setUpClass(cls):
@@ -31,7 +39,11 @@ class TestAccountAnalyticAccount(AccountingSavepointCase):
         ''' Ensure you can't change the company of an account.analytic.account if there are some journal entries '''
 
         self.env['account.move'].create({
+<<<<<<< HEAD
             'type': 'entry',
+=======
+            'move_type': 'entry',
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'date': '2019-01-01',
             'line_ids': [
                 (0, 0, {

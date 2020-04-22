@@ -32,7 +32,9 @@ from datetime import datetime, date
 from unittest.mock import patch
 
 from decorator import decorator
+from itertools import zip_longest as izip_longest
 from lxml import etree, html
+from xmlrpc import client as xmlrpclib
 
 from odoo.models import BaseModel
 from odoo.osv.expression import normalize_domain, TRUE_LEAF, FALSE_LEAF
@@ -41,21 +43,11 @@ from odoo.tools.misc import find_in_path
 from odoo.tools.safe_eval import safe_eval
 
 try:
-    from itertools import zip_longest as izip_longest
-except ImportError:
-    from itertools import izip_longest
-
-try:
     import websocket
 except ImportError:
     # chrome headless tests will be skipped
     websocket = None
 
-try:
-    from xmlrpc import client as xmlrpclib
-except ImportError:
-    # pylint: disable=bad-python3-import
-    import xmlrpclib
 
 import odoo
 import pprint
@@ -69,7 +61,6 @@ _logger = logging.getLogger(__name__)
 # The odoo library is supposed already configured.
 ADDONS_PATH = odoo.tools.config['addons_path']
 HOST = '127.0.0.1'
-PORT = odoo.tools.config['http_port']
 # Useless constant, tests are aware of the content of demo data
 ADMIN_USER_ID = odoo.SUPERUSER_ID
 
@@ -87,37 +78,6 @@ def get_db_name():
 
 # For backwards-compatibility - get_db_name() should be used instead
 DB = get_db_name()
-
-
-def at_install(flag):
-    """ Sets the at-install state of a test, the flag is a boolean specifying
-    whether the test should (``True``) or should not (``False``) run during
-    module installation.
-
-    By default, tests are run right after installing the module, before
-    starting the installation of the next module.
-
-    .. deprecated:: 12.0
-
-        ``at_install`` is now a flag, you can use :func:`tagged` to
-        add/remove it, although ``tagged`` only works on test classes
-    """
-    return tagged('at_install' if flag else '-at_install')
-
-def post_install(flag):
-    """ Sets the post-install state of a test. The flag is a boolean
-    specifying whether the test should or should not run after a set of
-    module installations.
-
-    By default, tests are *not* run after installation of all modules in the
-    current installation set.
-
-    .. deprecated:: 12.0
-
-        ``post_install`` is now a flag, you can use :func:`tagged` to
-        add/remove it, although ``tagged`` only works on test classes
-    """
-    return tagged('post_install' if flag else '-post_install')
 
 
 def new_test_user(env, login='', groups='base.group_user', context=None, **kwargs):
@@ -161,9 +121,126 @@ def new_test_user(env, login='', groups='base.group_user', context=None, **kwarg
 # ------------------------------------------------------------
 # Main classes
 # ------------------------------------------------------------
+class OdooSuite(unittest.suite.TestSuite):
+
+    if sys.version_info < (3, 8):
+        # Partial backport of bpo-24412, merged in CPython 3.8
+
+        def _handleClassSetUp(self, test, result):
+            previousClass = getattr(result, '_previousTestClass', None)
+            currentClass = test.__class__
+            if currentClass == previousClass:
+                return
+            if result._moduleSetUpFailed:
+                return
+            if getattr(currentClass, "__unittest_skip__", False):
+                return
+
+            try:
+                currentClass._classSetupFailed = False
+            except TypeError:
+                # test may actually be a function
+                # so its class will be a builtin-type
+                pass
+
+            setUpClass = getattr(currentClass, 'setUpClass', None)
+            if setUpClass is not None:
+                unittest.suite._call_if_exists(result, '_setupStdout')
+                try:
+                    setUpClass()
+                except Exception as e:
+                    if isinstance(result, unittest.suite._DebugResult):
+                        raise
+                    currentClass._classSetupFailed = True
+                    className = unittest.util.strclass(currentClass)
+                    self._createClassOrModuleLevelException(result, e,
+                                                            'setUpClass',
+                                                            className)
+                finally:
+                    unittest.suite._call_if_exists(result, '_restoreStdout')
+                    if currentClass._classSetupFailed is True:
+                        currentClass.doClassCleanups()
+                        if len(currentClass.tearDown_exceptions) > 0:
+                            for exc in currentClass.tearDown_exceptions:
+                                self._createClassOrModuleLevelException(
+                                        result, exc[1], 'setUpClass', className,
+                                        info=exc)
+
+        def _createClassOrModuleLevelException(self, result, exc, method_name, parent, info=None):
+            errorName = f'{method_name} ({parent})'
+            self._addClassOrModuleLevelException(result, exc, errorName, info)
+
+        def _addClassOrModuleLevelException(self, result, exception, errorName, info=None):
+            error = unittest.suite._ErrorHolder(errorName)
+            addSkip = getattr(result, 'addSkip', None)
+            if addSkip is not None and isinstance(exception, unittest.case.SkipTest):
+                addSkip(error, str(exception))
+            else:
+                if not info:
+                    result.addError(error, sys.exc_info())
+                else:
+                    result.addError(error, info)
+
+        def _tearDownPreviousClass(self, test, result):
+            previousClass = getattr(result, '_previousTestClass', None)
+            currentClass = test.__class__
+            if currentClass == previousClass:
+                return
+            if getattr(previousClass, '_classSetupFailed', False):
+                return
+            if getattr(result, '_moduleSetUpFailed', False):
+                return
+            if getattr(previousClass, "__unittest_skip__", False):
+                return
+
+            tearDownClass = getattr(previousClass, 'tearDownClass', None)
+            if tearDownClass is not None:
+                unittest.suite._call_if_exists(result, '_setupStdout')
+                try:
+                    tearDownClass()
+                except Exception as e:
+                    if isinstance(result, unittest.suite._DebugResult):
+                        raise
+                    className = unittest.util.strclass(previousClass)
+                    self._createClassOrModuleLevelException(result, e,
+                                                            'tearDownClass',
+                                                            className)
+                finally:
+                    unittest.suite._call_if_exists(result, '_restoreStdout')
+                    previousClass.doClassCleanups()
+                    if len(previousClass.tearDown_exceptions) > 0:
+                        for exc in previousClass.tearDown_exceptions:
+                            className = unittest.util.strclass(previousClass)
+                            self._createClassOrModuleLevelException(result, exc[1],
+                                                                    'tearDownClass',
+                                                                    className,
+                                                                    info=exc)
 
 
 class TreeCase(unittest.TestCase):
+
+    if sys.version_info < (3, 8):
+        # Partial backport of bpo-24412, merged in CPython 3.8
+        _class_cleanups = []
+
+        @classmethod
+        def addClassCleanup(cls, function, *args, **kwargs):
+            """Same as addCleanup, except the cleanup items are called even if
+            setUpClass fails (unlike tearDownClass). Backport of bpo-24412."""
+            cls._class_cleanups.append((function, args, kwargs))
+
+        @classmethod
+        def doClassCleanups(cls):
+            """Execute all class cleanup functions. Normally called for you after tearDownClass.
+            Backport of bpo-24412."""
+            cls.tearDown_exceptions = []
+            while cls._class_cleanups:
+                function, args, kwargs = cls._class_cleanups.pop()
+                try:
+                    function(*args, **kwargs)
+                except Exception as exc:
+                    cls.tearDown_exceptions.append(sys.exc_info())
+
     def __init__(self, methodName='runTest'):
         super(TreeCase, self).__init__(methodName)
         self.addTypeEqualityFunc(etree._Element, self.assertTreesEqual)
@@ -245,9 +322,25 @@ class BaseCase(TreeCase, MetaCase('DummyCase', (object,), {})):
         return self.env.ref(xid)
 
     @contextmanager
-    def _assertRaises(self, exception):
+    def with_user(self, login):
+        """ Change user for a given test, like with self.with_user() ... """
+        old_uid = self.uid
+        try:
+            user = self.env['res.users'].sudo().search([('login', '=', login)])
+            assert user, "Login %s not found" % login
+            # switch user
+            self.uid = user.id
+            self.env = self.env(user=self.uid)
+            yield
+        finally:
+            # back
+            self.uid = old_uid
+            self.env = self.env(user=self.uid)
+
+    @contextmanager
+    def _assertRaises(self, exception, *, msg=None):
         """ Context manager that clears the environment upon failure. """
-        with super(BaseCase, self).assertRaises(exception) as cm:
+        with super(BaseCase, self).assertRaises(exception, msg=msg) as cm:
             if hasattr(self, 'env'):
                 with self.env.clear_upon_failure():
                     yield cm
@@ -259,7 +352,7 @@ class BaseCase(TreeCase, MetaCase('DummyCase', (object,), {})):
             with self._assertRaises(exception):
                 func(*args, **kwargs)
         else:
-            return self._assertRaises(exception)
+            return self._assertRaises(exception, **kwargs)
 
     @contextmanager
     def assertQueryCount(self, default=0, flush=True, **counters):
@@ -281,10 +374,12 @@ class BaseCase(TreeCase, MetaCase('DummyCase', (object,), {})):
                 expected = counters.get(login, default)
                 if flush:
                     self.env.user.flush()
+                    self.env.cr.precommit()
                 count0 = self.cr.sql_log_count
                 yield
                 if flush:
                     self.env.user.flush()
+                    self.env.cr.precommit()
                 count = self.cr.sql_log_count - count0
                 if count != expected:
                     # add some info on caller to allow semi-automatic update of query count
@@ -299,9 +394,15 @@ class BaseCase(TreeCase, MetaCase('DummyCase', (object,), {})):
                         msg = "Query count less than expected for user %s: %d < %d in %s at %s:%s"
                         logger.info(msg, login, count, expected, funcname, filename, linenum)
         else:
+            # flush before and after during warmup, in order to reproduce the
+            # same operations, otherwise the caches might not be ready!
+            if flush:
+                self.env.user.flush()
+                self.env.cr.precommit()
             yield
             if flush:
                 self.env.user.flush()
+                self.env.cr.precommit()
 
     def assertRecordValues(self, records, expected_values):
         ''' Compare a recordset with a list of dictionaries representing the expected results.
@@ -457,23 +558,20 @@ class SingleTransactionCase(BaseCase):
 
     @classmethod
     def setUpClass(cls):
-        super(SingleTransactionCase, cls).setUpClass()
+        super().setUpClass()
         cls.registry = odoo.registry(get_db_name())
+        cls.addClassCleanup(cls.registry.reset_changes)
+        cls.addClassCleanup(cls.registry.clear_caches)
+
         cls.cr = cls.registry.cursor()
+        cls.addClassCleanup(cls.cr.close)
+
         cls.env = api.Environment(cls.cr, odoo.SUPERUSER_ID, {})
+        cls.addClassCleanup(cls.env.reset)
 
     def setUp(self):
         super(SingleTransactionCase, self).setUp()
         self.env.user.flush()
-
-    @classmethod
-    def tearDownClass(cls):
-        # rollback and close the cursor, and reset the environments
-        cls.registry.clear_caches()
-        cls.env.reset()
-        cls.cr.rollback()
-        cls.cr.close()
-        super(SingleTransactionCase, cls).tearDownClass()
 
 
 savepoint_seq = itertools.count()
@@ -489,20 +587,20 @@ class SavepointCase(SingleTransactionCase):
     the test data either.
     """
     def setUp(self):
-        super(SavepointCase, self).setUp()
-        self._savepoint_id = next(savepoint_seq)
-        self.cr.execute('SAVEPOINT test_%d' % self._savepoint_id)
+        super().setUp()
+
         # restore environments after the test to avoid invoking flush() with an
         # invalid environment (inexistent user id) from another test
         envs = self.env.all.envs
         self.addCleanup(envs.update, list(envs))
         self.addCleanup(envs.clear)
 
-    def tearDown(self):
-        self.cr.execute('ROLLBACK TO SAVEPOINT test_%d' % self._savepoint_id)
-        self.env.clear()
-        self.registry.clear_caches()
-        super(SavepointCase, self).tearDown()
+        self.addCleanup(self.registry.clear_caches)
+        self.addCleanup(self.env.clear)
+
+        self._savepoint_id = next(savepoint_seq)
+        self.cr.execute('SAVEPOINT test_%d' % self._savepoint_id)
+        self.addCleanup(self.cr.execute, 'ROLLBACK TO SAVEPOINT test_%d' % self._savepoint_id)
 
 
 class ChromeBrowserException(Exception):
@@ -854,7 +952,7 @@ class ChromeBrowser():
         full_path = os.path.join(self.screenshots_dir, fname)
         with open(full_path, 'wb') as f:
             f.write(decoded)
-        self._logger.log(25, 'Screenshot in: %s', full_path)
+        self._logger.runbot('Screenshot in: %s', full_path)
 
     def _save_screencast(self, prefix='failed'):
         # could be encododed with something like that
@@ -874,7 +972,7 @@ class ChromeBrowser():
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
         fname = '%s_screencast_%s.mp4' % (prefix, timestamp)
         outfile = os.path.join(self.screencasts_dir, fname)
-        
+
         try:
             ffmpeg_path = find_in_path('ffmpeg')
         except IOError:
@@ -883,11 +981,15 @@ class ChromeBrowser():
         if ffmpeg_path:
             framerate = int(len(self.screencast_frames) / (self.screencast_frames[-1].get('timestamp') - self.screencast_frames[0].get('timestamp')))
             r = subprocess.run([ffmpeg_path, '-framerate', str(framerate), '-i', '%s/frame_%%05d.png' % self.screencasts_frames_dir, outfile])
+<<<<<<< HEAD
             self._logger.log(25, 'Screencast in: %s', outfile)
+=======
+            self._logger.runbot('Screencast in: %s', outfile)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         else:
             outfile = outfile.strip('.mp4')
             shutil.move(self.screencasts_frames_dir, outfile)
-            self._logger.log(25, 'Screencast frames in: %s', outfile)
+            self._logger.runbot('Screencast frames in: %s', outfile)
 
     def start_screencast(self):
         if self.screencasts_dir:
@@ -1078,7 +1180,7 @@ class HttpCase(TransactionCase):
     def __init__(self, methodName='runTest'):
         super(HttpCase, self).__init__(methodName)
         # v8 api with correct xmlrpc exception handling.
-        self.xmlrpc_url = url_8 = 'http://%s:%d/xmlrpc/2/' % (HOST, PORT)
+        self.xmlrpc_url = url_8 = 'http://%s:%d/xmlrpc/2/' % (HOST, odoo.tools.config['http_port'])
         self.xmlrpc_common = xmlrpclib.ServerProxy(url_8 + 'common')
         self.xmlrpc_db = xmlrpclib.ServerProxy(url_8 + 'db')
         self.xmlrpc_object = xmlrpclib.ServerProxy(url_8 + 'object')
@@ -1090,21 +1192,24 @@ class HttpCase(TransactionCase):
         # start browser on demand
         if cls.browser is None:
             cls.browser = ChromeBrowser(cls._logger, cls.browser_size, cls.__name__)
+            cls.addClassCleanup(cls.terminate_browser)
 
     @classmethod
     def terminate_browser(cls):
         if cls.browser:
             cls.browser.stop()
             cls.browser = None
+<<<<<<< HEAD
 
     @classmethod
     def tearDownClass(cls):
         cls.terminate_browser()
         super(HttpCase, cls).tearDownClass()
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     def setUp(self):
         super(HttpCase, self).setUp()
-
         if self.registry_test_mode:
             self.registry.enter_test_mode(self.cr)
             self.addCleanup(self.registry.leave_test_mode)
@@ -1117,13 +1222,13 @@ class HttpCase(TransactionCase):
         self.opener = requests.Session()
         self.opener.cookies['session_id'] = self.session_id
 
-    def url_open(self, url, data=None, files=None, timeout=10, headers=None):
+    def url_open(self, url, data=None, files=None, timeout=10, headers=None, allow_redirects=True):
         self.env['base'].flush()
         if url.startswith('/'):
-            url = "http://%s:%s%s" % (HOST, PORT, url)
+            url = "http://%s:%s%s" % (HOST, odoo.tools.config['http_port'], url)
         if data or files:
-            return self.opener.post(url, data=data, files=files, timeout=timeout, headers=headers)
-        return self.opener.get(url, timeout=timeout, headers=headers)
+            return self.opener.post(url, data=data, files=files, timeout=timeout, headers=headers, allow_redirects=allow_redirects)
+        return self.opener.get(url, timeout=timeout, headers=headers, allow_redirects=allow_redirects)
 
     def _wait_remaining_requests(self, timeout=10):
 
@@ -1186,6 +1291,9 @@ class HttpCase(TransactionCase):
         To signal success test do: console.log('test successful')
         To signal test failure raise an exception or call console.error
         """
+        if not self.env.registry.loaded:
+            self._logger.warning('HttpCase test should be in post_install only')
+
         # increase timeout if coverage is running
         if any(f.filename.endswith('/coverage/execfile.py') for f in inspect.stack()  if f.filename):
             timeout = timeout * 1.5
@@ -1194,13 +1302,16 @@ class HttpCase(TransactionCase):
 
         try:
             self.authenticate(login, login)
-            base_url = "http://%s:%s" % (HOST, PORT)
+            base_url = "http://%s:%s" % (HOST, odoo.tools.config['http_port'])
             ICP = self.env['ir.config_parameter']
             ICP.set_param('web.base.url', base_url)
             # flush updates to the database before launching the client side,
             # otherwise they simply won't be visible
             ICP.flush()
-            url = "%s%s" % (base_url, url_path or '/')
+            if re.match('[a-z]*:', url_path or ''): # about:, http:, ...
+                url = url_path
+            else:
+                url = "%s%s" % (base_url, url_path or '/')
             self._logger.info('Open "%s" in browser', url)
 
             if self.browser.screencasts_dir:
@@ -1245,8 +1356,6 @@ class HttpCase(TransactionCase):
         # database
         self.env.cache.invalidate()
         return res
-
-    phantom_js = browser_js
 
 
 def users(*logins):
@@ -2292,7 +2401,7 @@ class TagsSelector(object):
 
         test_module = getattr(test, 'test_module', None)
         test_class = getattr(test, 'test_class', None)
-        test_tags = test.test_tags | {test_module}  # module as test_tags deprecated, keep for retrocompatibility, 
+        test_tags = test.test_tags | {test_module}  # module as test_tags deprecated, keep for retrocompatibility,
         test_method = getattr(test, '_testMethodName', None)
 
         def _is_matching(test_filter):

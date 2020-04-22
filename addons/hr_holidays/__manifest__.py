@@ -40,10 +40,12 @@ A synchronization with an internal agenda (Meetings of the CRM module) is also p
         'views/mail_activity_views.xml',
 
         'wizard/hr_holidays_summary_employees_views.xml',
+        'wizard/hr_departure_wizard_views.xml',
 
         'report/hr_holidays_templates.xml',
         'report/hr_holidays_reports.xml',
         'report/hr_leave_reports.xml',
+        'report/hr_leave_report_calendar.xml',
 
         'views/hr_views.xml',
         'views/hr_leave_template.xml',

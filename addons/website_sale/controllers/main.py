@@ -302,7 +302,7 @@ class WebsiteSale(http.Controller):
             values['main_object'] = category
         return request.render("website_sale.products", values)
 
-    @http.route(['/shop/product/<model("product.template"):product>'], type='http', auth="public", website=True)
+    @http.route(['/shop/product/<model("product.template"):product>'], type='http', auth="public", website=True, sitemap=True)
     def product(self, product, category='', search='', **kwargs):
         if not product.can_access_from_current_website():
             raise NotFound()
@@ -702,6 +702,7 @@ class WebsiteSale(http.Controller):
                 elif mode[1] == 'shipping':
                     order.partner_shipping_id = partner_id
 
+                # TDE FIXME: don't ever do this
                 order.message_partner_ids = [(4, partner_id), (3, request.website.partner_id.id)]
                 if not errors:
                     return request.redirect(kw.get('callback') or '/shop/confirm_order')
@@ -715,8 +716,8 @@ class WebsiteSale(http.Controller):
             'checkout': values,
             'can_edit_vat': can_edit_vat,
             'country': country,
+            'country_states': country.get_website_sale_states(mode=mode[1]),
             'countries': country.get_website_sale_countries(mode=mode[1]),
-            "states": country.get_website_sale_states(mode=mode[1]),
             'error': errors,
             'callback': kw.get('callback'),
             'only_services': order and order.only_services,
@@ -830,8 +831,7 @@ class WebsiteSale(http.Controller):
         values['acquirers'] = [acq for acq in acquirers if (acq.payment_flow == 'form' and acq.view_template_id) or
                                     (acq.payment_flow == 's2s' and acq.registration_view_template_id)]
         values['tokens'] = request.env['payment.token'].search(
-            [('partner_id', '=', order.partner_id.id),
-            ('acquirer_id', 'in', acquirers.ids)])
+            [('acquirer_id', 'in', acquirers.ids)])
 
         if order:
             values['acq_extra_fees'] = acquirers.get_acquirer_extra_fees(order.amount_total, order.currency_id, order.partner_id.country_id.id)
@@ -1001,8 +1001,7 @@ class WebsiteSale(http.Controller):
         PaymentProcessing.remove_payment_transaction(tx)
         return request.redirect('/shop/confirmation')
 
-
-    @http.route(['/shop/terms'], type='http', auth="public", website=True)
+    @http.route(['/shop/terms'], type='http', auth="public", website=True, sitemap=True)
     def terms(self, **kw):
         return request.render("website_sale.terms")
 
@@ -1244,7 +1243,7 @@ class WebsiteSale(http.Controller):
                     res_product.update(combination_info)
                     res_product['price'] = FieldMonetary.value_to_html(res_product['price'], monetary_options)
                     if rating:
-                        res_product['rating'] = request.env["ir.ui.view"].render_template('website_rating.rating_widget_stars_static', values={
+                        res_product['rating'] = request.env["ir.ui.view"].render_template('portal_rating.rating_widget_stars_static', values={
                             'rating_avg': product.rating_avg,
                             'rating_count': product.rating_count,
                         })

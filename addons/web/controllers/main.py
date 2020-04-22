@@ -26,7 +26,7 @@ import werkzeug.utils
 import werkzeug.wrappers
 import werkzeug.wsgi
 from collections import OrderedDict, defaultdict, Counter
-from werkzeug.urls import url_decode, iri_to_uri
+from werkzeug.urls import url_encode, url_decode, iri_to_uri
 from lxml import etree
 import unicodedata
 
@@ -496,6 +496,9 @@ class HomeStaticTemplateHelpers(object):
         for template_tree in list(all_templates_tree):
             if self.NAME_TEMPLATE_DIRECTIVE in template_tree.attrib:
                 template_name = template_tree.attrib[self.NAME_TEMPLATE_DIRECTIVE]
+                dotted_names = template_name.split('.', 1)
+                if len(dotted_names) > 1 and dotted_names[0] == addon:
+                    template_name = dotted_names[1]
             else:
                 # self.template_dict[addon] grows after processing each template
                 template_name = 'anonymous_template_%s' % len(self.template_dict[addon])
@@ -509,19 +512,19 @@ class HomeStaticTemplateHelpers(object):
                 # After several performance tests, we found out that deepcopy is the most efficient
                 # solution in this case (compared with copy, xpath with '.' and stringifying).
                 parent_tree = copy.deepcopy(self.template_dict[parent_addon][parent_name])
-                parent_tag = parent_tree.tag
-                # replace temporarily the parent tag so it is never the target of the inheritance
-                parent_tree.tag = 't'
+
                 xpaths = list(template_tree)
                 if self.debug and inherit_mode == self.EXTENSION_MODE:
                     for xpath in xpaths:
                         xpath.insert(0, etree.Comment(" Modified by %s from %s " % (template_name, addon)))
+                elif inherit_mode == self.PRIMARY_MODE:
+                    parent_tree.tag = template_tree.tag
                 inherited_template = apply_inheritance_specs(parent_tree, xpaths)
-                inherited_template.tag = parent_tag
 
                 if inherit_mode == self.PRIMARY_MODE:  # New template_tree: A' = B(A)
-                    inherited_template.set(self.NAME_TEMPLATE_DIRECTIVE, template_name)
-                    inherited_template.set(self.STATIC_INHERIT_DIRECTIVE, template_tree.attrib[self.STATIC_INHERIT_DIRECTIVE])
+                    for attr_name, attr_val in template_tree.attrib.items():
+                        if attr_name not in ('t-inherit', 't-inherit-mode'):
+                            inherited_template.set(attr_name, attr_val)
                     if self.debug:
                         self._remove_inheritance_comments(inherited_template)
                     self.template_dict[addon][template_name] = inherited_template
@@ -568,7 +571,7 @@ class HomeStaticTemplateHelpers(object):
         :returns: (concatenation_result, checksum)
         :rtype: (bytes, str)
         """
-        checksum = hashlib.new('sha1')
+        checksum = hashlib.new('sha512')  # sha512/256
         if not file_dict:
             return b'', checksum.hexdigest()
 
@@ -587,7 +590,7 @@ class HomeStaticTemplateHelpers(object):
             for template in addon.values():
                 root.append(template)
 
-        return etree.tostring(root, encoding='utf-8') if root is not None else b'', checksum.hexdigest()
+        return etree.tostring(root, encoding='utf-8') if root is not None else b'', checksum.hexdigest()[:64]
 
     def _get_qweb_templates(self):
         """One and only entry point that gets and evaluates static qweb templates
@@ -864,11 +867,6 @@ class Home(http.Controller):
             ('Cache-Control', 'public, max-age=' + str(CONTENT_MAXAGE)),
         ])
         return response
-
-    @http.route('/web/dbredirect', type='http', auth="none")
-    def web_db_redirect(self, redirect='/', **kw):
-        ensure_db()
-        return werkzeug.utils.redirect(redirect, 303)
 
     def _login_redirect(self, uid, redirect=None):
         return redirect if redirect else '/web'
@@ -1200,12 +1198,12 @@ class Session(http.Controller):
         try:
             if request.env['res.users'].change_password(old_password, new_password):
                 return {'new_password':new_password}
-        except UserError as e:
-            msg = e.name
         except AccessDenied as e:
             msg = e.args[0]
             if msg == AccessDenied().args[0]:
                 msg = _('The old password you provided is incorrect, your password was not changed.')
+        except UserError as e:
+            msg = e.args[0]
         return {'title': _('Change Password'), 'error': msg}
 
     @http.route('/web/session/get_lang_list', type='json', auth="none")
@@ -1261,7 +1259,7 @@ class Session(http.Controller):
             'state': json.dumps({'d': request.db, 'u': ICP.get_param('web.base.url')}),
             'scope': 'userinfo',
         }
-        return 'https://accounts.odoo.com/oauth2/auth?' + werkzeug.url_encode(params)
+        return 'https://accounts.odoo.com/oauth2/auth?' + url_encode(params)
 
     @http.route('/web/session/destroy', type='json', auth="user")
     def destroy(self):
@@ -1368,8 +1366,10 @@ class View(http.Controller):
 
 class Binary(http.Controller):
 
-    def placeholder(self, image='placeholder.png'):
-        with tools.file_open(get_resource_path('web', 'static/src/img', image), 'rb') as fd:
+    @staticmethod
+    def placeholder(image='placeholder.png'):
+        image_path = image.lstrip('/').split('/') if '/' in image else ['web', 'static', 'src', 'img', image]
+        with tools.file_open(get_resource_path(*image_path), 'rb') as fd:
             return fd.read()
 
     @http.route(['/web/content',
@@ -1439,20 +1439,46 @@ class Binary(http.Controller):
     def _content_image(self, xmlid=None, model='ir.attachment', id=None, field='datas',
                        filename_field='name', unique=None, filename=None, mimetype=None,
                        download=None, width=0, height=0, crop=False, quality=0, access_token=None,
-                       placeholder='placeholder.png', **kwargs):
+                       placeholder=None, **kwargs):
         status, headers, image_base64 = request.env['ir.http'].binary_content(
             xmlid=xmlid, model=model, id=id, field=field, unique=unique, filename=filename,
             filename_field=filename_field, download=download, mimetype=mimetype,
             default_mimetype='image/png', access_token=access_token)
 
+        return Binary._content_image_get_response(
+            status, headers, image_base64, model=model, id=id, field=field, download=download,
+            width=width, height=height, crop=crop, quality=quality,
+            placeholder=placeholder)
+
+    @staticmethod
+    def _content_image_get_response(
+            status, headers, image_base64, model='ir.attachment', id=None,
+            field='datas', download=None, width=0, height=0, crop=False,
+            quality=0, placeholder='placeholder.png'):
         if status in [301, 304] or (status != 200 and download):
             return request.env['ir.http']._response_by_status(status, headers, image_base64)
         if not image_base64:
+<<<<<<< HEAD
+=======
+            if placeholder is None and model in request.env:
+                # Try to browse the record in case a specific placeholder
+                # is supposed to be used. (eg: Unassigned users on a task)
+                record = request.env[model].browse(int(id)) if id else request.env[model]
+                placeholder_filename = record._get_placeholder_filename(field=field)
+                placeholder_content = Binary.placeholder(image=placeholder_filename)
+            else:
+                placeholder_content = Binary.placeholder()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             # Since we set a placeholder for any missing image, the status must be 200. In case one
             # wants to configure a specific 404 page (e.g. though nginx), a 404 status will cause
             # troubles.
             status = 200
+<<<<<<< HEAD
             image_base64 = base64.b64encode(self.placeholder(image=placeholder))
+=======
+            image_base64 = base64.b64encode(placeholder_content)
+
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             if not (width or height):
                 width, height = odoo.tools.image_guess_size_from_field_name(field)
 
@@ -1476,7 +1502,7 @@ class Binary(http.Controller):
 
     @http.route('/web/binary/upload', type='http', auth="user")
     @serialize_exception
-    def upload(self, callback, ufile):
+    def upload(self, ufile, callback=None):
         # TODO: might be useful to have a configuration flag for max-length file uploads
         out = """<script language="javascript" type="text/javascript">
                     var win = window.top.window;
@@ -1488,11 +1514,11 @@ class Binary(http.Controller):
                     ufile.content_type, base64.b64encode(data)]
         except Exception as e:
             args = [False, str(e)]
-        return out % (json.dumps(callback), json.dumps(args))
+        return out % (json.dumps(callback), json.dumps(args)) if callback else json.dumps(args)
 
     @http.route('/web/binary/upload_attachment', type='http', auth="user")
     @serialize_exception
-    def upload_attachment(self, callback, model, id, ufile):
+    def upload_attachment(self, model, id, ufile, callback=None):
         files = request.httprequest.files.getlist('ufile')
         Model = request.env['ir.attachment']
         out = """<script language="javascript" type="text/javascript">
@@ -1511,7 +1537,7 @@ class Binary(http.Controller):
             try:
                 attachment = Model.create({
                     'name': filename,
-                    'datas': base64.encodestring(ufile.read()),
+                    'datas': base64.encodebytes(ufile.read()),
                     'res_model': model,
                     'res_id': int(id)
                 })
@@ -1526,7 +1552,7 @@ class Binary(http.Controller):
                     'id': attachment.id,
                     'size': attachment.file_size
                 })
-        return out % (json.dumps(callback), json.dumps(args))
+        return out % (json.dumps(callback), json.dumps(args)) if callback else json.dumps(args)
 
     @http.route([
         '/web/binary/company_logo',
@@ -1972,7 +1998,7 @@ class ReportController(http.Controller):
     # Misc. route utils
     #------------------------------------------------------
     @http.route(['/report/barcode', '/report/barcode/<type>/<path:value>'], type='http', auth="public")
-    def report_barcode(self, type, value, width=600, height=100, humanreadable=0, quiet=1):
+    def report_barcode(self, type, value, width=600, height=100, humanreadable=0, quiet=1, mask=None):
         """Contoller able to render barcode images thanks to reportlab.
         Samples:
             <img t-att-src="'/report/barcode/QR/%s' % o.name"/>
@@ -1986,10 +2012,13 @@ class ReportController(http.Controller):
         at the bottom of the output image
         :param quiet: Accepted values: 0 (default) or 1. 1 will display white
         margins on left and right.
+        :param mask: The mask code to be used when rendering this QR-code.
+                     Masks allow adding elements on top of the generated image,
+                     such as the Swiss cross in the center of QR-bill codes.
         """
         try:
             barcode = request.env['ir.actions.report'].barcode(type, value, width=width,
-                height=height, humanreadable=humanreadable, quiet=quiet)
+                height=height, humanreadable=humanreadable, quiet=quiet, mask=mask)
         except (ValueError, AttributeError):
             raise werkzeug.exceptions.HTTPException(description='Cannot convert into barcode.')
 

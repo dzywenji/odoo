@@ -8,10 +8,7 @@ import logging
 import requests
 from werkzeug import urls
 
-from odoo import api, fields, models, registry, _
-from odoo.exceptions import UserError
-from odoo.http import request
-
+from odoo import api, fields, models, _
 
 _logger = logging.getLogger(__name__)
 
@@ -22,8 +19,7 @@ GOOGLE_TOKEN_ENDPOINT = 'https://accounts.google.com/o/oauth2/token'
 GOOGLE_API_BASE_URL = 'https://www.googleapis.com'
 
 
-# FIXME : this needs to become an AbstractModel, to be inhereted by google_calendar_service and google_drive_service
-class GoogleService(models.TransientModel):
+class GoogleService(models.AbstractModel):
     _name = 'google.service'
     _description = 'Google Service'
 
@@ -96,7 +92,7 @@ class GoogleService(models.TransientModel):
         return "%s?%s" % (GOOGLE_AUTH_ENDPOINT, encoded_params)
 
     @api.model
-    def _get_google_token_json(self, authorize_code, service):
+    def _get_google_tokens(self, authorize_code, service):
         """ Call Google API to exchange authorization code against token, with POST request, to
             not be redirected.
         """
@@ -114,12 +110,16 @@ class GoogleService(models.TransientModel):
             'redirect_uri': base_url + '/google_account/authentication'
         }
         try:
-            dummy, response, dummy = self._do_request(GOOGLE_TOKEN_ENDPOINT, params=data, headers=headers, type='POST', preuri='')
-            return response
+            dummy, response, dummy = self._do_request(GOOGLE_TOKEN_ENDPOINT, params=data, headers=headers, method='POST', preuri='')
+            access_token = response.get('access_token')
+            refresh_token = response.get('refresh_token')
+            ttl = response.get('expires_in')
+            return access_token, refresh_token, ttl
         except requests.HTTPError:
             error_msg = _("Something went wrong during your token generation. Maybe your Authorization Code is invalid")
             raise self.env['res.config.settings'].get_config_warning(error_msg)
 
+<<<<<<< HEAD
     # FIXME : this method update a field defined in google_calendar module. Since it is used only in that module, maybe it should be moved.
     @api.model
     def _refresh_google_token_json(self, refresh_token, service):  # exchange_AUTHORIZATION vs Token (service = calendar)
@@ -151,25 +151,32 @@ class GoogleService(models.TransientModel):
             raise self.env['res.config.settings'].get_config_warning(error_msg)
 
     # TODO JEM : remove preuri param, and rename type into method
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     @api.model
-    def _do_request(self, uri, params={}, headers={}, type='POST', preuri="https://www.googleapis.com"):
+    def _do_request(self, uri, params=None, headers=None, method='POST', preuri="https://www.googleapis.com", timeout=TIMEOUT):
         """ Execute the request to Google API. Return a tuple ('HTTP_CODE', 'HTTP_RESPONSE')
             :param uri : the url to contact
             :param params : dict or already encoded parameters for the request to make
             :param headers : headers of request
-            :param type : the method to use to make the request
+            :param method : the method to use to make the request
             :param preuri : pre url to prepend to param uri.
         """
-        _logger.debug("Uri: %s - Type : %s - Headers: %s - Params : %s !", (uri, type, headers, params))
+        if params is None:
+            params = {}
+        if headers is None:
+            headers = {}
+
+        _logger.debug("Uri: %s - Type : %s - Headers: %s - Params : %s !", (uri, method, headers, params))
 
         ask_time = fields.Datetime.now()
         try:
-            if type.upper() in ('GET', 'DELETE'):
-                res = requests.request(type.lower(), preuri + uri, params=params, timeout=TIMEOUT)
-            elif type.upper() in ('POST', 'PATCH', 'PUT'):
-                res = requests.request(type.lower(), preuri + uri, data=params, headers=headers, timeout=TIMEOUT)
+            if method.upper() in ('GET', 'DELETE'):
+                res = requests.request(method.lower(), preuri + uri, params=params, timeout=timeout)
+            elif method.upper() in ('POST', 'PATCH', 'PUT'):
+                res = requests.request(method.lower(), preuri + uri, data=params, headers=headers, timeout=timeout)
             else:
-                raise Exception(_('Method not supported [%s] not in [GET, POST, PUT, PATCH or DELETE]!') % (type))
+                raise Exception(_('Method not supported [%s] not in [GET, POST, PUT, PATCH or DELETE]!') % (method))
             res.raise_for_status()
             status = res.status_code
 
@@ -188,12 +195,5 @@ class GoogleService(models.TransientModel):
                 response = ""
             else:
                 _logger.exception("Bad google request : %s !", error.response.content)
-                if error.response.status_code in (400, 401, 410):
-                    raise error
-                raise self.env['res.config.settings'].get_config_warning(_("Something went wrong with your request to google"))
+                raise error
         return (status, response, ask_time)
-
-    # TODO : remove me, it is only used in google calendar. Make google_calendar use the constants
-    @api.model
-    def get_client_id(self, service):
-        return self.env['ir.config_parameter'].sudo().get_param('google_%s_client_id' % (service,), default=False)

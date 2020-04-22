@@ -58,14 +58,19 @@
         <record id="res_partner_bank_rule" model="ir.rule">
             <field name="name">Partner bank company rule</field>
             <field name="model_id" ref="model_res_partner_bank"/>
-            <field name="global" eval="True"/>
-                <field name="domain_force">['|', ('company_id', 'in', company_ids), ('company_id', '=', False)]</field>
+            <field name="domain_force">['|', ('company_id', 'in', company_ids), ('company_id', '=', False)]</field>
         </record>
 
         <record id="res_currency_rate_rule" model="ir.rule">
             <field name="name">multi-company currency rate rule</field>
             <field name="model_id" ref="model_res_currency_rate"/>
             <field name="domain_force">['|',('company_id','=',False),('company_id', 'in', company_ids)]</field>
+        </record>
+
+        <record id="change_password_rule" model="ir.rule">
+            <field name="name">change user password rule</field>
+            <field name="model_id" ref="model_change_password_user"/>
+            <field name="domain_force">[('create_uid', '=', user.id)]</field>
         </record>
 
         <!-- Security restriction for private addresses -->

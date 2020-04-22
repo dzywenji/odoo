@@ -576,6 +576,7 @@ msgid ""
 "                                   - fill the 'bank account' field of the invoice with the postal to be used to receive the related payment. A default account will be automatically set for all invoices created after you defined a postal account for your company."
 msgstr ""
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 #. module: l10n_ch
@@ -594,3 +595,5 @@ msgstr ""
 msgid "type: [(name, amount, base, formated amount, formated base)]"
 msgstr ""
 >>>>>>> 0a171090c7e... temp
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

@@ -33,6 +33,10 @@ class ImLivechatChannel(models.Model):
     default_message = fields.Char('Welcome Message', default='How may I help you?',
         help="This is an automated 'welcome' message that your visitor will see when they initiate a new conversation.")
     input_placeholder = fields.Char('Chat Input Placeholder', help='Text that prompts the user to initiate the chat.')
+    header_background_color = fields.Char(default="#875A7B", help="Default background color of the channel header once open")
+    title_color = fields.Char(default="#FFFFFF", help="Default title color of the channel once open")
+    button_background_color = fields.Char(default="#878787", help="Default background color of the Livechat button")
+    button_text_color = fields.Char(default="#FFFFFF", help="Default text color of the Livechat button")
 
     # computed fields
     web_page = fields.Char('Web Page', compute='_compute_web_page_link', store=False, readonly=True,
@@ -70,8 +74,15 @@ class ImLivechatChannel(models.Model):
 
     @api.depends('channel_ids')
     def _compute_nbr_channel(self):
+<<<<<<< HEAD
         data = self.env['mail.channel'].read_group([('livechat_channel_id', 'in', self._ids)], ['__count'], ['livechat_channel_id'], lazy=False)
         channel_count = {x['livechat_channel_id'][0]: x['__count'] for x in data}
+=======
+        channels = self.env['mail.channel'].search([('livechat_channel_id', 'in', self.ids)])
+        channel_count = dict.fromkeys(self.ids, 0)
+        for channel in channels.filtered(lambda c: c.channel_message_ids):
+            channel_count[channel.livechat_channel_id.id] += 1
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         for record in self:
             record.nbr_channel = channel_count.get(record.id, 0)
 
@@ -117,6 +128,7 @@ class ImLivechatChannel(models.Model):
                 channel_partner_to_add.append((4, visitor_user.partner_id.id))
         return {
             'channel_partner_ids': channel_partner_to_add,
+            'livechat_active': True,
             'livechat_operator_id': operator_partner_id,
             'livechat_channel_id': self.id,
             'anonymous_name': False if user_id else anonymous_name,
@@ -177,9 +189,9 @@ class ImLivechatChannel(models.Model):
             FROM mail_channel c
             LEFT OUTER JOIN mail_message_mail_channel_rel r ON c.id = r.mail_channel_id
             LEFT OUTER JOIN mail_message m ON r.mail_message_id = m.id
-            WHERE m.create_date > ((now() at time zone 'UTC') - interval '30 minutes')
-            AND c.channel_type = 'livechat'
+            WHERE c.channel_type = 'livechat' 
             AND c.livechat_operator_id in %s
+            AND m.create_date > ((now() at time zone 'UTC') - interval '30 minutes')
             GROUP BY c.livechat_operator_id
             ORDER BY COUNT(DISTINCT c.id) asc""", (tuple(operators.mapped('partner_id').ids),))
         active_channels = self.env.cr.dictfetchall()
@@ -204,6 +216,10 @@ class ImLivechatChannel(models.Model):
         self.ensure_one()
 
         return {
+            'header_background_color': self.header_background_color,
+            'button_background_color': self.button_background_color,
+            'title_color': self.title_color,
+            'button_text_color': self.button_text_color,
             'button_text': self.button_text,
             'input_placeholder': self.input_placeholder,
             'default_message': self.default_message,

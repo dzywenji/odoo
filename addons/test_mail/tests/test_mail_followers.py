@@ -4,11 +4,15 @@
 from psycopg2 import IntegrityError
 
 from odoo.tests import tagged
+<<<<<<< HEAD
 from odoo.addons.test_mail.tests import common
+=======
+from odoo.addons.test_mail.tests.common import TestMailCommon
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 from odoo.tools.misc import mute_logger
 
 
-class BaseFollowersTest(common.BaseFunctionalTest):
+class BaseFollowersTest(TestMailCommon):
 
     @classmethod
     def setUpClass(cls):
@@ -128,7 +132,7 @@ class BaseFollowersTest(common.BaseFunctionalTest):
         )
 
 
-class AdvancedFollowersTest(common.BaseFunctionalTest):
+class AdvancedFollowersTest(TestMailCommon):
     @classmethod
     def setUpClass(cls):
         super(AdvancedFollowersTest, cls).setUpClass()
@@ -219,7 +223,11 @@ class AdvancedFollowersTest(common.BaseFunctionalTest):
 
 
 @tagged('post_install', '-at_install')
+<<<<<<< HEAD
 class DuplicateNotificationTest(common.BaseFunctionalTest):
+=======
+class DuplicateNotificationTest(TestMailCommon):
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     def test_no_duplicate_notification(self):
         """
         Check that we only create one mail.notification per partner

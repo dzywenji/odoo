@@ -6,17 +6,14 @@ import io
 import re
 import logging
 import email
+import email.policy
 import dateutil
 import pytz
 import base64
-try:
-    from xmlrpc import client as xmlrpclib
-except ImportError:
-    import xmlrpclib
-
 
 from lxml import etree
 from datetime import datetime
+from xmlrpc import client as xmlrpclib
 
 from odoo import api, fields, models, tools, _
 from odoo.exceptions import ValidationError, UserError
@@ -74,7 +71,7 @@ class FetchmailServer(models.Model):
                         message = bytes(message.data)
                     if isinstance(message, str):
                         message = message.encode('utf-8')
-                    msg_txt = email.message_from_bytes(message)
+                    msg_txt = email.message_from_bytes(message, policy=email.policy.SMTP)
 
                     try:
                         self._attachment_invoice(msg_txt)
@@ -98,7 +95,7 @@ class FetchmailServer(models.Model):
     def _attachment_invoice(self, msg_txt):
         parsed_values = self.env['mail.thread']._message_parse_extract_payload(msg_txt)
         body, attachments = parsed_values['body'], parsed_values['attachments']
-        from_address = tools.decode_smtp_header(msg_txt.get('from'))
+        from_address = msg_txt.get('from')
         for attachment in attachments:
             split_attachment = attachment.fname.rpartition('.')
             if len(split_attachment) < 3:
@@ -134,7 +131,7 @@ class FetchmailServer(models.Model):
 
         invoice_attachment = self.env['ir.attachment'].create({
                 'name': att_name,
-                'datas': base64.encodestring(att_content),
+                'datas': base64.encodebytes(att_content),
                 'type': 'binary',
                 })
 
@@ -243,11 +240,10 @@ class FetchmailServer(models.Model):
             related_invoice.message_post(
                 body=(_("Errors in the E-Invoice :<br/>%s") % (error))
             )
-            activity_vals = {
-                'activity_type_id': self.env.ref('mail.mail_activity_data_todo').id,
-                'invoice_user_id': related_invoice.invoice_user_id.id if related_invoice.invoice_user_id else self.env.user.id
-            }
-            related_invoice.activity_schedule(summary='Rejection notice', **activity_vals)
+            related_invoice.activity_schedule(
+                'mail.mail_activity_data_todo',
+                summary='Rejection notice',
+                user_id=related_invoice.invoice_user_id.id if related_invoice.invoice_user_id else self.env.user.id)
 
         elif receipt_type == 'MC':
             # Failed delivery notice
@@ -303,11 +299,10 @@ class FetchmailServer(models.Model):
                 body=(_("Outcome notice: %s<br/>%s") % (related_invoice.l10n_it_send_state, info))
             )
             if related_invoice.l10n_it_send_state == 'delivered_refused':
-                activity_vals = {
-                    'activity_type_id': self.env.ref('mail.mail_activity_data_todo').id,
-                    'invoice_user_id': related_invoice.invoice_user_id.id if related_invoice.invoice_user_id else self.env.user.id
-                }
-                related_invoice.activity_schedule(summary='Outcome notice: Refused', **activity_vals)
+                related_invoice.activity_schedule(
+                    'mail.mail_activity_todo',
+                    user_id=related_invoice.invoice_user_id.id if related_invoice.invoice_user_id else self.env.user.id,
+                    summary='Outcome notice: Refused')
 
         # elif receipt_type == 'MT':
             # Metadata file

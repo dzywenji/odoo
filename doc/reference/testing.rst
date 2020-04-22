@@ -56,17 +56,22 @@ related to testing Odoo content (modules, mainly):
 .. autoclass:: odoo.tests.common.SavepointCase
 
 .. autoclass:: odoo.tests.common.HttpCase
-    :members: browse_ref, ref, url_open, phantom_js
+    :members: browse_ref, ref, url_open, browser_js
 
 .. autofunction:: odoo.tests.common.tagged
 
 By default, tests are run once right after the corresponding module has been
 installed. Test cases can also be configured to run after all modules have
-been installed, and not run right after the module installation:
+been installed, and not run right after the module installation::
 
-.. autofunction:: odoo.tests.common.at_install
+  # coding: utf-8
+  from odoo.tests import HttpCase, tagged
 
-.. autofunction:: odoo.tests.common.post_install
+  # This test should only be executed after all modules have been installed.
+  @tagged('-at_install', 'post_install')
+  class WebsiteVisitorTests(HttpCase):
+    def test_create_visitor_on_tracked_page(self):
+        Page = self.env['website.page']
 
 The most common situation is to use
 :class:`~odoo.tests.common.TransactionCase` and test a property of a model
@@ -302,13 +307,15 @@ Testing Infrastructure
 Here is a high level overview of the most important parts of the testing
 infrastructure:
 
-- there is an asset bundle named `web.js_tests_assets`_.  This bundle contains
+- there is an asset bundle named `web.qunit_suite`_.  This bundle contains
   the main code (assets common + assets backend), some libraries, the QUnit test
-  runner, and some additional helper code
+  runner and the test bundles listed below.
 
-- another asset bundle, `web.qunit_suite`_, contains all the tests (and the
-  js_tests_assets code).  Almost all the test files should be added to this
-  bundle
+- a bundle named `web.tests_assets`_ includes most of the assets and utils required
+  by the test suite: custom QUnit asserts, test helpers, lazy loaded assets, etc.
+
+- another asset bundle, `web.qunit_suite_tests`_, contains all the test scripts.
+  This is typically where the test files are added to the suite.
 
 - there is a `controller`_ in web, mapped to the route */web/tests*. This controller
   simply renders the *web.qunit_suite* template.
@@ -321,7 +328,7 @@ infrastructure:
 
 - we want the runbot to also run these tests, so there is a test (in `test_js.py`_)
   which simply spawns a browser and points it to the *web/tests* url.  Note that
-  the phantom_js method does not spawn phantom_js, but Chrome headless instead.
+  the browser_js method spawns a Chrome headless instance.
 
 
 Modularity and testing
@@ -375,7 +382,7 @@ the following:
 
         <?xml version="1.0" encoding="utf-8"?>
         <odoo>
-            <template id="qunit_suite" name="my addon tests" inherit_id="web.qunit_suite">
+            <template id="qunit_suite_tests" name="my addon tests" inherit_id="web.qunit_suite_tests">
                 <xpath expr="//script[last()]" position="after">
                     <script type="text/javascript" src="/my_addon/static/tests/utils_tests.js"/>
                 </xpath>
@@ -501,7 +508,7 @@ Testing Python code and JS code separately is very useful, but it does not prove
 that the web client and the server work together.  In order to do that, we can
 write another kind of test: tours.  A tour is a mini scenario of some interesting
 business flow.  It explains a sequence of steps that should be followed.  The
-test runner will then create a phantom_js browser, point it to the proper url
+test runner will then create a Chrome headless browser, point it to the proper url
 and simulate the click and inputs, according to the scenario.
 
 Screenshots and screencasts during browser_js tests
@@ -521,8 +528,9 @@ Two new command line arguments were added since Odoo 13.0 to control this behavi
 
 .. _qunit: https://qunitjs.com/
 .. _qunit_config.js: https://github.com/odoo/odoo/blob/51ee0c3cb59810449a60dae0b086b49b1ed6f946/addons/web/static/tests/helpers/qunit_config.js#L49
-.. _web.js_tests_assets: https://github.com/odoo/odoo/blob/51ee0c3cb59810449a60dae0b086b49b1ed6f946/addons/web/views/webclient_templates.xml#L427
-.. _web.qunit_suite: https://github.com/odoo/odoo/blob/51ee0c3cb59810449a60dae0b086b49b1ed6f946/addons/web/views/webclient_templates.xml#L509
+.. _web.tests_assets: https://github.com/odoo/odoo/blob/51ee0c3cb59810449a60dae0b086b49b1ed6f946/addons/web/views/webclient_templates.xml#L594
+.. _web.qunit_suite: https://github.com/odoo/odoo/blob/51ee0c3cb59810449a60dae0b086b49b1ed6f946/addons/web/views/webclient_templates.xml#L660
+.. _web.qunit_suite_tests: https://github.com/odoo/odoo/blob/51ee0c3cb59810449a60dae0b086b49b1ed6f946/addons/web/views/webclient_templates.xml#L680
 .. _controller: https://github.com/odoo/odoo/blob/51ee0c3cb59810449a60dae0b086b49b1ed6f946/addons/web/controllers/main.py#L637
 .. _test_js.py: https://github.com/odoo/odoo/blob/51ee0c3cb59810449a60dae0b086b49b1ed6f946/addons/web/tests/test_js.py#L13
 .. _test_utils.js: https://github.com/odoo/odoo/blob/51ee0c3cb59810449a60dae0b086b49b1ed6f946/addons/web/static/tests/helpers/test_utils.js

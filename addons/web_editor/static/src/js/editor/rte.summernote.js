@@ -1,21 +1,26 @@
 odoo.define('web_editor.rte.summernote', function (require) {
 'use strict';
 
-var ajax = require('web.ajax');
 var Class = require('web.Class');
+const concurrency = require('web.concurrency');
 var core = require('web.core');
-var ColorpickerDialog = require('web.ColorpickerDialog');
+// Use the top window's core.bus for dialog events so that they take the whole window
+// instead of being confined to an iframe. This means that the event triggered on
+// the bus by summernote in an iframe will be caught by the wysiwyg's SummernoteManager
+// outside the iframe.
+const topBus = window.top.odoo.__DEBUG__.services['web.core'].bus;
+const ColorpickerDialog = require('web.ColorpickerDialog');
+var ColorPaletteWidget = require('web_editor.ColorPalette').ColorPaletteWidget;
 var mixins = require('web.mixins');
 const session = require('web.session');
 var fonts = require('wysiwyg.fonts');
-var weContext = require('web_editor.context');
 var rte = require('web_editor.rte');
 var ServicesMixin = require('web.ServicesMixin');
 var weWidgets = require('wysiwyg.widgets');
 
-var QWeb = core.qweb;
 var _t = core._t;
 
+<<<<<<< HEAD
 session.is_bound.then(() => {
     if (session.is_website_user) {
         return;
@@ -32,6 +37,8 @@ session.is_bound.then(() => {
     });
 });
 
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 // Summernote Lib (neek change to make accessible: method and object)
 var dom = $.summernote.core.dom;
 var range = $.summernote.core.range;
@@ -42,28 +49,14 @@ var tplButton = renderer.getTemplate().button;
 var tplIconButton = renderer.getTemplate().iconButton;
 var tplDropdown = renderer.getTemplate().dropdown;
 
-function _rgbToHex(cssColor) {
-    var rgba = cssColor.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+(?:\.\d+)?))?\)$/);
-    if (!rgba) {
-        return cssColor;
-    }
-    if (rgba[4]) {
-        return cssColor;
-    }
-    var hex = ColorpickerDialog.convertRgbToHex(
-        parseInt(rgba[1]),
-        parseInt(rgba[2]),
-        parseInt(rgba[3])
-    );
-    if (!hex) {
-        return cssColor; // TODO handle error
-    }
-    return hex.hex.toUpperCase();
-}
+var applyColor = function (target, eventName, color) {
+    var layoutInfo = dom.makeLayoutInfo(target);
+    $.summernote.pluginEvents[eventName](undefined, eventHandler.modules.editor, layoutInfo, color);
+};
 
 // Update and change the popovers content, and add history button
-var fn_createPalette = renderer.createPalette;
 renderer.createPalette = function ($container, options) {
+<<<<<<< HEAD
     fn_createPalette.call(this, $container, options);
 
     const $clpicker = QWeb.has_template('web_editor.colorpicker')
@@ -143,6 +136,52 @@ renderer.createPalette = function ($container, options) {
         var $el = $(this);
         var className = $el.hasClass('o_custom_color') ? $el.data('color') : 'bg-' + $el.data('color');
         $el.attr('data-event', 'backColor').attr('data-value', className).addClass($el.hasClass('o_custom_color') ? '' : className);
+=======
+    const $dropdownContent = $container.find(".colorPalette");
+    // The editor's root widget can be website or web's root widget and cannot be properly retrieved...
+    const parent = odoo.__DEBUG__.services['root.widget'];
+    _.each($dropdownContent, elem => {
+        const eventName = elem.dataset.eventName;
+        let colorpicker = null;
+        const mutex = new concurrency.MutexedDropPrevious();
+        const $dropdown = $(elem).closest('.btn-group, .dropdown');
+        let manualOpening = false;
+        $dropdown.on('show.bs.dropdown', () => {
+            if (manualOpening) {
+                return true;
+            }
+            mutex.exec(() => {
+                const oldColorpicker = colorpicker;
+                const hookEl = oldColorpicker ? oldColorpicker.el : elem;
+
+                const r = range.create();
+                const targetNode = r.sc;
+                const targetElement = targetNode.nodeType === Node.ELEMENT_NODE ? targetNode : targetNode.parentNode;
+                colorpicker = new ColorPaletteWidget(parent, {
+                    excluded: ['transparent_grayscale'],
+                    $editable: rte.Class.prototype.editable(), // Our parent is the root widget, we can't retrieve the editable section from it...
+                    selectedColor: $(targetElement).css(eventName === "foreColor" ? 'color' : 'backgroundColor'),
+                });
+                colorpicker.on('color_picked', null, ev => {
+                    let color = ev.data.color;
+                    if (!ColorpickerDialog.isCSSColor(color)) {
+                        color = (eventName === "foreColor" ? 'text-' : 'bg-') + color;
+                    }
+                    applyColor(ev.data.target, eventName, color);
+                });
+                colorpicker.on('color_reset', null, ev => applyColor(ev.data.target, eventName, 'inherit'));
+                return colorpicker.replace(hookEl).then(() => {
+                    if (oldColorpicker) {
+                        oldColorpicker.destroy();
+                    }
+                    manualOpening = true;
+                    $dropdown.children('.dropdown-toggle').dropdown('show');
+                    manualOpening = false;
+                });
+            });
+            return false;
+        });
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     });
 };
 
@@ -299,8 +338,6 @@ eventHandler.modules.popover.button.update = function ($container, oStyle) {
         $(oStyle.image).addClass('o_we_selected_image');
 
         if (dom.isImgFont(oStyle.image)) {
-            $container.find('[data-event="customColor"][data-value="foreColor"]').attr('data-color', $(oStyle.image).css('color'));
-            $container.find('[data-event="customColor"][data-value="backColor"]').attr('data-color', $(oStyle.image).css('background-color'));
             $container.find('.note-fore-color-preview > button').css('border-bottom-color', $(oStyle.image).css('color'));
             $container.find('.note-back-color-preview > button').css('border-bottom-color', $(oStyle.image).css('background-color'));
 
@@ -343,8 +380,6 @@ eventHandler.modules.popover.button.update = function ($container, oStyle) {
 
         $(oStyle.image).trigger('attributes_change');
     } else {
-        $container.find('[data-event="customColor"][data-value="foreColor"]').attr('data-color', oStyle.color);
-        $container.find('[data-event="customColor"][data-value="backColor"]').attr('data-color', oStyle['background-color']);
         $container.find('.note-fore-color-preview > button').css('border-bottom-color', oStyle.color);
         $container.find('.note-back-color-preview > button').css('border-bottom-color', oStyle['background-color']);
     }
@@ -467,7 +502,7 @@ eventHandler.modules.linkDialog.showLinkDialog = function ($editable, $dialog, l
     }
 
     var def = new $.Deferred();
-    core.bus.trigger('link_dialog_demand', {
+    topBus.trigger('link_dialog_demand', {
         $editable: $editable,
         linkInfo: linkInfo,
         onSave: function (linkInfo) {
@@ -489,7 +524,7 @@ eventHandler.modules.imageDialog.showImageDialog = function ($editable) {
     var media = $(r.sc).parents().addBack().filter(function (i, el) {
         return dom.isImg(el);
     })[0];
-    core.bus.trigger('media_dialog_demand', {
+    topBus.trigger('media_dialog_demand', {
         $editable: $editable,
         media: media,
         options: {
@@ -509,34 +544,15 @@ eventHandler.modules.imageDialog.showImageDialog = function ($editable) {
 $.summernote.pluginEvents.alt = function (event, editor, layoutInfo, sorted) {
     var $editable = layoutInfo.editable();
     var $selection = layoutInfo.handle().find('.note-control-selection');
-    core.bus.trigger('alt_dialog_demand', {
+    topBus.trigger('alt_dialog_demand', {
         $editable: $editable,
         media: $selection.data('target'),
-    });
-};
-$.summernote.pluginEvents.customColor = function (event, editor, layoutInfo, customColor) {
-    var defaultColor = event.target.dataset.color;
-    core.bus.trigger('color_picker_dialog_demand', {
-        color: defaultColor === 'rgba(0, 0, 0, 0)' ? 'rgb(255, 0, 0)' : defaultColor,
-        onSave: function (color) {
-            var $palettes = $(event.currentTarget).find('.note-custom-color-palette > .note-color-row')
-                .append(('<button type="button" class="note-color-btn" data-value="' + color + '" style="background-color:' + color + ';" />'));
-            $palettes.filter(':odd').find('button:not([data-event])').attr('data-event', 'backColor');
-            $palettes.filter(':even').find('button:not([data-event])').attr('data-event', 'foreColor');
-            if (customColor === 'foreColor') {
-                $(event.currentTarget).find('.note-fore-color-preview > button').css('border-bottom-color', color);
-                $.summernote.pluginEvents.foreColor(event, editor, layoutInfo, color);
-            } else {
-                $(event.currentTarget).find('.note-back-color-preview > button').css('border-bottom-color', color);
-                $.summernote.pluginEvents.backColor(event, editor, layoutInfo, color);
-            }
-        }
     });
 };
 $.summernote.pluginEvents.cropImage = function (event, editor, layoutInfo, sorted) {
     var $editable = layoutInfo.editable();
     var $selection = layoutInfo.handle().find('.note-control-selection');
-    core.bus.trigger('crop_image_dialog_demand', {
+    topBus.trigger('crop_image_dialog_demand', {
         $editable: $editable,
         media: $selection.data('target'),
     });
@@ -1150,11 +1166,10 @@ var SummernoteManager = Class.extend(mixins.EventDispatcherMixin, ServicesMixin,
         mixins.EventDispatcherMixin.init.call(this);
         this.setParent(parent);
 
-        core.bus.on('alt_dialog_demand', this, this._onAltDialogDemand);
-        core.bus.on('color_picker_dialog_demand', this, this._onColorPickerDialogDemand);
-        core.bus.on('crop_image_dialog_demand', this, this._onCropImageDialogDemand);
-        core.bus.on('link_dialog_demand', this, this._onLinkDialogDemand);
-        core.bus.on('media_dialog_demand', this, this._onMediaDialogDemand);
+        topBus.on('alt_dialog_demand', this, this._onAltDialogDemand);
+        topBus.on('crop_image_dialog_demand', this, this._onCropImageDialogDemand);
+        topBus.on('link_dialog_demand', this, this._onLinkDialogDemand);
+        topBus.on('media_dialog_demand', this, this._onMediaDialogDemand);
     },
     /**
      * @override
@@ -1162,11 +1177,60 @@ var SummernoteManager = Class.extend(mixins.EventDispatcherMixin, ServicesMixin,
     destroy: function () {
         mixins.EventDispatcherMixin.destroy.call(this);
 
-        core.bus.off('alt_dialog_demand', this, this._onAltDialogDemand);
-        core.bus.off('color_picker_dialog_demand', this, this._onColorPickerDialogDemand);
-        core.bus.off('crop_image_dialog_demand', this, this._onCropImageDialogDemand);
-        core.bus.off('link_dialog_demand', this, this._onLinkDialogDemand);
-        core.bus.off('media_dialog_demand', this, this._onMediaDialogDemand);
+        topBus.off('alt_dialog_demand', this, this._onAltDialogDemand);
+        topBus.off('crop_image_dialog_demand', this, this._onCropImageDialogDemand);
+        topBus.off('link_dialog_demand', this, this._onLinkDialogDemand);
+        topBus.off('media_dialog_demand', this, this._onMediaDialogDemand);
+    },
+
+    /**
+     * Create/Update cropped attachments.
+     *
+     * @param {jQuery} $editable
+     * @returns {Promise}
+     */
+    saveCroppedImages: function ($editable) {
+        var defs = _.map($editable.find('.o_cropped_img_to_save'), async croppedImg => {
+            var $croppedImg = $(croppedImg);
+            $croppedImg.removeClass('o_cropped_img_to_save');
+
+            var resModel = $croppedImg.data('crop:resModel');
+            var resID = $croppedImg.data('crop:resID');
+            var cropID = $croppedImg.data('crop:id');
+            var mimetype = $croppedImg.data('crop:mimetype');
+            var originalSrc = $croppedImg.data('crop:originalSrc');
+
+            var datas = $croppedImg.attr('src').split(',')[1];
+            let attachmentID = cropID;
+            if (!cropID) {
+                var name = originalSrc + '.crop';
+                attachmentID = await this._rpc({
+                    model: 'ir.attachment',
+                    method: 'create',
+                    args: [{
+                        res_model: resModel,
+                        res_id: resID,
+                        name: name,
+                        datas: datas,
+                        mimetype: mimetype,
+                        url: originalSrc, // To save the original image that was cropped
+                    }],
+                });
+            } else {
+                await this._rpc({
+                    model: 'ir.attachment',
+                    method: 'write',
+                    args: [[cropID], {datas: datas}],
+                });
+            }
+            const access_token = await this._rpc({
+                model: 'ir.attachment',
+                method: 'generate_access_token',
+                args: [[attachmentID]],
+            });
+            $croppedImg.attr('src', '/web/image/' + attachmentID + '?access_token=' + access_token[0]);
+        });
+        return Promise.all(defs);
     },
 
     /**
@@ -1245,27 +1309,6 @@ var SummernoteManager = Class.extend(mixins.EventDispatcherMixin, ServicesMixin,
             altDialog.on('cancel', this, data.onCancel);
         }
         altDialog.open();
-    },
-/**
-     * Called when a demand to open a color picker dialog is received on the bus.
-     *
-     * @private
-     * @param {Object} data
-     */
-    _onColorPickerDialogDemand: function (data) {
-        if (data.__alreadyDone) {
-            return;
-        }
-        data.__alreadyDone = true;
-        var colorpicker = new ColorpickerDialog(this, {
-            defaultColor: data.color,
-        });
-        if (data.onSave) {
-            colorpicker.on('colorpicker:saved', this, function (ev) {
-                data.onSave(ev.data.cssColor);
-            });
-        }
-        colorpicker.open();
     },
     /**
      * Called when a demand to open a crop dialog is received on the bus.
@@ -1346,6 +1389,7 @@ var SummernoteManager = Class.extend(mixins.EventDispatcherMixin, ServicesMixin,
         mediaDialog.open();
     },
 });
+<<<<<<< HEAD
 /**
  * @todo cannot do this without include because it would make a loop in the
  * JS module dependencies otherwise.
@@ -1380,5 +1424,7 @@ rte.Class.include({
         return this._summernoteManager.saveCroppedImages($editable);
     },
 });
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 return SummernoteManager;
 });

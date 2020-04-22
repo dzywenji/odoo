@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
-import base64
-import datetime
 import random
-import re
 import requests
 import string
 
 from lxml import html
-from werkzeug import urls, utils
+from werkzeug import urls
 
+<<<<<<< HEAD
 from odoo import models, fields, api, _
 
 
@@ -23,6 +21,9 @@ def VALIDATE_URL(url):
         return 'http://' + url
 
     return url
+=======
+from odoo import tools, models, fields, api, _
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 
 class LinkTracker(models.Model):
@@ -44,8 +45,6 @@ class LinkTracker(models.Model):
     redirected_url = fields.Char(string='Redirected URL', compute='_compute_redirected_url')
     short_url_host = fields.Char(string='Host of the short URL', compute='_compute_short_url_host')
     title = fields.Char(string='Page Title', store=True)
-    favicon = fields.Char(string='Favicon', compute='_compute_favicon', store=True)
-    icon_src = fields.Char(string='Favicon Source', compute='_compute_icon_src')
     # Tracking
     link_code_ids = fields.One2many('link.tracker.code', 'link_id', string='Codes')
     code = fields.Char(string='Short URL code', compute='_compute_code')
@@ -72,11 +71,6 @@ class LinkTracker(models.Model):
             record = self.env['link.tracker.code'].search([('link_id', '=', tracker.id)], limit=1, order='id DESC')
             tracker.code = record.code
 
-    @api.depends('favicon')
-    def _compute_icon_src(self):
-        for tracker in self:
-            tracker.icon_src = 'data:image/png;base64,' + tracker.favicon
-
     @api.depends('url')
     def _compute_redirected_url(self):
         for tracker in self:
@@ -101,16 +95,6 @@ class LinkTracker(models.Model):
 
         return title
 
-    @api.depends('url')
-    def _compute_favicon(self):
-        for tracker in self:
-            try:
-                icon = requests.get('http://www.google.com/s2/favicons', params={'domain': tracker.url}, timeout=5).content
-                icon_base64 = base64.b64encode(icon).replace(b"\n", b"").decode('ascii')
-            except:
-                icon_base64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsSAAALEgHS3X78AAACiElEQVQ4EaVTzU8TURCf2tJuS7tQtlRb6UKBIkQwkRRSEzkQgyEc6lkOKgcOph78Y+CgjXjDs2i44FXY9AMTlQRUELZapVlouy3d7kKtb0Zr0MSLTvL2zb75eL838xtTvV6H/xELBptMJojeXLCXyobnyog4YhzXYvmCFi6qVSfaeRdXdrfaU1areV5KykmX06rcvzumjY/1ggkR3Jh+bNf1mr8v1D5bLuvR3qDgFbvbBJYIrE1mCIoCrKxsHuzK+Rzvsi29+6DEbTZz9unijEYI8ObBgXOzlcrx9OAlXyDYKUCzwwrDQx1wVDGg089Dt+gR3mxmhcUnaWeoxwMbm/vzDFzmDEKMMNhquRqduT1KwXiGt0vre6iSeAUHNDE0d26NBtAXY9BACQyjFusKuL2Ry+IPb/Y9ZglwuVscdHaknUChqLF/O4jn3V5dP4mhgRJgwSYm+gV0Oi3XrvYB30yvhGa7BS70eGFHPoTJyQHhMK+F0ZesRVVznvXw5Ixv7/C10moEo6OZXbWvlFAF9FVZDOqEABUMRIkMd8GnLwVWg9/RkJF9sA4oDfYQAuzzjqzwvnaRUFxn/X2ZlmGLXAE7AL52B4xHgqAUqrC1nSNuoJkQtLkdqReszz/9aRvq90NOKdOS1nch8TpL555WDp49f3uAMXhACRjD5j4ykuCtf5PP7Fm1b0DIsl/VHGezzP1KwOiZQobFF9YyjSRYQETRENSlVzI8iK9mWlzckpSSCQHVALmN9Az1euDho9Xo8vKGd2rqooA8yBcrwHgCqYR0kMkWci08t/R+W4ljDCanWTg9TJGwGNaNk3vYZ7VUdeKsYJGFNkfSzjXNrSX20s4/h6kB81/271ghG17l+rPTAAAAAElFTkSuQmCC'
-            tracker.favicon = icon_base64
-
     @api.model
     def create(self, vals):
         create_vals = vals.copy()
@@ -118,7 +102,7 @@ class LinkTracker(models.Model):
         if 'url' not in create_vals:
             raise ValueError('URL field required')
         else:
-            create_vals['url'] = VALIDATE_URL(vals['url'])
+            create_vals['url'] = tools.validate_url(vals['url'])
 
         search_domain = []
         for fname, value in create_vals.items():
@@ -146,26 +130,10 @@ class LinkTracker(models.Model):
 
     @api.model
     def convert_links(self, html, vals, blacklist=None):
-        for match in re.findall(URL_REGEX, html):
-
-            short_schema = self.env['ir.config_parameter'].sudo().get_param('web.base.url') + '/r/'
-
-            href = match[0]
-            long_url = match[1]
-
-            vals['url'] = utils.unescape(long_url)
-
-            if not blacklist or not [s for s in blacklist if s in long_url] and not long_url.startswith(short_schema):
-                link = self.create(vals)
-                shorten_url = self.browse(link.id)[0].short_url
-
-                if shorten_url:
-                    new_href = href.replace(long_url, shorten_url)
-                    html = html.replace(href, new_href)
-
-        return html
+        raise NotImplementedError('Moved on mail.render.mixin')
 
     def _convert_links_text(self, body, vals, blacklist=None):
+<<<<<<< HEAD
         shortened_schema = self.env['ir.config_parameter'].sudo().get_param('web.base.url') + '/r/'
         unsubscribe_schema = self.env['ir.config_parameter'].sudo().get_param('web.base.url') + '/sms/'
         for original_url in re.findall(TEXT_URL_REGEX, body):
@@ -184,6 +152,9 @@ class LinkTracker(models.Model):
                 body = body.replace(original_url, shortened_url, 1)
 
         return body
+=======
+        raise NotImplementedError('Moved on mail.render.mixin')
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     def action_view_statistics(self):
         action = self.env['ir.actions.act_window'].for_xml_id('link_tracker', 'link_tracker_click_action_statistics')

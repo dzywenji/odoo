@@ -115,15 +115,13 @@ class MailTestAlias(models.Model):
         'mail.alias', 'Alias',
         delegate=True)
 
-    def get_alias_model_name(self, vals):
-        return vals.get('alias_model', 'mail.test')
-
-    def get_alias_values(self):
-        self.ensure_one()
-        res = super(MailTestAlias, self).get_alias_values()
-        res['alias_force_thread_id'] = self.id
-        res['alias_parent_thread_id'] = self.id
-        return res
+    def _alias_get_creation_values(self):
+        values = super(MailTestAlias, self)._alias_get_creation_values()
+        values['alias_model_id'] = self.env['ir.model']._get('mail.test').id
+        if self.id:
+            values['alias_force_thread_id'] = self.id
+            values['alias_parent_thread_id'] = self.id
+        return values
 
 
 class MailModel(models.Model):
@@ -159,3 +157,25 @@ class MailMultiCompany(models.Model):
 
     name = fields.Char()
     company_id = fields.Many2one('res.company')
+
+
+class MailTrackingModel(models.Model):
+    _description = 'Test Tracking Model'
+    _name = 'mail.test.tracking'
+    _inherit = ['mail.thread']
+
+    name = fields.Char(required=True, tracking=True)
+    field_0 = fields.Char(tracking=True)
+    field_1 = fields.Char(tracking=True)
+    field_2 = fields.Char(tracking=True)
+
+
+class MailCompute(models.Model):
+    _name = 'mail.test.compute'
+    _description = "Test model with several tracked computed fields"
+    _inherit = ['mail.thread']
+
+    partner_id = fields.Many2one('res.partner', tracking=True)
+    partner_name = fields.Char(related='partner_id.name', store=True, tracking=True)
+    partner_email = fields.Char(related='partner_id.email', store=True, tracking=True)
+    partner_phone = fields.Char(related='partner_id.phone', tracking=True)

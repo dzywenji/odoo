@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
-from odoo.addons.test_mail.tests.common import mail_new_test_user
+from odoo.addons.mail.tests.common import mail_new_test_user
 from odoo.tests.common import TransactionCase, users, warmup
 from odoo.tests import tagged
 from odoo.tools import mute_logger
@@ -50,7 +50,12 @@ class TestMassMailPerformance(TestMassMailPerformanceBase):
             'mailing_domain': [('id', 'in', self.mm_recs.ids)],
         })
 
+<<<<<<< HEAD
         with self.assertQueryCount(__system__=2179, marketing=2879):
+=======
+        # runbot needs +50 compared to local
+        with self.assertQueryCount(__system__=1915, marketing=1916):
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             mailing.action_send_mail()
 
         self.assertEqual(mailing.sent, 50)
@@ -89,7 +94,12 @@ class TestMassMailBlPerformance(TestMassMailPerformanceBase):
             'mailing_domain': [('id', 'in', self.mm_recs.ids)],
         })
 
+<<<<<<< HEAD
         with self.assertQueryCount(__system__=2530, marketing=3326):
+=======
+        # runbot needs +62 compared to local
+        with self.assertQueryCount(__system__=2239, marketing=2240):
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             mailing.action_send_mail()
 
         self.assertEqual(mailing.sent, 50)

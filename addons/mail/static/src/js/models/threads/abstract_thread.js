@@ -83,14 +83,6 @@ var AbstractThread = Class.extend(Mixins.EventDispatcherMixin, {
         return undefined;
     },
     /**
-     * By default, threads do not have out-of-office feature
-     *
-     * @return {string|undefined}
-     */
-    getOutOfOfficeMessage: function () {
-        return undefined;
-    },
-    /**
      * Get the status of the thread (e.g. 'online', 'offline', etc.)
      *
      * @returns {string}
@@ -117,6 +109,12 @@ var AbstractThread = Class.extend(Mixins.EventDispatcherMixin, {
      */
     hasMessages: function () {
         return !_.isEmpty(this.getMessages());
+    },
+    /**
+     * @return {boolean}
+     */
+    hasOutOfOffice() {
+        return !!this.getOutOfOfficeInfo();
     },
     /**
      * States whether this thread is compatible with the 'seen' feature.

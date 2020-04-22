@@ -7,6 +7,7 @@ import os
 import logging
 import pytz
 import requests
+import werkzeug.urls
 import werkzeug.utils
 import werkzeug.wrappers
 
@@ -51,9 +52,9 @@ class QueryURL(object):
                     paths[key] = u"%s" % value
             elif value:
                 if isinstance(value, list) or isinstance(value, set):
-                    fragments.append(werkzeug.url_encode([(key, item) for item in value]))
+                    fragments.append(werkzeug.urls.url_encode([(key, item) for item in value]))
                 else:
-                    fragments.append(werkzeug.url_encode([(key, value)]))
+                    fragments.append(werkzeug.urls.url_encode([(key, value)]))
         for key in path_args:
             value = paths.get(key)
             if value is not None:
@@ -65,8 +66,11 @@ class QueryURL(object):
 
 class Website(Home):
 
-    @http.route('/', type='http', auth="public", website=True)
+    @http.route('/', type='http', auth="public", website=True, sitemap=True)
     def index(self, **kw):
+        # prefetch all menus (it will prefetch website.page too)
+        top_menu = request.website.menu_id
+
         homepage = request.website.homepage_id
         if homepage and (homepage.sudo().is_visible or request.env.user.has_group('base.group_user')) and homepage.url != '/':
             return request.env['ir.http'].reroute(homepage.url)
@@ -75,7 +79,6 @@ class Website(Home):
         if website_page:
             return website_page
         else:
-            top_menu = request.website.menu_id
             first_menu = top_menu and top_menu.child_id and top_menu.child_id.filtered(lambda menu: menu.is_visible)
             if first_menu and first_menu[0].url not in ('/', '', '#') and (not (first_menu[0].url.startswith(('/?', '/#', ' ')))):
                 return request.redirect(first_menu[0].url)
@@ -127,7 +130,7 @@ class Website(Home):
         fields = country.get_address_fields()
         return dict(fields=fields, states=[(st.id, st.name, st.code) for st in country.state_ids], phone_code=country.phone_code)
 
-    @http.route(['/robots.txt'], type='http', auth="public")
+    @http.route(['/robots.txt'], type='http', auth="public", website=True, sitemap=False)
     def robots(self, **kwargs):
         return request.render('website.robots', {'url_root': request.httprequest.url_root}, mimetype='text/plain')
 
@@ -199,7 +202,7 @@ class Website(Home):
 
         return request.make_response(content, [('Content-Type', mimetype)])
 
-    @http.route('/website/info', type='http', auth="public", website=True)
+    @http.route('/website/info', type='http', auth="public", website=True, sitemap=True)
     def website_info(self, **kwargs):
         try:
             request.website.get_template('website.website_info').name
@@ -214,6 +217,13 @@ class Website(Home):
             'version': odoo.service.common.exp_version()
         }
         return request.render('website.website_info', values)
+
+    @http.route(['/website/social/<string:social>'], type='http', auth="public", website=True, sitemap=False)
+    def social(self, social, **kwargs):
+        url = getattr(request.website, 'social_%s' % social, False)
+        if not url:
+            raise werkzeug.exceptions.NotFound()
+        return request.redirect(url)
 
     # ------------------------------------------------------
     # Edit
@@ -287,11 +297,11 @@ class Website(Home):
     def get_switchable_related_views(self, key):
         views = request.env["ir.ui.view"].get_related_views(key, bundles=False).filtered(lambda v: v.customize_show)
         views = views.sorted(key=lambda v: (v.inherit_id.id, v.name))
-        return views.read(['name', 'id', 'key', 'xml_id', 'arch', 'active', 'inherit_id'])
+        return views.with_context(display_website=False).read(['name', 'id', 'key', 'xml_id', 'active', 'inherit_id'])
 
     @http.route('/website/toggle_switchable_view', type='json', auth='user', website=True)
     def toggle_switchable_view(self, view_key):
-        request.website.viewref(view_key).toggle()
+        request.website.viewref(view_key).toggle_active()
 
     @http.route('/website/reset_template', type='http', auth='user', methods=['POST'], website=True, csrf=False)
     def reset_template(self, view_id, mode='soft', redirect='/', **kwargs):
@@ -331,6 +341,34 @@ class Website(Home):
         xmlroot = ET.fromstring(response)
         return json.dumps([sugg[0].attrib['data'] for sugg in xmlroot if len(sugg) and sugg[0].attrib['data']])
 
+    @http.route(['/website/get_seo_data'], type='json', auth="user", website=True)
+    def get_seo_data(self, res_id, res_model):
+        if not request.env.user.has_group('website.group_website_publisher'):
+            raise werkzeug.exceptions.Forbidden()
+
+        fields = ['website_meta_title', 'website_meta_description', 'website_meta_keywords', 'website_meta_og_img']
+        if res_model == 'website.page':
+            fields.extend(['website_indexed', 'website_id'])
+        res = request.env[res_model].browse(res_id).read(fields)[0]
+        res['has_social_default_image'] = request.website.has_social_default_image
+        return res
+
+    @http.route(['/google<string(length=16):key>.html'], type='http', auth="public", website=True, sitemap=False)
+    def google_console_search(self, key, **kwargs):
+        if not request.website.google_search_console:
+            logger.warning('Google Search Console not enable')
+            raise werkzeug.exceptions.NotFound()
+
+        trusted = request.website.google_search_console.lstrip('google').rstrip('.html')
+        if key != trusted:
+            if key.startswith(trusted):
+                request.website.sudo().google_search_console = "google%s.html" % key
+            else:
+                logger.warning('Google Search Console %s not recognize' % key)
+                raise werkzeug.exceptions.NotFound()
+
+        return request.make_response("google-site-verification: %s" % request.website.google_search_console)
+
     # ------------------------------------------------------
     # Themes
     # ------------------------------------------------------
@@ -342,35 +380,33 @@ class Website(Home):
         domain = [("key", "in", xml_ids)] + request.website.website_domain()
         return View.search(domain).filter_duplicate()
 
-    @http.route(['/website/theme_customize_get'], type='json', auth="public", website=True)
+    @http.route(['/website/theme_customize_get'], type='json', auth='user', website=True)
     def theme_customize_get(self, xml_ids):
         views = self._get_customize_views(xml_ids)
-        return {
-            'enabled': views.filtered('active').mapped('key'),
-            'names': {view.key: view.name for view in views},
-        }
+        return views.filtered('active').mapped('key')
 
-    @http.route(['/website/theme_customize'], type='json', auth="public", website=True)
-    def theme_customize(self, enable=None, disable=None, get_bundle=False):
-        """ enable or Disable lists of ``xml_id`` of the inherit templates """
+    @http.route(['/website/theme_customize'], type='json', auth='user', website=True)
+    def theme_customize(self, enable=None, disable=None):
+        """
+        Enables and/or disables views according to list of keys.
 
+        :param enable: list of views' keys to enable
+        :param disable: list of views' keys to disable
+        """
         self._get_customize_views(disable).write({'active': False})
         self._get_customize_views(enable).write({'active': True})
 
-        if get_bundle:
-            context = dict(request.context)
-            return {
-                'web.assets_common': request.env['ir.qweb']._get_asset_link_urls('web.assets_common', options=context),
-                'web.assets_frontend': request.env['ir.qweb']._get_asset_link_urls('web.assets_frontend', options=context),
-                'website.assets_editor': request.env['ir.qweb']._get_asset_link_urls('website.assets_editor', options=context),
-            }
-
-        return True
-
-    @http.route(['/website/theme_customize_reload'], type='http', auth="public", website=True)
-    def theme_customize_reload(self, href, enable, disable, tab=0, **kwargs):
-        self.theme_customize(enable and enable.split(",") or [], disable and disable.split(",") or [])
-        return request.redirect(href + ("&theme=true" if "#" in href else "#theme=true") + ("&tab=" + tab))
+    @http.route(['/website/theme_customize_bundle_reload'], type='json', auth='user', website=True)
+    def theme_customize_bundle_reload(self):
+        """
+        Reloads asset bundles and returns their unique URLs.
+        """
+        context = dict(request.context)
+        return {
+            'web.assets_common': request.env['ir.qweb']._get_asset_link_urls('web.assets_common', options=context),
+            'web.assets_frontend': request.env['ir.qweb']._get_asset_link_urls('web.assets_frontend', options=context),
+            'website.assets_editor': request.env['ir.qweb']._get_asset_link_urls('website.assets_editor', options=context),
+        }
 
     @http.route(['/website/make_scss_custo'], type='json', auth='user', website=True)
     def make_scss_custo(self, url, values):
@@ -470,7 +506,13 @@ class WebsiteBinary(http.Controller):
                 kw['unique'] = unique
         return Binary().content_image(**kw)
 
+<<<<<<< HEAD
+=======
+    # if not icon provided in DOM, browser tries to access /favicon.ico, eg when opening an order pdf
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     @http.route(['/favicon.ico'], type='http', auth='public', website=True, multilang=False, sitemap=False)
     def favicon(self, **kw):
-        # when opening a pdf in chrome, chrome tries to open the default favicon url
-        return self.content_image(model='website', id=str(request.website.id), field='favicon', **kw)
+        website = request.website
+        response = request.redirect(website.image_url(website, 'favicon'), code=301)
+        response.headers['Cache-Control'] = 'public, max-age=%s' % (365 * 24 * 60)
+        return response

@@ -73,6 +73,7 @@ class Channel(models.Model):
         return res
 
     name = fields.Char('Name', required=True, translate=True)
+    active = fields.Boolean(default=True, help="Set active to false to hide the channel without removing it.")
     channel_type = fields.Selection([
         ('chat', 'Chat Discussion'),
         ('channel', 'Channel')],
@@ -207,9 +208,8 @@ class Channel(models.Model):
 
         # Create channel and alias
         channel = super(Channel, self.with_context(
-            alias_model_name=self._name, alias_parent_model_name=self._name, mail_create_nolog=True, mail_create_nosubscribe=True)
+            mail_create_nolog=True, mail_create_nosubscribe=True)
         ).create(vals)
-        channel.alias_id.write({"alias_force_thread_id": channel.id, 'alias_parent_thread_id': channel.id})
 
         if vals.get('group_ids'):
             channel._subscribe_users()
@@ -221,8 +221,6 @@ class Channel(models.Model):
         return channel
 
     def unlink(self):
-        aliases = self.mapped('alias_id')
-
         # Delete mail.channel
         try:
             all_emp_group = self.env.ref('mail.channel_all_employees')
@@ -230,10 +228,7 @@ class Channel(models.Model):
             all_emp_group = None
         if all_emp_group and all_emp_group in self and not self._context.get(MODULE_UNINSTALL_FLAG):
             raise UserError(_('You cannot delete those groups, as the Whole Company group is required by other modules.'))
-        res = super(Channel, self).unlink()
-        # Cascade-delete mail aliases as well, as they should not exist without the mail.channel.
-        aliases.sudo().unlink()
-        return res
+        return super(Channel, self).unlink()
 
     def write(self, vals):
         # First checks if user tries to modify moderation fields and has not the right to do it.
@@ -256,8 +251,12 @@ class Channel(models.Model):
 
         return result
 
-    def get_alias_model_name(self, vals):
-        return vals.get('alias_model', 'mail.channel')
+    def _alias_get_creation_values(self):
+        values = super(Channel, self)._alias_get_creation_values()
+        values['alias_model_id'] = self.env['ir.model']._get('mail.channel').id
+        if self.id:
+            values['alias_force_thread_id'] = self.id
+        return values
 
     def _subscribe_users(self):
         for mail_channel in self:
@@ -280,7 +279,7 @@ class Channel(models.Model):
         if not self.email_send:
             notification = _('<div class="o_mail_notification">left <a href="#" class="o_channel_redirect" data-oe-id="%s">#%s</a></div>') % (self.id, self.name,)
             # post 'channel left' message as root since the partner just unsubscribed from the channel
-            self.sudo().message_post(body=notification, subtype="mail.mt_comment", author_id=partner.id)
+            self.sudo().message_post(body=notification, subtype_xmlid="mail.mt_comment", author_id=partner.id)
         return result
 
     def _notify_get_groups(self):
@@ -367,7 +366,9 @@ class Channel(models.Model):
         # Notifies the message author when his message is pending moderation if required on channel.
         # The fields "email_from" and "reply_to" are filled in automatically by method create in model mail.message.
         if self.moderation_notify and self.moderation_notify_msg and message_type == 'email' and moderation_status == 'pending_moderation':
-            self.env['mail.mail'].create({
+            self.env['mail.mail'].sudo().create({
+                'author_id': self.env.user.partner_id.id,
+                'email_from': self.env.user.company_id.catchall_formatted or self.env.user.company_id.email_formatted,
                 'body_html': self.moderation_notify_msg,
                 'subject': 'Re: %s' % (kwargs.get('subject', '')),
                 'email_to': email,
@@ -380,9 +381,7 @@ class Channel(models.Model):
         if alias.alias_contact == 'followers' and self.ids:
             author = self.env['res.partner'].browse(message_dict.get('author_id', False))
             if not author or author not in self.channel_partner_ids:
-                return {
-                    'error_message': _('restricted to channel members'),
-                }
+                return _('restricted to channel members')
             return True
         return super(Channel, self)._alias_check_contact(message, message_dict, alias)
 
@@ -419,12 +418,20 @@ class Channel(models.Model):
         for partner in partners.filtered(lambda p: p.email and not (p.email in banned_emails)):
             company = partner.company_id or self.env.company
             create_values = {
+                'email_from': company.catchall_formatted or company.email_formatted,
+                'author_id': self.env.user.partner_id.id,
                 'body_html': view.render({'channel': self, 'partner': partner}, engine='ir.qweb', minimal_qcontext=True),
                 'subject': _("Guidelines of channel %s") % self.name,
+<<<<<<< HEAD
                 'email_from': company.catchall or company.email,
                 'recipient_ids': [(4, partner.id)]
             }
             mail = self.env['mail.mail'].create(create_values)
+=======
+                'recipient_ids': [(4, partner.id)]
+            }
+            mail = self.env['mail.mail'].sudo().create(create_values)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         return True
 
     def _update_moderation_email(self, emails, status):
@@ -504,18 +511,16 @@ class Channel(models.Model):
         Return the information needed by channel to display channel members
             :param all_partners: list of res.parner():
             :param direct_partners: list of res.parner():
-            :returns: a list of {'id', 'name', 'email'} for each partner and adds {im_status, out_of_office_message} for direct_partners.
+            :returns: a list of {'id', 'name', 'email'} for each partner and adds {im_status} for direct_partners.
             :rtype : list(dict)
         """
         partner_infos = {partner['id']: partner for partner in all_partners.sudo().read(['id', 'name', 'email'])}
-        # add im _status and out_of_office_message for direct_partners
+        # add im _status for direct_partners
         direct_partners_im_status = {partner['id']: partner for partner in direct_partners.sudo().read(['im_status'])}
 
         for i in direct_partners_im_status.keys():
             partner_infos[i].update(direct_partners_im_status[i])
 
-        for user in self.env['res.users'].search([('partner_id', 'in', direct_partners.ids), ('out_of_office_message', '!=', False)]):
-            partner_infos[user.partner_id.id]['out_of_office_message'] = user.out_of_office_message
         return partner_infos
 
     def channel_info(self, extra_info=False):
@@ -781,7 +786,7 @@ class Channel(models.Model):
                     }
                 else:
                     notification = _('<div class="o_mail_notification">joined <a href="#" class="o_channel_redirect" data-oe-id="%s">#%s</a></div>') % (channel.id, channel.name,)
-                self.message_post(body=notification, message_type="notification", subtype="mail.mt_comment", author_id=partner.id)
+                self.message_post(body=notification, message_type="notification", subtype_xmlid="mail.mt_comment", author_id=partner.id, notify_by_email=False)
 
         # broadcast the channel header to the added partner
         self._broadcast(partner_ids)
@@ -862,7 +867,7 @@ class Channel(models.Model):
         added = self.action_follow()
         if added and self.channel_type == 'channel' and not self.email_send:
             notification = _('<div class="o_mail_notification">joined <a href="#" class="o_channel_redirect" data-oe-id="%s">#%s</a></div>') % (self.id, self.name,)
-            self.message_post(body=notification, message_type="notification", subtype="mail.mt_comment")
+            self.message_post(body=notification, message_type="notification", subtype_xmlid="mail.mt_comment")
 
         if added and self.moderation_guidelines:
             self._send_guidelines(self.env.user.partner_id)
@@ -887,7 +892,7 @@ class Channel(models.Model):
             'channel_partner_ids': [(4, self.env.user.partner_id.id)]
         })
         notification = _('<div class="o_mail_notification">created <a href="#" class="o_channel_redirect" data-oe-id="%s">#%s</a></div>') % (new_channel.id, new_channel.name,)
-        new_channel.message_post(body=notification, message_type="notification", subtype="mail.mt_comment")
+        new_channel.message_post(body=notification, message_type="notification", subtype_xmlid="mail.mt_comment")
         channel_info = new_channel.channel_info('creation')[0]
         self.env['bus.bus'].sendone((self._cr.dbname, 'res.partner', self.env.user.partner_id.id), channel_info)
         return channel_info
@@ -917,9 +922,6 @@ class Channel(models.Model):
                 INNER JOIN mail_channel C ON CP.channel_id = C.id
             WHERE C.uuid = %s""", (uuid,))
         return self._cr.dictfetchall()
-
-    def _channel_fetch_listeners_where_clause(self, uuid):
-        return ("C.uuid = %s", (uuid,))
 
     def channel_fetch_preview(self):
         """ Return the last message of the given channels """

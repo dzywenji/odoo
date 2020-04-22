@@ -8,7 +8,11 @@ from odoo.addons.im_livechat.controllers.main import LivechatController
 
 class WebsiteLivechat(LivechatController):
 
+<<<<<<< HEAD
     @http.route('/livechat', type='http', auth="public", website=True)
+=======
+    @http.route('/livechat', type='http', auth="public", website=True, sitemap=True)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     def channel_list(self, **kw):
         # display the list of the channel
         channels = request.env['im_livechat.channel'].search([('website_published', '=', True)])
@@ -17,15 +21,14 @@ class WebsiteLivechat(LivechatController):
         }
         return request.render('website_livechat.channel_list_page', values)
 
-
-    @http.route('/livechat/channel/<model("im_livechat.channel"):channel>', type='http', auth='public', website=True)
+    @http.route('/livechat/channel/<model("im_livechat.channel"):channel>', type='http', auth='public', website=True, sitemap=True)
     def channel_rating(self, channel, **kw):
         # get the last 100 ratings and the repartition per grade
         domain = [
             ('res_model', '=', 'mail.channel'), ('res_id', 'in', channel.sudo().channel_ids.ids),
             ('consumed', '=', True), ('rating', '>=', 1),
         ]
-        ratings = request.env['rating.rating'].search(domain, order='create_date desc', limit=100)
+        ratings = request.env['rating.rating'].sudo().search(domain, order='create_date desc', limit=100)
         repartition = channel.sudo().channel_ids.rating_get_grades(domain=domain)
 
         # compute percentage
@@ -65,6 +68,7 @@ class WebsiteLivechat(LivechatController):
         if visitor_sudo:
             anonymous_name = visitor_sudo.display_name
         return super(WebsiteLivechat, self).get_session(channel_id, anonymous_name, previous_operator_id=previous_operator_id, **kwargs)
+<<<<<<< HEAD
 
     @http.route('/im_livechat/visitor_leave_session', type='json', auth="public")
     def visitor_leave_session(self, uuid):
@@ -75,6 +79,8 @@ class WebsiteLivechat(LivechatController):
         mail_channel = request.env['mail.channel'].sudo().search([('uuid', '=', uuid)])
         if mail_channel:
             mail_channel.close_livechat_request_session()
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     @http.route('/im_livechat/close_empty_livechat', type='json', auth="public")
     def close_empty_livechat(self, uuid):

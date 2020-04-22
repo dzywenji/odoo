@@ -10,6 +10,15 @@ from odoo.exceptions import UserError, ValidationError
 class SaleOrder(models.Model):
     _inherit = 'sale.order'
 
+    @api.model
+    def default_get(self, fields_list):
+        default_vals = super(SaleOrder, self).default_get(fields_list)
+        if "sale_order_template_id" in fields_list and not default_vals.get("sale_order_template_id"):
+            company_id = default_vals.get('company_id', False)
+            company = self.env["res.company"].browse(company_id) if company_id else self.env.company
+            default_vals['sale_order_template_id'] = company.sale_order_template_id.id
+        return default_vals
+
     sale_order_template_id = fields.Many2one(
         'sale.order.template', 'Quotation Template',
         readonly=True, check_company=True,
@@ -49,33 +58,54 @@ class SaleOrder(models.Model):
         }
 
     def _compute_option_data_for_template_change(self, option):
+        price = option.product_id.lst_price
+        discount = 0
+
         if self.pricelist_id:
-            price = self.pricelist_id.with_context(uom=option.uom_id.id).get_product_price(option.product_id, 1, False)
-        else:
-            price = option.price_unit
+            pricelist_price = self.pricelist_id.with_context(uom=option.uom_id.id).get_product_price(option.product_id, 1, False)
+
+            if self.pricelist_id.discount_policy == 'without_discount' and price:
+                discount = max(0, (price - pricelist_price) * 100 / price)
+            else:
+                price = pricelist_price
+
         return {
             'product_id': option.product_id.id,
             'name': option.name,
             'quantity': option.quantity,
             'uom_id': option.uom_id.id,
             'price_unit': price,
-            'discount': option.discount,
+            'discount': discount
         }
+
+    def update_prices(self):
+        self.ensure_one()
+        res = super().update_prices()
+        for line in self.sale_order_option_ids:
+            line.price_unit = self.pricelist_id.get_product_price(line.product_id, line.quantity, self.partner_id, uom_id=line.uom_id.id)
+        return res
 
     @api.onchange('sale_order_template_id')
     def onchange_sale_order_template_id(self):
+
         if not self.sale_order_template_id:
             self.require_signature = self._get_default_require_signature()
             self.require_payment = self._get_default_require_payment()
             return
+
         template = self.sale_order_template_id.with_context(lang=self.partner_id.lang)
 
+        # --- first, process the list of products from the template
         order_lines = [(5, 0, 0)]
         for line in template.sale_order_template_line_ids:
             data = self._compute_line_data_for_template_change(line)
+
             if line.product_id:
+                price = line.product_id.lst_price
                 discount = 0
+
                 if self.pricelist_id:
+<<<<<<< HEAD
                     price = self.pricelist_id.with_context(uom=line.product_uom_id.id).get_product_price(line.product_id, 1, False)
                     if self.pricelist_id.discount_policy == 'without_discount' and line.price_unit:
                         discount = (line.price_unit - price) / line.price_unit * 100
@@ -89,26 +119,35 @@ class SaleOrder(models.Model):
 
                 else:
                     price = line.price_unit
+=======
+                    pricelist_price = self.pricelist_id.with_context(uom=line.product_uom_id.id).get_product_price(line.product_id, 1, False)
+
+                    if self.pricelist_id.discount_policy == 'without_discount' and price:
+                        discount = max(0, (price - pricelist_price) * 100 / price)
+                    else:
+                        price = pricelist_price
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
                 data.update({
                     'price_unit': price,
-                    'discount': 100 - ((100 - discount) * (100 - line.discount) / 100),
+                    'discount': discount,
                     'product_uom_qty': line.product_uom_qty,
                     'product_id': line.product_id.id,
                     'product_uom': line.product_uom_id.id,
                     'customer_lead': self._get_customer_lead(line.product_id.product_tmpl_id),
                 })
-                if self.pricelist_id:
-                    data.update(self.env['sale.order.line']._get_purchase_price(self.pricelist_id, line.product_id, line.product_uom_id, fields.Date.context_today(self)))
+
             order_lines.append((0, 0, data))
 
         self.order_line = order_lines
         self.order_line._compute_tax_id()
 
+        # then, process the list of optional products from the template
         option_lines = [(5, 0, 0)]
         for option in template.sale_order_template_option_ids:
             data = self._compute_option_data_for_template_change(option)
             option_lines.append((0, 0, data))
+
         self.sale_order_option_ids = option_lines
 
         if template.number_of_days > 0:
@@ -155,7 +194,7 @@ class SaleOrderLine(models.Model):
         if self.product_id and self.order_id.sale_order_template_id:
             for line in self.order_id.sale_order_template_id.sale_order_template_line_ids:
                 if line.product_id == self.product_id:
-                    self.name = line.name
+                    self.name = line.with_context(lang=self.order_id.partner_id.lang).name
                     break
         return domain
 
@@ -199,14 +238,20 @@ class SaleOrderOption(models.Model):
         product = self.product_id.with_context(lang=self.order_id.partner_id.lang)
         self.name = product.get_product_multiline_description_sale()
         self.uom_id = self.uom_id or product.uom_id
+<<<<<<< HEAD
         domain = {'uom_id': [('category_id', '=', self.product_id.uom_id.category_id.id)]}
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         # To compute the dicount a so line is created in cache
         values = self._get_values_to_add_to_order()
         new_sol = self.env['sale.order.line'].new(values)
         new_sol._onchange_discount()
         self.discount = new_sol.discount
         self.price_unit = new_sol._get_display_price(product)
+<<<<<<< HEAD
         return {'domain': domain}
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     def button_add_to_order(self):
         self.add_option_to_order()

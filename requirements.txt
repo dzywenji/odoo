@@ -17,7 +17,10 @@ lxml==4.3.2 ; sys_platform != 'win32' and python_version >= '3.7'
 lxml ; sys_platform == 'win32'
 Mako==1.0.7
 MarkupSafe==1.1.0
+<<<<<<< HEAD
 mock==2.0.0
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 num2words==0.5.6
 ofxparse==0.19
 passlib==1.7.1
@@ -39,7 +42,11 @@ qrcode==6.1
 reportlab==3.5.13
 requests==2.21.0
 zeep==3.2.0
+<<<<<<< HEAD
 vatnumber==1.2
+=======
+python-stdnum==1.8
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 vobject==0.9.6.1
 Werkzeug==0.14.1
 XlsxWriter==1.1.2

@@ -10,55 +10,33 @@ LivechatButton.include({
 
     /**
      * @override
-     * This will will correctly format the livechat session cookie
-     * that comes from server side (and that is not properly formatted)
+     * Check if a chat request is opened for this visitor
+     * if yes, replace the session cookie and start the conversation immediately.
+     * Do this before calling super to have everything ready before executing existing start logic.
      * This is used for chat request mechanism, when an operator send a chat request
      * from backend to a website visitor.
      */
     willStart: function () {
-        var self = this;
-        var cookie = utils.get_cookie('im_livechat_session');
-        var ready;
-        if (cookie) {
-            var cleanedLivechatSessionCookie = this.decode_server_cookie(cookie);
-            utils.set_cookie('im_livechat_session', cleanedLivechatSessionCookie, 60*60);
+        if (this.options.chat_request_session) {
+            utils.set_cookie('im_livechat_session', JSON.stringify(this.options.chat_request_session), 60*60);
         }
         return this._super();
     },
 
     /**
      * @override
-     * Called when the visitor closes the livechat chatter
-     * (no matter the way : close, send feedback, ..)
+     * Called when the visitor closes the livechat chatter the first time (first click on X button)
      * this will deactivate the mail_channel, clean the chat request if any
      * and allow the operators to send the visitor a new chat request
      */
-    _closeChat: function () {
-        var self = this;
+    _onCloseChatWindow: function (ev) {
+        this._super(ev);
         var cookie = utils.get_cookie('im_livechat_session');
         if (cookie) {
             var channel = JSON.parse(cookie);
-            var ready = session.rpc('/im_livechat/visitor_leave_session', {uuid: channel.uuid});
-            ready.then(self._super());
+            session.rpc('/im_livechat/visitor_leave_session', {uuid: channel.uuid});
+            utils.set_cookie('im_livechat_session', "", -1); // remove cookie
         }
-        else {
-            this._super();
-        }
-    },
-
-    /**
-    * Utils to correctly re-encode json string sent by server.
-    * Copied from StackOverflow.
-    */
-    decode_server_cookie: function (val) {
-        if (val.indexOf('\\') === -1) {
-            return val;  // not encoded
-        }
-        val = val.slice(1, -1).replace(/\\"/g, '"');
-        val = val.replace(/\\(\d{3})/g, function(match, octal) {
-            return String.fromCharCode(parseInt(octal, 8));
-        });
-        return val.replace(/\\\\/g, '\\');
     },
 });
 

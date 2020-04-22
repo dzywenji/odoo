@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, date
 import calendar
 from dateutil.relativedelta import relativedelta
 
@@ -45,6 +45,7 @@ class ResCompany(models.Model):
     cash_account_code_prefix = fields.Char(string='Prefix of the cash accounts')
     default_cash_difference_income_account_id = fields.Many2one('account.account', string="Cash Difference Income Account")
     default_cash_difference_expense_account_id = fields.Many2one('account.account', string="Cash Difference Expense Account")
+    account_journal_suspense_account_id = fields.Many2one('account.account', string='Journal Suspense Account')
     transfer_account_code_prefix = fields.Char(string='Prefix of the transfer accounts')
     account_sale_tax_id = fields.Many2one('account.tax', string="Default Sale Tax")
     account_purchase_tax_id = fields.Many2one('account.tax', string="Default Purchase Tax")
@@ -64,14 +65,11 @@ class ResCompany(models.Model):
     property_stock_valuation_account_id = fields.Many2one('account.account', string="Account Template for Stock Valuation")
     bank_journal_ids = fields.One2many('account.journal', 'company_id', domain=[('type', '=', 'bank')], string='Bank Journals')
     tax_exigibility = fields.Boolean(string='Use Cash Basis')
-    account_bank_reconciliation_start = fields.Date(string="Bank Reconciliation Threshold", help="""The bank reconciliation widget won't ask to reconcile payments older than this date.
-                                                                                                       This is useful if you install accounting after having used invoicing for some time and
-                                                                                                       don't want to reconcile all the past payments with bank statements.""")
 
     incoterm_id = fields.Many2one('account.incoterms', string='Default incoterm',
         help='International Commercial Terms are a series of predefined commercial terms used in international transactions.')
 
-    qr_code = fields.Boolean(string='Display SEPA QR code')
+    qr_code = fields.Boolean(string='Display QR-code on invoices')
 
     invoice_is_email = fields.Boolean('Email by default', default=True)
     invoice_is_print = fields.Boolean('Print by default', default=True)
@@ -79,7 +77,7 @@ class ResCompany(models.Model):
     #Fields of the setup step for opening move
     account_opening_move_id = fields.Many2one(string='Opening Journal Entry', comodel_name='account.move', help="The journal entry containing the initial balance of all this company's accounts.")
     account_opening_journal_id = fields.Many2one(string='Opening Journal', comodel_name='account.journal', related='account_opening_move_id.journal_id', help="Journal where the opening entry of this company's accounting has been posted.", readonly=False)
-    account_opening_date = fields.Date(string='Opening Date', related='account_opening_move_id.date', help="Date at which the opening entry of this company's accounting has been posted.", readonly=False)
+    account_opening_date = fields.Date(string='Opening Entry', default=lambda self: fields.Date.today().replace(month=1, day=1), required=True, help="That is the date of the opening entry.")
 
     # Fields marking the completion of a setup step
     # YTI FIXME : The selection should be factorize as a static list in base, like ONBOARDING_STEP_STATES
@@ -106,6 +104,9 @@ class ResCompany(models.Model):
         help="Account used to move the period of a revenue",
         domain="[('internal_group', '=', 'asset'), ('internal_type', 'not in', ('receivable', 'payable')), ('reconcile', '=', True), ('company_id', '=', id)]")
     accrual_default_journal_id = fields.Many2one('account.journal', help="Journal used by default for moving the period of an entry", domain="[('type', '=', 'general')]")
+
+    # Technical field to hide country specific fields in company form view
+    country_code = fields.Char(related='country_id.code')
 
     @api.constrains('account_opening_move_id', 'fiscalyear_last_day', 'fiscalyear_last_month')
     def _check_fiscalyear_last_day(self):
@@ -227,11 +228,19 @@ class ResCompany(models.Model):
     def _validate_fiscalyear_lock(self, values):
         if values.get('fiscalyear_lock_date'):
             nb_draft_entries = self.env['account.move'].search([
-                ('company_id', 'in', [c.id for c in self]),
+                ('company_id', 'in', self.ids),
                 ('state', '=', 'draft'),
                 ('date', '<=', values['fiscalyear_lock_date'])])
             if nb_draft_entries:
                 raise ValidationError(_('There are still unposted entries in the period you want to lock. You should either post or delete them.'))
+
+    def _get_user_fiscal_lock_date(self):
+        """Get the fiscal lock date for this company depending on the user"""
+        self.ensure_one()
+        lock_date = max(self.period_lock_date or date.min, self.fiscalyear_lock_date or date.min)
+        if self.user_has_groups('account.group_account_manager'):
+            lock_date = self.fiscalyear_lock_date or date.min
+        return lock_date
 
     def write(self, values):
         #restrict the closing of FY if there are still unposted entries
@@ -324,13 +333,10 @@ class ResCompany(models.Model):
             if not default_journal:
                 raise UserError(_("Please install a chart of accounts or create a miscellaneous journal before proceeding."))
 
-            today = datetime.today().date()
-            opening_date = today.replace(month=int(self.fiscalyear_last_month), day=self.fiscalyear_last_day) + timedelta(days=1)
-            if opening_date > today:
-                opening_date = opening_date + relativedelta(years=-1)
+            opening_date = self.account_opening_date - timedelta(days=1)
 
             self.account_opening_move_id = self.env['account.move'].create({
-                'name': _('Opening Journal Entry'),
+                'ref': _('Opening Journal Entry'),
                 'company_id': self.id,
                 'journal_id': default_journal.id,
                 'date': opening_date,
@@ -447,8 +453,8 @@ class ResCompany(models.Model):
                         "\nPlease go to Configuration > Journals.")
                 raise RedirectWarning(msg, action.id, _("Go to the journal configuration"))
 
-            sample_invoice = self.env['account.move'].with_context(default_type='out_invoice', default_journal_id=journal.id).create({
-                'invoice_payment_ref': _('Sample invoice'),
+            sample_invoice = self.env['account.move'].with_context(default_move_type='out_invoice', default_journal_id=journal.id).create({
+                'payment_reference': _('Sample invoice'),
                 'partner_id': partner.id,
                 'invoice_line_ids': [
                     (0, 0, {

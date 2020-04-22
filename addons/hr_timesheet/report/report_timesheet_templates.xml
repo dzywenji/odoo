@@ -26,8 +26,13 @@
                                         <th><span>Date</span></th>
                                         <th><span>Responsible</span></th>
                                         <th><span>Description</span></th>
+<<<<<<< HEAD
                                         <th t-if="show_project">Project</th>
                                         <th t-if="show_task">Task</th>
+=======
+                                        <th t-if="show_project"><span>Project</span></th>
+                                        <th t-if="show_task"><span>Task</span></th>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                                         <th class="text-right"><span>Time</span></th>
                                     </tr>
                                </thead>

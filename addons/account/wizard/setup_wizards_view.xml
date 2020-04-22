@@ -37,6 +37,7 @@
                 <form>
                     <field name="num_journals_without_account" invisible="1"/>
                     <field name="journal_id" invisible="1"/>
+                    <field name="company_id" invisible="1"/>
                     <field name="linked_journal_id" invisible="1"/>
                     <sheet>
                         <div class="oe_title">
@@ -54,7 +55,7 @@
                         </group>
                         <group attrs="{'invisible': [('num_journals_without_account', '&lt;', 2)]}">
                            <group>
-                            <field name="linked_journal_id" attrs="{'required': [('num_journals_without_account','!=',0)]}" domain="[('type','=','bank'), ('bank_account_id', '=', False)]"/>
+                            <field name="linked_journal_id" attrs="{'required': [('num_journals_without_account','!=',0)]}"/>
                           </group>
                           <group>
                                <span class="text-muted">Only journals not yet linked to a bank account are proposed</span>
@@ -73,13 +74,17 @@
             <field name="name">account.setup.opening.move.line.tree</field>
             <field name="model">account.account</field>
             <field name="arch" type="xml">
-                <tree editable="top" create="1" delete="1" decoration-muted="opening_debit == 0 and opening_credit == 0">
+                <tree editable="top" create="1" delete="1" multi_edit="1" decoration-muted="opening_debit == 0 and opening_credit == 0">
                     <field name="code"/>
                     <field name="name"/>
-                    <field name="user_type_id"/>
+                    <field name="company_id" invisible="1"/>
+                    <field name="user_type_id" widget="account_hierarchy_selection"/>
                     <field name="reconcile" widget="boolean_toggle"/>
                     <field name="opening_debit"/>
                     <field name="opening_credit"/>
+                    <field name="tax_ids" optional="hide" widget="many2many_tags"/>
+                    <field name="tag_ids" optional="hide" widget="many2many_tags"/>
+                    <field name="allowed_journal_ids" optional="hide" widget="many2many_tags"/>
                     <button name="action_read_account" type="object" icon="fa-expand" title="Open" aria-label="Open" class="float-right"/>
                 </tree>
             </field>

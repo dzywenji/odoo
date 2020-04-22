@@ -53,9 +53,10 @@ class QWeb(models.AbstractModel):
         view_id = View.get_view_id(el.attrib.get('t-call'))
         name = View.browse(view_id).name
         thumbnail = el.attrib.pop('t-thumbnail', "oe-thumbnail")
-        div = u'<div name="%s" data-oe-type="snippet" data-oe-thumbnail="%s">' % (
+        div = u'<div name="%s" data-oe-type="snippet" data-oe-thumbnail="%s" data-oe-snippet-id="%s">' % (
             escape(pycompat.to_text(name)),
-            escape(pycompat.to_text(thumbnail))
+            escape(pycompat.to_text(thumbnail)),
+            escape(pycompat.to_text(view_id)),
         )
         return [self._append(ast.Str(div))] + self._compile_node(el, options) + [self._append(ast.Str(u'</div>'))]
 
@@ -283,7 +284,7 @@ class DateTime(models.AbstractModel):
 
                 dt = user_tz.localize(dt).astimezone(utc)
             except Exception:
-                logger.warn(
+                logger.warning(
                     "Failed to convert the value for a field of the model"
                     " %s back from the user's timezone (%s) to UTC",
                     model, tz_name,
@@ -358,16 +359,18 @@ class Image(models.AbstractModel):
 
         url_object = urls.url_parse(url)
         if url_object.path.startswith('/web/image'):
-            # url might be /web/image/<model>/<id>[_<checksum>]/<field>[/<width>x<height>]
             fragments = url_object.path.split('/')
             query = url_object.decode_query()
-            if fragments[3].isdigit():
+            url_id = fragments[3].split('-')[0]
+            # ir.attachment image urls: /web/image/<id>[-<checksum>][/...]
+            if url_id.isdigit():
                 model = 'ir.attachment'
-                oid = fragments[3]
+                oid = url_id
                 field = 'datas'
+            # url of binary field on model: /web/image/<model>/<id>/<field>[/...]
             else:
                 model = query.get('model', fragments[3])
-                oid = query.get('id', fragments[4].split('_')[0])
+                oid = query.get('id', fragments[4])
                 field = query.get('field', fragments[5])
             item = self.env[model].browse(int(oid))
             return item[field]

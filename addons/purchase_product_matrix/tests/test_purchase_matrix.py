@@ -12,6 +12,7 @@ class TestPurchaseMatrixUi(TestMatrixCommon):
         self.start_tour("/web", 'purchase_matrix_tour', login="admin")
 
         # Ensures some dynamic create variants have been created by the matrix
+<<<<<<< HEAD
         # Ensures a SO has been created with exactly x lines ...
 
         self.assertEquals(len(self.matrix_template.product_variant_ids), 8)
@@ -21,14 +22,32 @@ class TestPurchaseMatrixUi(TestMatrixCommon):
 
         self.matrix_template.flush()
         self.assertEquals(round(self.matrix_template.purchased_product_qty, 2), 56.8)
+=======
+        # Ensures a PO has been created with exactly x lines ...
+
+        self.assertEqual(len(self.matrix_template.product_variant_ids), 8)
+        self.assertEqual(len(self.matrix_template.product_variant_ids.product_template_attribute_value_ids), 6)
+        self.assertEqual(len(self.matrix_template.attribute_line_ids.product_template_value_ids), 8)
+        self.env['purchase.order.line'].search([('product_id', 'in', self.matrix_template.product_variant_ids.ids)]).order_id.button_confirm()
+
+        self.matrix_template.flush()
+        self.assertEqual(round(self.matrix_template.purchased_product_qty, 2), 56.8)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         for variant in self.matrix_template.product_variant_ids:
             # 5 and 9.2 because of no variant attributes
             self.assertIn(round(variant.purchased_product_qty, 2), [5, 9.2])
 
+<<<<<<< HEAD
         # Ensure no duplicate line has been created on the SO.
         # NB: the *2 is because the no_variant attribute doesn't create a variant
         # but still gives different order lines.
         self.assertEquals(
+=======
+        # Ensure no duplicate line has been created on the PO.
+        # NB: the *2 is because the no_variant attribute doesn't create a variant
+        # but still gives different order lines.
+        self.assertEqual(
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             len(self.env['purchase.order.line'].search([('product_id', 'in', self.matrix_template.product_variant_ids.ids)])),
             len(self.matrix_template.product_variant_ids)*2
         )

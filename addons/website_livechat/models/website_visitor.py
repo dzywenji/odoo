@@ -29,10 +29,12 @@ class WebsiteVisitor(models.Model):
 
     @api.depends('mail_channel_ids')
     def _compute_session_count(self):
-        sessions = self.env['mail.channel'].read_group([('livechat_visitor_id', 'in', self.ids)], ['livechat_visitor_id'], ['livechat_visitor_id'])
-        sessions_count = {session['livechat_visitor_id'][0]: session['livechat_visitor_id_count'] for session in sessions}
+        sessions = self.env['mail.channel'].search([('livechat_visitor_id', 'in', self.ids)])
+        session_count = dict.fromkeys(self.ids, 0)
+        for session in sessions.filtered(lambda c: c.channel_message_ids):
+            session_count[session.livechat_visitor_id.id] += 1
         for visitor in self:
-            visitor.session_count = sessions_count.get(visitor.id, 0)
+            visitor.session_count = session_count.get(visitor.id, 0)
 
     def action_send_chat_request(self):
         """ Send a chat request to website_visitor(s).
@@ -74,6 +76,7 @@ class WebsiteVisitor(models.Model):
             mail_channels_info = mail_channels.channel_info('channel_minimize')
             for mail_channel_info in mail_channels_info:
                 self.env['bus.bus'].sendone((self._cr.dbname, 'res.partner', operator.partner_id.id), mail_channel_info)
+<<<<<<< HEAD
 
     def _handle_website_page_visit(self, response, website_page, visitor_sudo):
         """ Called when the visitor navigates to a website page.
@@ -103,3 +106,5 @@ class WebsiteVisitor(models.Model):
                 })
                 expiration_date = datetime.now() + timedelta(days=100 * 365)  # never expire
                 response.set_cookie('im_livechat_session', livechat_session, expires=expiration_date.timestamp())
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

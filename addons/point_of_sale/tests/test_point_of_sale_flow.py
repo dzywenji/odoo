@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
+
 import time
 
 import odoo
-from odoo import fields
+from odoo import fields, tools
 from odoo.tools import float_compare, mute_logger, test_reports
 from odoo.tests.common import Form
 from odoo.addons.point_of_sale.tests.common import TestPointOfSaleCommon
@@ -13,7 +15,7 @@ class TestPointOfSaleFlow(TestPointOfSaleCommon):
 
 
     def test_order_refund(self):
-        self.pos_config.open_session_cb()
+        self.pos_config.open_session_cb(check_coa=False)
         current_session = self.pos_config.current_session_id
         # I create a new PoS order with 2 lines
         order = self.PosOrder.create({
@@ -204,7 +206,7 @@ class TestPointOfSaleFlow(TestPointOfSaleCommon):
             return untax, sum(tax.get('amount', 0.0) for tax in res['taxes'])
 
         # I click on create a new session button
-        self.pos_config.open_session_cb()
+        self.pos_config.open_session_cb(check_coa=False)
         current_session = self.pos_config.current_session_id
 
         # I create a PoS order with 2 units of PCSC234 at 450 EUR
@@ -263,12 +265,12 @@ class TestPointOfSaleFlow(TestPointOfSaleCommon):
         # I test that the pickings are created as expected during payment
         # One picking attached and having all the positive move lines in the correct state
         self.assertEqual(
-            self.pos_order_pos1.picking_id.state,
+            self.pos_order_pos1.picking_ids[0].state,
             'done',
             'Picking should be in done state.'
         )
         self.assertEqual(
-            self.pos_order_pos1.picking_id.move_lines.mapped('state'),
+            self.pos_order_pos1.picking_ids[0].move_lines.mapped('state'),
             ['done', 'done'],
             'Move Lines should be in done state.'
         )
@@ -327,14 +329,13 @@ class TestPointOfSaleFlow(TestPointOfSaleCommon):
 
         # I test that the pickings are created as expected
         # One picking attached and having all the positive move lines in the correct state
-        self.pos_order_pos2.create_picking()
         self.assertEqual(
-            self.pos_order_pos2.picking_id.state,
+            self.pos_order_pos2.picking_ids[0].state,
             'done',
             'Picking should be in done state.'
         )
         self.assertEqual(
-            self.pos_order_pos2.picking_id.move_lines.mapped('state'),
+            self.pos_order_pos2.picking_ids[0].move_lines.mapped('state'),
             ['done', 'done'],
             'Move Lines should be in done state.'
         )
@@ -393,12 +394,12 @@ class TestPointOfSaleFlow(TestPointOfSaleCommon):
         # I test that the pickings are created as expected
         # One picking attached and having all the positive move lines in the correct state
         self.assertEqual(
-            self.pos_order_pos3.picking_id.state,
+            self.pos_order_pos3.picking_ids[0].state,
             'done',
             'Picking should be in done state.'
         )
         self.assertEqual(
-            self.pos_order_pos3.picking_id.move_lines.mapped('state'),
+            self.pos_order_pos3.picking_ids[0].move_lines.mapped('state'),
             ['done'],
             'Move Lines should be in done state.'
         )
@@ -415,7 +416,7 @@ class TestPointOfSaleFlow(TestPointOfSaleCommon):
             untax = res['total_excluded']
             return untax, sum(tax.get('amount', 0.0) for tax in res['taxes'])
 
-        self.pos_config.open_session_cb()
+        self.pos_config.open_session_cb(check_coa=False)
         current_session = self.pos_config.current_session_id
 
         untax1, atax1 = compute_tax(self.product3, 450*0.95, 2)
@@ -471,6 +472,7 @@ class TestPointOfSaleFlow(TestPointOfSaleCommon):
 
         # I test that the total of the attached invoice is correct
         invoice = self.env['account.move'].browse(res['res_id'])
+        invoice.post()
         self.assertAlmostEqual(
             invoice.amount_total, self.pos_order_pos1.amount_total, places=2, msg="Invoice not correct")
 
@@ -504,7 +506,7 @@ class TestPointOfSaleFlow(TestPointOfSaleCommon):
             'amount': 1000,
             'partner_id': self.partner4.id,
             'statement_id': account_statement.id,
-            'name': 'EXT001'
+            'payment_ref': 'EXT001'
         })
         # I modify the bank statement and set the Closing Balance.
         account_statement.write({
@@ -519,11 +521,9 @@ class TestPointOfSaleFlow(TestPointOfSaleCommon):
             'debit': 0.0,
         }]
 
-        self.env['account.reconciliation.widget'].process_bank_statement_line(account_statement_line.ids, [{'new_aml_dicts': new_aml_dicts}])
-
         # I confirm the bank statement using Confirm button
 
-        self.AccountBankStatement.button_confirm_bank()
+        self.AccountBankStatement.button_validate()
 
     def test_create_from_ui(self):
         """
@@ -539,7 +539,7 @@ class TestPointOfSaleFlow(TestPointOfSaleCommon):
             return untax, sum(tax.get('amount', 0.0) for tax in res['taxes'])
 
         # I click on create a new session button
-        self.pos_config.open_session_cb()
+        self.pos_config.open_session_cb(check_coa=False)
 
         current_session = self.pos_config.current_session_id
         num_starting_orders = len(current_session.order_ids)
@@ -719,7 +719,7 @@ class TestPointOfSaleFlow(TestPointOfSaleCommon):
         })
 
         # I click on create a new session button
-        eur_config.open_session_cb()
+        eur_config.open_session_cb(check_coa=False)
         current_session = eur_config.current_session_id
 
         # I create a PoS order with 2 units of PCSC234 at 450 EUR (Tax Incl)
@@ -818,8 +818,7 @@ class TestPointOfSaleFlow(TestPointOfSaleCommon):
             self.assertAlmostEqual(a, b)
 
     def test_order_to_invoice_no_tax(self):
-
-        self.pos_config.open_session_cb()
+        self.pos_config.open_session_cb(check_coa=False)
         current_session = self.pos_config.current_session_id
 
         # I create a new PoS order with 2 units of PC1 at 450 EUR (Tax Incl) and 3 units of PCSC349 at 300 EUR. (Tax Excl)
@@ -871,6 +870,7 @@ class TestPointOfSaleFlow(TestPointOfSaleCommon):
 
         # I test that the total of the attached invoice is correct
         invoice = self.env['account.move'].browse(res['res_id'])
+        invoice.post()
         self.assertAlmostEqual(
             invoice.amount_total, self.pos_order_pos1.amount_total, places=2, msg="Invoice not correct")
 

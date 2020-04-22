@@ -132,8 +132,8 @@ class Http(models.AbstractModel):
         if not request.session.uid:
             env = api.Environment(request.cr, SUPERUSER_ID, request.context)
             website = env['website'].get_current_website()
-            if website and website.user_id:
-                request.uid = website.user_id.id
+            request.uid = website and website._get_cached('user_id')
+
         if not request.uid:
             super(Http, cls)._auth_method_public()
 
@@ -199,8 +199,14 @@ class Http(models.AbstractModel):
         # context (eg: /shop), and it's not going to propagate to the global context of the tab
         # If the company of the website is not in the allowed companies of the user, set the main
         # company of the user.
+<<<<<<< HEAD
         if request.website.company_id in request.env.user.company_ids:
             context['allowed_company_ids'] = request.website.company_id.ids
+=======
+        website_company_id = request.website._get_cached('company_id')
+        if website_company_id in request.env.user.company_ids.ids:
+            context['allowed_company_ids'] = [website_company_id]
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         else:
             context['allowed_company_ids'] = request.env.user.company_id.ids
 
@@ -222,7 +228,7 @@ class Http(models.AbstractModel):
     @classmethod
     def _get_default_lang(cls):
         if getattr(request, 'website', False):
-            return request.website.default_lang_id
+            return request.env['res.lang'].browse(request.website._get_cached('default_lang_id'))
         return super(Http, cls)._get_default_lang()
 
     @classmethod
@@ -239,9 +245,18 @@ class Http(models.AbstractModel):
         published_domain = page_domain
         # specific page first
         page = request.env['website.page'].sudo().search(published_domain, order='website_id asc', limit=1)
+<<<<<<< HEAD
         if page and (request.website.is_publisher() or page.is_visible):
             _, ext = os.path.splitext(req_page)
             return request.render(page.get_view_identifier(), {
+=======
+        if page:
+            # prefetch all menus (it will prefetch website.page too)
+            request.website.menu_id
+        if page and (request.website.is_publisher() or page.is_visible):
+            _, ext = os.path.splitext(req_page)
+            return request.render(page.view_id.id, {
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 'deletable': True,
                 'main_object': page,
             }, mimetype=_guess_mimetype(ext))
@@ -280,7 +295,14 @@ class Http(models.AbstractModel):
         code, values = super(Http, cls)._get_exception_code_values(exception)
         if request.website.is_publisher() and isinstance(exception, werkzeug.exceptions.NotFound):
             values['path'] = request.httprequest.path[1:]
+<<<<<<< HEAD
             values['force_template'] = 'website.page_404'
+=======
+        if isinstance(exception, werkzeug.exceptions.Forbidden) and \
+           exception.description == "website_visibility_password_required":
+            code = 'protected_403'
+            values['path'] = request.httprequest.path
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         return (code, values)
 
     @classmethod
@@ -291,7 +313,7 @@ class Http(models.AbstractModel):
             try:
                 # exception.name might be int, string
                 exception_template = int(exception.name)
-            except:
+            except ValueError:
                 exception_template = exception.name
             view = View._view_obj(exception_template)
             if exception.html and exception.html in view.arch:
@@ -314,8 +336,13 @@ class Http(models.AbstractModel):
 
     @classmethod
     def _get_error_html(cls, env, code, values):
+<<<<<<< HEAD
         if values.get('force_template'):
             return env['ir.ui.view'].render_template(values['force_template'], values)
+=======
+        if code in ('page_404', 'protected_403'):
+            return code.split('_')[1], env['ir.ui.view'].render_template('website.%s' % code, values)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         return super(Http, cls)._get_error_html(env, code, values)
 
     def binary_content(self, xmlid=None, model='ir.attachment', id=None, field='datas',
@@ -359,7 +386,7 @@ class Http(models.AbstractModel):
         if request.env.user.has_group('website.group_website_publisher'):
             session_info.update({
                 'website_id': request.website.id,
-                'website_company_id': request.website.company_id.id,
+                'website_company_id': request.website._get_cached('company_id'),
             })
         return session_info
 
@@ -373,5 +400,12 @@ class ModelConverter(ModelConverter):
         domain = safe_eval(self.domain, (args or {}).copy())
         if dom:
             domain += dom
+<<<<<<< HEAD
         for record in Model.search_read(domain, ['display_name']):
             yield {'loc': (record['id'], record['display_name'])}
+=======
+        for record in Model.search(domain):
+            # return record so URL will be the real endpoint URL as the record will go through `slug()`
+            # the same way as endpoint URL is retrieved during dispatch (301 redirect), see `to_url()` from ModelConverter
+            yield record
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

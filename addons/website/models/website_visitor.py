@@ -121,6 +121,7 @@ class WebsiteVisitor(models.Model):
             visitor.time_since_last_action = _format_time_ago(self.env, (datetime.now() - visitor.last_connection_datetime))
             visitor.is_connected = (datetime.now() - visitor.last_connection_datetime) < timedelta(minutes=5)
 
+<<<<<<< HEAD
     def _prepare_visitor_send_mail_values(self):
         if self.partner_id.email:
             return {
@@ -129,30 +130,41 @@ class WebsiteVisitor(models.Model):
                 'partner_ids': [self.partner_id.id],
             }
         return {}
+=======
+    def _check_for_message_composer(self):
+        """ Purpose of this method is to actualize visitor model prior to contacting
+        him. Used notably for inheritance purpose, when dealing with leads that
+        could update the visitor model. """
+        return bool(self.partner_id and self.partner_id.email)
+
+    def _prepare_message_composer_context(self):
+        return {
+            'default_model': 'res.partner',
+            'default_res_id': self.partner_id.id,
+            'default_partner_ids': [self.partner_id.id],
+        }
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     def action_send_mail(self):
         self.ensure_one()
-        visitor_mail_values = self._prepare_visitor_send_mail_values()
-        if not visitor_mail_values:
-            raise UserError(_("There is no email linked this visitor."))
+        if not self._check_for_message_composer():
+            raise UserError(_("There is no contact and/or no email linked this visitor."))
+        visitor_composer_ctx = self._prepare_message_composer_context()
         compose_form = self.env.ref('mail.email_compose_message_wizard_form', False)
-        ctx = dict(
-            default_model=visitor_mail_values.get('res_model'),
-            default_res_id=visitor_mail_values.get('res_id'),
+        compose_ctx = dict(
             default_use_template=False,
-            default_partner_ids=[(6, 0, visitor_mail_values.get('partner_ids'))],
             default_composition_mode='comment',
-            default_reply_to=self.env.user.partner_id.email,
         )
+        compose_ctx.update(**visitor_composer_ctx)
         return {
-            'name': _('Compose Email'),
+            'name': _('Contact Visitor'),
             'type': 'ir.actions.act_window',
             'view_mode': 'form',
             'res_model': 'mail.compose.message',
             'views': [(compose_form.id, 'form')],
             'view_id': compose_form.id,
             'target': 'new',
-            'context': ctx,
+            'context': compose_ctx,
         }
 
     def _get_visitor_from_request(self, force_create=False):
@@ -195,9 +207,9 @@ class WebsiteVisitor(models.Model):
         if request.httprequest.cookies.get('visitor_uuid', '') != visitor_sudo.access_token:
             expiration_date = datetime.now() + timedelta(days=365)
             response.set_cookie('visitor_uuid', visitor_sudo.access_token, expires=expiration_date)
-        self._handle_website_page_visit(response, website_page, visitor_sudo)
+        self._handle_website_page_visit(website_page, visitor_sudo)
 
-    def _handle_website_page_visit(self, response, website_page, visitor_sudo):
+    def _handle_website_page_visit(self, website_page, visitor_sudo):
         """ Called on dispatch. This will create a website.visitor if the http request object
         is a tracked website page or a tracked view. Only on tracked elements to avoid having
         too much operations done on every page or other http requests.
@@ -225,8 +237,8 @@ class WebsiteVisitor(models.Model):
             self.env['website.track'].create(website_track_values)
         self._update_visitor_last_visit()
 
-    def _create_visitor(self, website_track_values=None):
-        """ Create a visitor and add a track to it if website_track_values is set."""
+    def _create_visitor(self):
+        """ Create a visitor. Tracking is added after the visitor has been created."""
         country_code = request.session.get('geoip', {}).get('country_code', False)
         country_id = request.env['res.country'].sudo().search([('code', '=', country_code)], limit=1).id if country_code else False
         vals = {
@@ -237,8 +249,6 @@ class WebsiteVisitor(models.Model):
         if not self.env.user._is_public():
             vals['partner_id'] = self.env.user.partner_id.id
             vals['name'] = self.env.user.partner_id.name
-        if website_track_values:
-            vals['website_track_ids'] = [(0, 0, website_track_values)]
         return self.sudo().create(vals)
 
     def _cron_archive_visitors(self):

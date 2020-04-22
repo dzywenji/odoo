@@ -3,7 +3,16 @@ odoo.define('web.field_registry', function (require) {
 
 var Registry = require('web.Registry');
 
-return new Registry();
+var FieldRegistry = Registry.extend({
+    add: function (key, value, score) {
+        if (value.prototype instanceof owl.Component) {
+            throw new Error("This registry should not contain any Component. Use 'web.field_registry_owl' instead.");
+        }
+        return this._super(...arguments);
+    },
+});
+
+return new FieldRegistry();
 });
 
 odoo.define('web._field_registry', function (require) {
@@ -62,7 +71,12 @@ registry
     .add('dashboard_graph', basic_fields.JournalDashboardGraph)
     .add('ace', basic_fields.AceEditor)
     .add('color', basic_fields.FieldColor)
+<<<<<<< HEAD
     .add('many2one_reference', basic_fields.FieldInteger);
+=======
+    .add('many2one_reference', basic_fields.FieldInteger)
+    .add('color_picker', basic_fields.FieldColorPicker);
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 // Relational fields
 registry

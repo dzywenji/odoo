@@ -36,11 +36,9 @@ class AccountMove(models.Model):
         if not self.purchase_id:
             return
 
-        # Copy partner.
-        self.partner_id = self.purchase_id.partner_id
-        self.fiscal_position_id = self.purchase_id.fiscal_position_id
-        self.invoice_payment_term_id = self.purchase_id.payment_term_id
-        self.currency_id = self.purchase_id.currency_id
+        # Copy data from PO
+        invoice_vals = self.purchase_id._prepare_invoice()
+        self.update(invoice_vals)
 
         # Copy purchase lines.
         po_lines = self.purchase_id.order_line - self.line_ids.mapped('purchase_line_id')
@@ -61,6 +59,7 @@ class AccountMove(models.Model):
         refs = [ref for ref in refs if ref]
         self.ref = ','.join(refs)
 
+<<<<<<< HEAD
         # Compute invoice_payment_ref.
         if len(refs) == 1:
             self.invoice_payment_ref = refs[0]
@@ -68,12 +67,25 @@ class AccountMove(models.Model):
         self.purchase_id = False
         self._onchange_currency()
         self.invoice_partner_bank_id = self.bank_partner_id.bank_ids and self.bank_partner_id.bank_ids[0]
+=======
+        # Compute payment_reference.
+        if len(refs) == 1:
+            self.payment_reference = refs[0]
+
+        self.purchase_id = False
+        self._onchange_currency()
+        self.partner_bank_id = self.bank_partner_id.bank_ids and self.bank_partner_id.bank_ids[0]
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     @api.onchange('partner_id', 'company_id')
     def _onchange_partner_id(self):
         res = super(AccountMove, self)._onchange_partner_id()
         if not self.env.context.get('default_journal_id') and self.partner_id and\
+<<<<<<< HEAD
                 self.type in ['in_invoice', 'in_refund'] and\
+=======
+                self.move_type in ['in_invoice', 'in_refund'] and\
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 self.currency_id != self.partner_id.property_purchase_currency_id and\
                 self.partner_id.property_purchase_currency_id.id:
             journal_domain = [

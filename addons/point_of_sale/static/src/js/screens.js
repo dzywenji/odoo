@@ -2080,7 +2080,7 @@ var PaymentScreenWidget = ScreenWidget.extend({
         var extradue = this.compute_extradue(order);
 
         this.$('.paymentlines-container').empty();
-        var lines = $(QWeb.render('PaymentScreen-Paymentlines', { 
+        var lines = $(QWeb.render('PaymentScreen-Paymentlines', {
             widget: this, 
             order: order,
             paymentlines: lines,
@@ -2116,6 +2116,7 @@ var PaymentScreenWidget = ScreenWidget.extend({
                 'title': _t('Error'),
                 'body':  _t('There is already an electronic payment in progress.'),
             });
+            return false;
         } else {
             order.add_paymentline(payment_method);
             this.reset_input();
@@ -2127,6 +2128,7 @@ var PaymentScreenWidget = ScreenWidget.extend({
 
             this.render_paymentlines();
         }
+        return true;
     },
     render_paymentmethods: function() {
         var self = this;
@@ -2287,6 +2289,15 @@ var PaymentScreenWidget = ScreenWidget.extend({
             return false;
         }
 
+        if(order.has_not_valid_rounding()) {
+            var line = order.has_not_valid_rounding();
+            this.gui.show_popup('error',{
+                    title: _t('Incorrect rounding'),
+                    body:  _t('You have to round your payments lines.' + line.amount + ' is not rounded.'),
+                });
+            return false;
+        }
+
         // The exact amount must be paid if there is no cash payment method defined.
         if (Math.abs(order.get_total_with_tax() - order.get_total_paid()) > 0.00001) {
             var cash = false;
@@ -2421,6 +2432,14 @@ var PaymentScreenWidget = ScreenWidget.extend({
     // and complete the sale process
     validate_order: function(force_validation) {
         if (this.order_is_valid(force_validation)) {
+            // remove pending payments before finalizing the validation
+            var order = this.pos.get_order();
+            order.get_paymentlines().forEach(line => {
+                if (!line.is_done()) {
+                    order.remove_paymentline(line);
+                }
+            });
+            this.render_paymentlines();
             this.finalize_validation();
         }
     },
@@ -2444,7 +2463,7 @@ var PaymentScreenWidget = ScreenWidget.extend({
                 rpc.query({
                     model: 'pos.order',
                     method: 'action_receipt_to_customer',
-                    args: [order.get_name(), order.get_client(), ticket, order_server_ids],
+                    args: [order_server_ids, order.get_name(), order.get_client(), ticket],
                 }).then(function() {
                   resolve();
                 }).catch(function () {

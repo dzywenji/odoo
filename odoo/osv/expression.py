@@ -453,10 +453,13 @@ def select_from_where(cr, select_field, from_table, where_field, where_ids, wher
                 res.extend([r[0] for r in cr.fetchall()])
     return res
 
+<<<<<<< HEAD
 def select_distinct_from_where_not_null(cr, select_field, from_table):
     # This method helper is deprecated, to remove in master
     cr.execute('SELECT distinct("%s") FROM "%s" where "%s" is not null' % (select_field, from_table, select_field))
     return [r[0] for r in cr.fetchall()]
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 def get_unaccent_wrapper(cr):
     if odoo.registry(cr.dbname).has_unaccent:
@@ -910,7 +913,7 @@ class expression(object):
 
             # Making search easier when there is a left operand as one2many or many2many
             elif len(path) > 1 and field.store and field.type in ('many2many', 'one2many'):
-                right_ids = comodel.search([('.'.join(path[1:]), operator, right)]).ids
+                right_ids = comodel.with_context(**field.context).search([('.'.join(path[1:]), operator, right)]).ids
                 leaf.leaf = (path[0], 'in', right_ids)
                 push(leaf)
 

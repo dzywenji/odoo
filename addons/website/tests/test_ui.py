@@ -96,7 +96,11 @@ class TestUiTranslate(odoo.tests.HttpCase):
 class TestUi(odoo.tests.HttpCase):
 
     def test_01_admin_tour_banner(self):
+<<<<<<< HEAD
         self.start_tour("/", 'banner', login='admin')
+=======
+        self.start_tour("/", 'banner', login='admin', step_delay=100)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     def test_02_restricted_editor(self):
         self.restricted_editor = self.env['res.users'].create({

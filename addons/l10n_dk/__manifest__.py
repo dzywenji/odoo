@@ -6,7 +6,11 @@
     'version': '1.0',
     'author': 'Odoo House ApS',
     'website': 'https://odoohouse.dk',
+<<<<<<< HEAD
     'category': 'Localization',
+=======
+    'category': 'Accounting/Localizations',
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     'description': """
 
 Localization Module for Denmark
@@ -22,7 +26,11 @@ This is the module to manage the **accounting chart for Denmark**. Cover both on
         - 25% moms
         - Resturationsmoms 6,25%
         - Omvendt betalingspligt
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 - Konteringsgrupper
         - EU (Virksomhed)
         - EU (Privat)
@@ -102,4 +110,10 @@ Copyright 2018 Odoo House ApS
         'data/account_chart_template_configuration_data.xml',
         'data/menuitem_data.xml'
     ],
+<<<<<<< HEAD
+=======
+    'demo': [
+        'demo/demo_company.xml',
+    ],
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 }

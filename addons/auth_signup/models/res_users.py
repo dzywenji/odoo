@@ -164,6 +164,8 @@ class ResUsers(models.Model):
 
     def action_reset_password(self):
         """ create signup token for each user, and send their signup url by email """
+        if self.filtered(lambda user: not user.active):
+            raise UserError(_("You cannot perform this action on an archived user."))
         # prepare reset password signup
         create_mode = bool(self.env.context.get('create_user'))
 
@@ -195,9 +197,14 @@ class ResUsers(models.Model):
         for user in self:
             if not user.email:
                 raise UserError(_("Cannot send email: user %s has no email address.") % user.name)
+            # TDE FIXME: make this template technical (qweb)
             with self.env.cr.savepoint():
                 force_send = not(self.env.context.get('import_file', False))
+<<<<<<< HEAD
                 template.with_context(lang=user.lang).send_mail(user.id, force_send=force_send, raise_exception=True)
+=======
+                template.send_mail(user.id, force_send=force_send, raise_exception=True)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             _logger.info("Password reset email sent for user <%s> to <%s>", user.login, user.email)
 
     def send_unregistered_user_reminder(self, after_days=5):

@@ -94,9 +94,7 @@ class SaleOrder(models.Model):
 
         reward_qty = min(int(int(max_product_qty / program.rule_min_quantity) * program.reward_product_quantity), reward_product_qty)
         # Take the default taxes on the reward product, mapped with the fiscal position
-        taxes = program.reward_product_id.taxes_id
-        if self.fiscal_position_id:
-            taxes = self.fiscal_position_id.map_tax(taxes)
+        taxes = self.fiscal_position_id.map_tax(program.reward_product_id.taxes_id)
         return {
             'product_id': program.discount_line_product_id.id,
             'price_unit': - price_unit,
@@ -147,9 +145,7 @@ class SaleOrder(models.Model):
             if line:
                 discount_line_amount = line.price_reduce * (program.discount_percentage / 100)
                 if discount_line_amount:
-                    taxes = line.tax_id
-                    if self.fiscal_position_id:
-                        taxes = self.fiscal_position_id.map_tax(taxes)
+                    taxes = self.fiscal_position_id.map_tax(line.tax_id)
 
                     reward_dict[line.tax_id] = {
                         'name': _("Discount: ") + program.name,
@@ -174,9 +170,7 @@ class SaleOrder(models.Model):
                     if line.tax_id in reward_dict:
                         reward_dict[line.tax_id]['price_unit'] -= discount_line_amount
                     else:
-                        taxes = line.tax_id
-                        if self.fiscal_position_id:
-                            taxes = self.fiscal_position_id.map_tax(taxes)
+                        taxes = self.fiscal_position_id.map_tax(line.tax_id)
 
                         tax_name = ""
                         if len(taxes) == 1:
@@ -244,7 +238,6 @@ class SaleOrder(models.Model):
         return coupon
 
     def _send_reward_coupon_mail(self):
-        self.ensure_one()
         template = self.env.ref('sale_coupon.mail_template_sale_coupon', raise_if_not_found=False)
         if template:
             for coupon in self.generated_coupon_ids:
@@ -272,10 +265,6 @@ class SaleOrder(models.Model):
             ('promo_code_usage', '=', 'no_code_needed'),
         ])._filter_programs_from_common_rules(self)
         return programs
-
-    def _get_applied_coupon_program_coming_from_another_so(self):
-        # TODO: Remove me in master as no more used
-        pass
 
     def _get_valid_applied_coupon_program(self):
         self.ensure_one()
@@ -430,10 +419,11 @@ class SaleOrderLine(models.Model):
         # as the product is the generic discount line.
         # In case of a free product, retrieving the tax on the line instead of the product won't affect the behavior.
         for line in reward_lines:
-            fpos = line.order_id.fiscal_position_id or line.order_id.partner_id.property_account_position_id
+            line = line.with_company(line.company_id)
+            fpos = line.order_id.fiscal_position_id or line.order_id.fiscal_position_id.get_fiscal_position(line.order_partner_id.id)
             # If company_id is set, always filter taxes by the company
             taxes = line.tax_id.filtered(lambda r: not line.company_id or r.company_id == line.company_id)
-            line.tax_id = fpos.map_tax(taxes, line.product_id, line.order_id.partner_shipping_id) if fpos else taxes
+            line.tax_id = fpos.map_tax(taxes, line.product_id, line.order_id.partner_shipping_id)
 
     # Invalidation of `sale.coupon.program.order_count`
     # `test_program_rules_validity_dates_and_uses`,

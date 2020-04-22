@@ -4,14 +4,11 @@
 import base64
 from random import choice
 from string import digits
-import itertools
-from werkzeug import url_encode
-import pytz
+from werkzeug.urls import url_encode
 
 from odoo import api, fields, models, _
 from odoo.exceptions import ValidationError, AccessError
 from odoo.modules.module import get_module_resource
-from odoo.addons.resource.models.resource_mixin import timezone_datetime
 
 
 class HrEmployeePrivate(models.Model):
@@ -55,7 +52,7 @@ class HrEmployeePrivate(models.Model):
         ('male', 'Male'),
         ('female', 'Female'),
         ('other', 'Other')
-    ], groups="hr.group_hr_user", default="male", tracking=True)
+    ], groups="hr.group_hr_user", tracking=True)
     marital = fields.Selection([
         ('single', 'Single'),
         ('married', 'Married'),
@@ -114,6 +111,7 @@ class HrEmployeePrivate(models.Model):
         ('retired', 'Retired')
     ], string="Departure Reason", groups="hr.group_hr_user", copy=False, tracking=True)
     departure_description = fields.Text(string="Additional Information", groups="hr.group_hr_user", copy=False, tracking=True)
+    departure_date = fields.Date(string="Departure Date", groups="hr.group_hr_user", copy=False, tracking=True)
     message_main_attachment_id = fields.Many2one(groups="hr.group_hr_user")
 
     _sql_constraints = [
@@ -194,26 +192,6 @@ class HrEmployeePrivate(models.Model):
             if employee.pin and not employee.pin.isdigit():
                 raise ValidationError(_("The PIN must be a sequence of digits."))
 
-    @api.onchange('job_id')
-    def _onchange_job_id(self):
-        if self.job_id:
-            self.job_title = self.job_id.name
-
-    @api.onchange('address_id')
-    def _onchange_address(self):
-        self.work_phone = self.address_id.phone
-        self.mobile_phone = self.address_id.mobile
-
-    @api.onchange('company_id')
-    def _onchange_company(self):
-        address = self.company_id.partner_id.address_get(['default'])
-        self.address_id = address['default'] if address else False
-
-    @api.onchange('department_id')
-    def _onchange_department(self):
-        if self.department_id.manager_id:
-            self.parent_id = self.department_id.manager_id
-
     @api.onchange('user_id')
     def _onchange_user(self):
         if self.user_id:
@@ -274,10 +252,14 @@ class HrEmployeePrivate(models.Model):
 
     def toggle_active(self):
         res = super(HrEmployeePrivate, self).toggle_active()
-        self.filtered(lambda employee: employee.active).write({
+        unarchived_employees = self.filtered(lambda employee: employee.active)
+        unarchived_employees.write({
             'departure_reason': False,
             'departure_description': False,
+            'departure_date': False
         })
+        archived_addresses = unarchived_employees.mapped('address_home_id').filtered(lambda addr: not addr.active)
+        archived_addresses.toggle_active()
         if len(self) == 1 and not self.active:
             return {
                 'type': 'ir.actions.act_window',

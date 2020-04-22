@@ -15,6 +15,7 @@ var core = require('web.core');
 var dom = require('web.dom');
 var ListRenderer = require('web.ListRenderer');
 var utils = require('web.utils');
+const { WidgetAdapterMixin } = require('web.OwlCompatibility');
 
 var _t = core._t;
 
@@ -42,7 +43,6 @@ ListRenderer.include({
      * @param {boolean} params.isMultiEditable
      */
     init: function (parent, state, params) {
-        var self = this;
         this._super.apply(this, arguments);
 
         this.editable = params.editable;
@@ -62,33 +62,27 @@ ListRenderer.include({
 
         // The following code will browse the arch to find
         // all the <create> that are inside <control>
-
-        if (this.addCreateLine) {
-            this.creates = [];
-
-            _.each(this.arch.children, function (child) {
-                if (child.tag !== 'control') {
+        this.creates = [];
+        this.arch.children.forEach(child => {
+            if (child.tag !== 'control') {
+                return;
+            }
+            child.children.forEach(child => {
+                if (child.tag !== 'create' || child.attrs.invisible) {
                     return;
                 }
-
-                _.each(child.children, function (child) {
-                    if (child.tag !== 'create' || child.attrs.invisible) {
-                        return;
-                    }
-
-                    self.creates.push({
-                        context: child.attrs.context,
-                        string: child.attrs.string,
-                    });
+                this.creates.push({
+                    context: child.attrs.context,
+                    string: child.attrs.string,
                 });
             });
+        });
 
-            // Add the default button if we didn't find any custom button.
-            if (this.creates.length === 0) {
-                this.creates.push({
-                    string: _t("Add a line"),
-                });
-            }
+        // Add the default button if we didn't find any custom button.
+        if (this.creates.length === 0) {
+            this.creates.push({
+                string: _t("Add a line"),
+            });
         }
 
         // if addTrashIcon is true, there will be a small trash icon at the end
@@ -467,6 +461,9 @@ ListRenderer.include({
         }
 
         return Promise.all(defs).then(function () {
+            // mark Owl sub components as mounted
+            WidgetAdapterMixin.on_attach_callback.call(self);
+
             // necessary to trigger resize on fieldtexts
             core.bus.trigger('DOM_updated');
         });
@@ -505,12 +502,12 @@ ListRenderer.include({
                 onSuccess: resolve,
                 onFailure: reject,
             });
-        }).then(changedFields => {
+        }).then(selectNextRow => {
             this._enableRecordSelectors();
             // If any field has changed and if the list is in multiple edition,
             // we send a truthy boolean to _selectRow to tell it not to select
             // the following record.
-            return changedFields && changedFields.length && this.isInMultipleRecordEdition(recordID);
+            return selectNextRow;
         }).guardedCatch(() => {
             toggleWidgets(false);
         });
@@ -529,6 +526,15 @@ ListRenderer.include({
             // remove computed modifiers data (as they are obsolete) to force
             // them to be recomputed at next (sub-)rendering
             this.allModifiersData = [];
+        }
+        if ('addTrashIcon' in params) {
+            if (this.addTrashIcon !== params.addTrashIcon) {
+                this.columnWidths = false; // columns changed, so forget stored widths
+            }
+            this.addTrashIcon = params.addTrashIcon;
+        }
+        if ('addCreateLine' in params) {
+            this.addCreateLine = params.addCreateLine;
         }
         return this._super.apply(this, arguments);
     },
@@ -655,7 +661,11 @@ ListRenderer.include({
         if (!thElements.length) {
             return;
         }
+<<<<<<< HEAD
         const table = this.el.getElementsByTagName('table')[0];
+=======
+        const table = this.el.getElementsByClassName('o_list_table')[0];
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         let columnWidths = this.columnWidths;
 
         if (!columnWidths || !columnWidths.length) { // no column widths to restore
@@ -747,7 +757,7 @@ ListRenderer.include({
             return '1';
         }
         const fixedWidths = {
-            boolean: '50px',
+            boolean: '70px',
             date: '92px',
             datetime: '146px',
             float: '92px',
@@ -1198,15 +1208,17 @@ ListRenderer.include({
             $tr.append($td);
             $rows.push($tr);
 
-            _.each(this.creates, function (create, index) {
-                var $a = $('<a href="#" role="button">')
-                    .attr('data-context', create.context)
-                    .text(create.string);
-                if (index > 0) {
-                    $a.addClass('ml16');
-                }
-                $td.append($a);
-            });
+            if (this.addCreateLine) {
+                _.each(this.creates, function (create, index) {
+                    var $a = $('<a href="#" role="button">')
+                        .attr('data-context', create.context)
+                        .text(create.string);
+                    if (index > 0) {
+                        $a.addClass('ml16');
+                    }
+                    $td.append($a);
+                });
+            }
         }
         return $rows;
     },
@@ -1218,7 +1230,7 @@ ListRenderer.include({
     _renderView: function () {
         this.currentRow = null;
         return this._super.apply(this, arguments).then(() => {
-            const table = this.el.getElementsByTagName('table')[0];
+            const table = this.el.getElementsByClassName('o_list_table')[0];
             if (table) {
                 table.classList.toggle('o_empty_list', !this._hasVisibleRecords(this.state));
                 this._freezeColumnWidths();
@@ -1298,8 +1310,8 @@ ListRenderer.include({
         var recordId = this._getRecordID(rowIndex);
         // To select a row, the currently selected one must be unselected first
         var self = this;
-        return this.unselectRow().then(noSelectNext => {
-            if (noSelectNext) {
+        return this.unselectRow().then((selectNextRow = true) => {
+            if (!selectNextRow) {
                 return Promise.resolve();
             }
             if (!recordId) {
@@ -1331,7 +1343,7 @@ ListRenderer.include({
      *   overflow
      */
     _squeezeTable: function () {
-        const table = this.el.getElementsByTagName('table')[0];
+        const table = this.el.getElementsByClassName('o_list_table')[0];
         const thead = table.getElementsByTagName('thead')[0];
         const thElements = [...thead.getElementsByTagName('th')];
         const columnWidths = thElements.map(th => th.offsetWidth);
@@ -1547,6 +1559,10 @@ ListRenderer.include({
             return;
         }
         ev.stopPropagation(); // stop the event, the action is done by this renderer
+        if (ev.data.originalEvent && ['next', 'previous'].includes(ev.data.direction)) {
+            ev.data.originalEvent.preventDefault();
+            ev.data.originalEvent.stopPropagation();
+        }
         switch (ev.data.direction) {
             case 'previous':
                 if (this.currentFieldIndex > 0) {
@@ -1670,7 +1686,7 @@ ListRenderer.include({
 
         this.isResizing = true;
 
-        const table = this.el.getElementsByTagName('table')[0];
+        const table = this.el.getElementsByClassName('o_list_table')[0];
         const th = ev.target.closest('th');
         table.style.width = `${table.offsetWidth}px`;
         const thPosition = [...th.parentNode.children].indexOf(th);

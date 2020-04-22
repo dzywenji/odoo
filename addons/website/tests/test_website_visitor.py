@@ -2,7 +2,11 @@
 from odoo import tests
 from datetime import datetime, timedelta
 
+<<<<<<< HEAD
 
+=======
+@tests.tagged('-at_install', 'post_install')
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 class WebsiteVisitorTests(tests.HttpCase):
     def setUp(self):
         super(WebsiteVisitorTests, self).setUp()
@@ -67,7 +71,10 @@ class WebsiteVisitorTests(tests.HttpCase):
         })
         partner_demo = self.env.ref('base.partner_demo')
         old_visitor.partner_id = partner_demo.id
+<<<<<<< HEAD
         partner_demo.visitor_ids = [(6, 0, [old_visitor.id])]  # TODO DBE : Remove this line in Master (13.1) after visitor_ids field declaration master fix
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         self.assertEqual(partner_demo.visitor_ids.id, old_visitor.id, "The partner visitor should be set correctly.")
 
         # archive old visitor

@@ -103,7 +103,11 @@ class test_inherits(common.TransactionCase):
 
     def test_display_name(self):
         """ Check the 'display_name' of an inherited translated 'name'. """
+<<<<<<< HEAD
         self.env['res.lang'].load_lang('fr_FR')
+=======
+        self.env['res.lang']._activate_lang('fr_FR')
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         # concrete check
         pallet_en = self.env['test.pallet'].create({'name': 'Bread'})

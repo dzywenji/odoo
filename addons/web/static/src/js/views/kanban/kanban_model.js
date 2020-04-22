@@ -179,20 +179,9 @@ var KanbanModel = BasicModel.extend({
      * @override
      */
     load: function (params) {
-        this.defaultGroupedBy = params.groupBy;
+        this.defaultGroupedBy = params.groupBy || [];
         params.groupedBy = (params.groupedBy && params.groupedBy.length) ? params.groupedBy : this.defaultGroupedBy;
         return this._super(params);
-    },
-    /**
-     * Opens a given group and loads its <limit> first records
-     *
-     * @param {string} groupID
-     * @returns {Promise}
-     */
-    loadColumnRecords: function (groupID) {
-        var dataPoint = this.localData[groupID];
-        dataPoint.isOpen = true;
-        return this.reload(groupID);
     },
     /**
      * Load more records in a group.

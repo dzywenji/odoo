@@ -78,7 +78,6 @@
                         domain="[('activity_ids.date_deadline', '&gt;', context_today().strftime('%Y-%m-%d'))
                         ]"/>
                 <group expand="0" string="Group By">
-                    <filter name="group_name" string="Description" context="{'group_by':'name'}"/>
                     <filter name="group_employee" string="Employee" context="{'group_by':'employee_id'}"/>
                     <filter name="group_category" string="Category" context="{'group_by':'category_id'}"/>
                     <filter name="group_second_approver_id" string="Validator" context="{'group_by':'second_approver_id'}"/>
@@ -142,8 +141,8 @@
                             <div class="row no-gutters" t-if="['validate', 'refuse'].includes(record.state.raw_value)">
                                 <div class="col-2"/>
                                 <div class="col-10">
-                                    <span t-if="record.state.raw_value === 'validate'" class="fa fa-check text-muted"/>
-                                    <span t-else="" class="fa fa-ban text-muted"/>
+                                    <span t-if="record.state.raw_value === 'validate'" class="fa fa-check text-muted" aria-label="validated"/>
+                                    <span t-else="" class="fa fa-ban text-muted" aria-label="refused"/>
                                     <span class="text-muted"><t t-esc="record.state.value"/></span>
                                 </div>
                             </div>
@@ -207,6 +206,20 @@
                 <field name="state" widget="statusbar" statusbar_visible="confirm,validate"/>
             </header>
             <sheet>
+                <div class="alert alert-info" role="alert" attrs="{'invisible': ['|', ('tz_mismatch', '=', False), ('holiday_type', '=', 'category')]}">
+                    <span attrs="{'invisible': [('holiday_type', '!=', 'employee')]}">
+                        The employee has a different timezone than yours! Here dates and times are displayed in the employee's timezone
+                    </span>
+                    <span attrs="{'invisible': [('holiday_type', '!=', 'department')]}">
+                        The department's company has a different timezone than yours! Here dates and times are displayed in the company's timezone
+                    </span>
+                    <span attrs="{'invisible': [('holiday_type', '!=', 'company')]}">
+                        The company has a different timezone than yours! Here dates and times are displayed in the company's timezone
+                    </span>
+                    (<field name="tz"/>).
+                </div>
+                <field name="tz_mismatch" invisible="1"/>
+                <field name="holiday_type" invisible="1"/>
                 <field name="leave_type_request_unit" invisible="1"/>
                 <div class="oe_title oe_read_only" attrs="{'invisible': [('display_name', '=', False)]}" name="title">
                     <h1>
@@ -343,9 +356,26 @@
         <field name="name">hr.leave.view.dashboard</field>
         <field name="model">hr.leave</field>
         <field name="arch" type="xml">
-            <calendar js_class="time_off_calendar" string="Time Off Request" form_view_id="%(hr_holidays.hr_leave_view_form_dashboard)d" event_open_popup="true" date_start="date_from" date_stop="date_to" mode="month" quick_add="False" color="employee_id">
+            <calendar js_class="time_off_calendar" string="Time Off Request" form_view_id="%(hr_holidays.hr_leave_view_form_dashboard)d" event_open_popup="true" date_start="date_from" date_stop="date_to" mode="month" quick_add="False" show_unusual_days="True" color="employee_id" hide_time="True">
                 <field name="display_name"/>
+                <field name="employee_id" filters="1" invisible="1"/>
+                <field name="state" invisible="1"/>
             </calendar>
+        </field>
+    </record>
+
+    <record id="hr_leave_view_form_dashboard_new_time_off" model="ir.ui.view">
+        <field name="name">hr.leave.view.form.dashboard.new.time.off</field>
+        <field name="model">hr.leave</field>
+        <field name="inherit_id" ref="hr_holidays.hr_leave_view_form_dashboard"/>
+        <field name="mode">primary</field>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet" position="after">
+                <footer>
+                    <button string="Save" special="save" class="oe_highlight" />
+                    <button string="Discard" special="cancel" />
+                </footer>
+            </xpath>
         </field>
     </record>
 
@@ -377,7 +407,7 @@
                         'required': [('holiday_type', '=', 'employee')],
                         'invisible': [('holiday_type', '!=', 'employee')]
                         }"/>
-                    <field name="mode_company_id" groups="hr_holidays.group_hr_holidays_user" attrs="{
+                    <field name="mode_company_id" string="Company" groups="hr_holidays.group_hr_holidays_user" attrs="{
                         'required': [('holiday_type', '=', 'company')],
                         'invisible': [('holiday_type', '!=', 'company')]
                         }"/>
@@ -403,8 +433,9 @@
         <field name="name">hr.leave.view.calendar</field>
         <field name="model">hr.leave</field>
         <field name="arch" type="xml">
-            <calendar string="Time Off Request" event_open_popup="true" date_start="date_from" date_stop="date_to" mode="month" quick_add="False" color="employee_id">
+            <calendar js_class="time_off_calendar_all" string="Time Off Request" event_open_popup="true" date_start="date_from" date_stop="date_to" mode="month" quick_add="False" color="employee_id">
                 <field name="display_name"/>
+                <field name="employee_id" filters="1" invisible="1"/>
             </calendar>
         </field>
     </record>
@@ -515,6 +546,7 @@
         </field>
     </record>
 
+<<<<<<< HEAD
     <record id="action_hr_holidays_dashboard" model="ir.actions.act_window">
         <field name="name">All Time Off</field>
         <field name="res_model">hr.leave</field>
@@ -527,6 +559,8 @@
         <field name="view_id" />
     </record>
 
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     <record id="hr_leave_action_new_request" model="ir.actions.act_window">
         <field name="name">Dashboard</field>
         <field name="res_model">hr.leave</field>
@@ -573,7 +607,7 @@
     <record id="hr_leave_action_my_request_view_form" model="ir.actions.act_window.view">
         <field name="view_mode">form</field>
         <field name="act_window_id" ref="hr_leave_action_my_request"/>
-        <field name="view_id" ref="hr_leave_view_form_dashboard"/>
+        <field name="view_id" ref="hr_leave_view_form_dashboard_new_time_off"/>
     </record>
 
     <record id="hr_leave_action_my" model="ir.actions.act_window">

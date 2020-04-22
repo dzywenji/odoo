@@ -58,9 +58,15 @@ class TestViewsDuringModuleOperation(TransactionCase):
         update_module_child_view.with_context(website_id=1).write({'name': 'Child View (W1)'})
 
         # Ensure views are correctly setup
-        self.assertEquals(View.search_count([('type', '=', 'qweb'), ('key', '=', update_module_child_view.key)]), 2)
+        self.assertEqual(View.search_count([('type', '=', 'qweb'), ('key', '=', update_module_child_view.key)]), 2)
         self.assertTrue(self.env.ref(update_module_view_to_be_t_called.key))
         self.assertTrue(self.env.ref(update_module_base_view.key))
+
+        # the upgrade of the module below instanciates a NEW registry, so we
+        # have to restore the old one in order to perform the cleanups
+        @self.addCleanup
+        def cleanup():
+            self.registry.registries[self.registry.db_name] = self.registry
 
         # Update the module
         test_website_module = self.env['ir.module.module'].search([('name', '=', 'test_website')])
@@ -69,4 +75,4 @@ class TestViewsDuringModuleOperation(TransactionCase):
         # Ensure generic views got removed
         self.assertFalse(self.env.ref('test_website.update_module_view_to_be_t_called', raise_if_not_found=False))
         # Ensure specific COW views got removed
-        self.assertEquals(View.search_count([('type', '=', 'qweb'), ('key', '=', 'test_website.update_module_child_view')]), 0)
+        self.assertEqual(View.search_count([('type', '=', 'qweb'), ('key', '=', 'test_website.update_module_child_view')]), 0)

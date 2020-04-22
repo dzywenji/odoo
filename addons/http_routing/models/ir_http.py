@@ -5,7 +5,9 @@ import os
 import re
 import traceback
 import unicodedata
-import werkzeug
+import werkzeug.exceptions
+import werkzeug.routing
+import werkzeug.urls
 
 # optional python-slugify import (https://github.com/un33k/python-slugify)
 try:
@@ -181,7 +183,7 @@ def url_for(url_from, lang_code=None, no_rewrite=False):
 
     # don't try to match route if we know that no rewrite has been loaded.
     routing = getattr(request, 'website_routing', None)  # not modular, but not overridable
-    if not request.env['ir.http']._rewrite_len.get(routing):
+    if not getattr(request.env['ir.http'], '_rewrite_len', {}).get(routing):
         no_rewrite = True
 
     # avoid useless check for 1 char URL '/', '#', ... and absolute URL
@@ -409,7 +411,7 @@ class IrHttp(models.AbstractModel):
                 lang = preferred_lang or cls._get_default_lang()
 
             request.lang = lang
-            context['lang'] = lang.code
+            context['lang'] = lang._get_cached('code')
 
             # bind modified context
             request.context = context
@@ -553,8 +555,8 @@ class IrHttp(models.AbstractModel):
             return cls._handle_exception(e)
 
         if getattr(request, 'is_frontend_multilang', False) and request.httprequest.method in ('GET', 'HEAD'):
-            generated_path = werkzeug.url_unquote_plus(path)
-            current_path = werkzeug.url_unquote_plus(request.httprequest.path)
+            generated_path = werkzeug.urls.url_unquote_plus(path)
+            current_path = werkzeug.urls.url_unquote_plus(request.httprequest.path)
             if generated_path != current_path:
                 if request.lang != cls._get_default_lang():
                     path = '/' + request.lang.url_code + path
@@ -570,9 +572,8 @@ class IrHttp(models.AbstractModel):
             exception=exception,
             traceback=traceback.format_exc(),
         )
-        # only except_orm exceptions contain a message
-        if isinstance(exception, exceptions.except_orm):
-            values['error_message'] = exception.name
+        if isinstance(exception, exceptions.UserError):
+            values['error_message'] = exception.args[0]
             code = 400
             if isinstance(exception, exceptions.AccessError):
                 code = 403
@@ -600,7 +601,7 @@ class IrHttp(models.AbstractModel):
 
     @classmethod
     def _get_error_html(cls, env, code, values):
-        return env['ir.ui.view'].render_template('http_routing.%s' % code, values)
+        return code, env['ir.ui.view'].render_template('http_routing.%s' % code, values)
 
     @classmethod
     def _handle_exception(cls, exception):
@@ -651,12 +652,12 @@ class IrHttp(models.AbstractModel):
                 _logger.error("500 Internal Server Error:\n\n%s", values['traceback'])
                 values = cls._get_values_500_error(env, values, exception)
             elif code == 403:
-                _logger.warn("403 Forbidden:\n\n%s", values['traceback'])
+                _logger.warning("403 Forbidden:\n\n%s", values['traceback'])
             elif code == 400:
-                _logger.warn("400 Bad Request:\n\n%s", values['traceback'])
+                _logger.warning("400 Bad Request:\n\n%s", values['traceback'])
             try:
-                html = cls._get_error_html(env, code, values)
+                code, html = cls._get_error_html(env, code, values)
             except Exception:
-                html = env['ir.ui.view'].render_template('http_routing.http_error', values)
+                code, html = 418, env['ir.ui.view'].render_template('http_routing.http_error', values)
 
         return werkzeug.wrappers.Response(html, status=code, content_type='text/html;charset=utf-8')

@@ -151,7 +151,7 @@ class Module(models.Model):
     _name = "ir.module.module"
     _rec_name = "shortdesc"
     _description = "Module"
-    _order = 'sequence,name'
+    _order = 'application desc,sequence,name'
 
     @api.model
     def fields_view_get(self, view_id=None, view_type='form', toolbar=False, submenu=False):
@@ -294,10 +294,15 @@ class Module(models.Model):
     icon = fields.Char('Icon URL')
     icon_image = fields.Binary(string='Icon', compute='_get_icon_image')
     to_buy = fields.Boolean('Odoo Enterprise Module', default=False)
+    has_iap = fields.Boolean(compute='_compute_has_iap')
 
     _sql_constraints = [
         ('name_uniq', 'UNIQUE (name)', 'The name of the module must be unique!'),
     ]
+
+    def _compute_has_iap(self):
+        for module in self:
+            module.has_iap = 'iap' in module.upstream_dependencies(exclude_states=('',)).mapped('name')
 
     def unlink(self):
         if not self:
@@ -878,7 +883,7 @@ class Module(models.Model):
             cat_id = modules.db.create_categories(self._cr, categs)
             self.write({'category_id': cat_id})
 
-    def _update_translations(self, filter_lang=None):
+    def _update_translations(self, filter_lang=None, overwrite=False):
         if not filter_lang:
             langs = self.env['res.lang'].get_installed()
             filter_lang = [code for code, _ in langs]
@@ -891,7 +896,7 @@ class Module(models.Model):
             for mod in update_mods
         }
         mod_names = topological_sort(mod_dict)
-        self.env['ir.translation']._load_module_terms(mod_names, filter_lang)
+        self.env['ir.translation']._load_module_terms(mod_names, filter_lang, overwrite)
 
     def _check(self):
         for module in self:
@@ -906,6 +911,40 @@ class Module(models.Model):
             module.name: module.id
             for module in self.sudo().search([('state', '=', 'installed')])
         }
+
+    @api.model
+    def search_panel_select_range(self, field_name):
+        if field_name == 'category_id':
+            domain = [('module_ids', '!=', False)]
+
+            excluded_xmlids = [
+                'base.module_category_website_theme',
+                'base.module_category_theme',
+            ]
+            if not self.user_has_groups('base.group_no_one'):
+                excluded_xmlids.append('base.module_category_hidden')
+
+            excluded_category_ids = []
+            for excluded_xmlid in excluded_xmlids:
+                categ = self.env.ref(excluded_xmlid, False)
+                if not categ:
+                    continue
+                excluded_category_ids.append(categ.id)
+
+            if excluded_category_ids:
+                domain = expression.AND([domain, [
+                    ('id', 'not in', excluded_category_ids),
+                    ('parent_id', 'not in', excluded_category_ids),
+                ]])
+            categories = self.env['ir.module.category'].search(domain)
+            categories = categories | categories.mapped('parent_id')
+            return {
+                'parent_field': 'parent_id',
+                'values': self.env['ir.module.category'].search_read(
+                    [('id', 'in', categories.ids)],
+                    ['display_name', 'parent_id']),
+            }
+        return super(Module, self).search_panel_select_range(field_name)
 
 
 DEP_STATES = STATES + [('unknown', 'Unknown')]

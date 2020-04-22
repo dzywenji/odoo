@@ -361,7 +361,7 @@ var PivotModel = AbstractModel.extend({
      * @param {string} groupBy
      * @returns {Promise}
      */
-    expandGroup: function (group, groupBy) {
+    expandGroup: async function (group, groupBy) {
         var leftDivisors;
         var rightDivisors;
 
@@ -411,9 +411,7 @@ var PivotModel = AbstractModel.extend({
             originRow = headers[headers.length - 1].map(processHeader);
         } else {
             colGroupHeaderRows = headers.slice(0, headers.length - 1);
-            if (measureCount > 1) {
-                measureRow = headers[headers.length - 1].map(processHeader);
-            }
+            measureRow = headers[headers.length - 1].map(processHeader);
         }
 
         // remove the empty headers on left side
@@ -475,6 +473,7 @@ var PivotModel = AbstractModel.extend({
         function twistKey(key) {
             return JSON.stringify(JSON.parse(key).reverse());
         }
+
         function twist(object) {
             var newObject = {};
             Object.keys(object).forEach(function (key) {
@@ -483,6 +482,7 @@ var PivotModel = AbstractModel.extend({
             });
             return newObject;
         }
+
         this.measurements = twist(this.measurements);
         this.counts = twist(this.counts);
         this.groupDomains = twist(this.groupDomains);
@@ -507,6 +507,7 @@ var PivotModel = AbstractModel.extend({
             measures: this.data.measures,
             origins: this.data.origins,
             rowGroupBys: groupBys.rowGroupBys,
+            selectionGroupBys: this._getSelectionGroupBy(groupBys),
         };
         if (!raw && state.hasData) {
             state.table = this._getTable();
@@ -529,17 +530,15 @@ var PivotModel = AbstractModel.extend({
      * @param {boolean} [params.compare=false]
      * @param {Object} params.context
      * @param {Object} params.fields
-     * @param {Array[]} [params.comparisonTimeRange=[]]
      * @param {string[]} [params.groupedBy]
-     * @param {Array[]} [params.timeRange=[]]
      * @param {string[]} params.colGroupBys
      * @param {Array[]} params.domain
      * @param {string[]} params.measures
      * @param {string[]} params.rowGroupBys
-     * @param {string} [params.comparisonTimeRangeDescription=""]
      * @param {string} [params.default_order]
-     * @param {string} [params.timeRangeDescription=""]
      * @param {string} params.modelName
+     * @param {Object[]} params.groupableFields
+     * @param {Object} params.timeRanges
      * @returns {Promise}
      */
     load: function (params) {
@@ -549,23 +548,19 @@ var PivotModel = AbstractModel.extend({
 
         this.fields = params.fields;
         this.modelName = params.modelName;
+        this.groupableFields = params.groupableFields;
         this.data = {
             expandedRowGroupBys: [],
             expandedColGroupBys: [],
             domain: this.initialDomain,
-            timeRange: params.timeRange || [],
-            timeRangeDescription: params.timeRangeDescription || "",
-            comparisonTimeRange: params.comparisonTimeRange || [],
-            comparisonTimeRangeDescription: params.comparisonTimeRangeDescription || "",
-            compare: params.compare || false,
             context: _.extend({}, session.user_context, params.context),
             groupedBy: params.context.pivot_row_groupby || params.groupedBy,
             colGroupBys: params.context.pivot_column_groupby || params.colGroupBys,
             measures: this._processMeasures(params.context.pivot_measures) || params.measures,
+            timeRanges: params.timeRanges,
         };
+        this._computeDerivedParams();
 
-        this.data.domains = this._getDomains();
-        this.data.origins = this._getOrigins();
         this.data.rowGroupBys = !_.isEmpty(this.data.groupedBy) ? this.data.groupedBy : this.initialRowGroupBys;
 
         var defaultOrder = params.default_order && params.default_order.split(' ');
@@ -585,14 +580,11 @@ var PivotModel = AbstractModel.extend({
      * @param {Object} params
      * @param {boolean} [params.compare=false]
      * @param {Object} params.context
-     * @param {Array[]} [params.comparisonTimeRange=[]]
      * @param {string[]} [params.groupedBy]
-     * @param {Array[]} [params.timeRange=[]]
      * @param {Array[]} params.domain
      * @param {string[]} params.groupBy
      * @param {string[]} params.measures
-     * @param {string} [params.comparisonTimeRangeDescription=""]
-     * @param {string} [params.timeRangeDescription=""]
+     * @param {Object} [params.timeRanges]
      * @returns {Promise}
      */
     reload: function (handle, params) {
@@ -605,21 +597,6 @@ var PivotModel = AbstractModel.extend({
             this.data.groupedBy = params.context.pivot_row_groupby || this.data.groupedBy;
             this.data.measures = this._processMeasures(params.context.pivot_measures) || this.data.measures;
             this.defaultGroupedBy = this.data.groupedBy.length ? this.data.groupedBy : this.defaultGroupedBy;
-            var timeRangeMenuData = params.context.timeRangeMenuData;
-            if (timeRangeMenuData) {
-                this.data.timeRange = timeRangeMenuData.timeRange || [];
-                this.data.timeRangeDescription = timeRangeMenuData.timeRangeDescription || "";
-                this.data.comparisonTimeRange = timeRangeMenuData.comparisonTimeRange || [];
-                this.data.comparisonTimeRangeDescription = timeRangeMenuData.comparisonTimeRangeDescription || "";
-                this.data.compare = this.data.comparisonTimeRange.length > 0;
-            } else {
-                this.data.timeRange = [];
-                this.data.timeRangeDescription = "";
-                this.data.comparisonTimeRange = [];
-                this.data.comparisonTimeRangeDescription = "";
-                this.data.compare = false;
-                this.data.context = _.omit(this.data.context, 'timeRangeMenuData');
-            }
         }
         if ('domain' in params) {
             this.data.domain = params.domain;
@@ -630,9 +607,11 @@ var PivotModel = AbstractModel.extend({
         if ('groupBy' in params) {
             this.data.groupedBy = params.groupBy.length ? params.groupBy : this.defaultGroupedBy;
         }
+        if ('timeRanges' in params) {
+            this.data.timeRanges = params.timeRanges;
+        }
+        this._computeDerivedParams();
 
-        this.data.domains = this._getDomains();
-        this.data.origins = this._getOrigins();
         this.data.rowGroupBys = !_.isEmpty(this.data.groupedBy) ? this.data.groupedBy : this.initialRowGroupBys;
 
         if (!_.isEqual(oldRowGroupBys, self.data.rowGroupBys)) {
@@ -661,6 +640,7 @@ var PivotModel = AbstractModel.extend({
      * in-memory sort.
      *
      * @param {Object} sortedColumn
+     * @param {number[]} sortedColumn.groupId
      */
     sortRows: function (sortedColumn) {
         var self = this;
@@ -786,20 +766,6 @@ var PivotModel = AbstractModel.extend({
         } else {
             return values[0];
         }
-    },
-    /**
-     * Returns the principal domains used by the pivot model to fetch data.
-     * The domains represent two main groups of records.
-     *
-     * @private
-     * @returns {Array[][]}
-     */
-    _getDomains: function () {
-        var domains = [this.data.domain.concat(this.data.timeRange)];
-        if (this.data.compare) {
-            domains.push(this.data.domain.concat(this.data.comparisonTimeRange));
-        }
-        return domains;
     },
     /**
      * Returns the rowGroupBys and colGroupBys arrays that
@@ -1041,7 +1007,7 @@ var PivotModel = AbstractModel.extend({
             var groupId = column.groupId;
             var measure = column.measure;
             var isSorted = sortedColumn.measure === measure &&
-                           _.isEqual(sortedColumn.groupId, groupId);
+                _.isEqual(sortedColumn.groupId, groupId);
             var isSortedByOrigin = isSorted && !sortedColumn.originIndexes[1];
             var isSortedByVariation = isSorted && sortedColumn.originIndexes[1];
 
@@ -1079,19 +1045,31 @@ var PivotModel = AbstractModel.extend({
 
         return originRow;
     },
+
     /**
-     * Create an array with the origin descriptions.
-     *
+     * Get the selection needed to display the group by dropdown
+     * @returns {Object[]}
      * @private
-     * @returns {string[]}
      */
-    _getOrigins: function () {
-        var origins = [this.data.timeRangeDescription || ""];
-        if (this.data.compare) {
-            origins.push(this.data.comparisonTimeRangeDescription);
-        }
-        return origins;
+    _getSelectionGroupBy: function (groupBys) {
+        let groupedFieldNames = groupBys.rowGroupBys
+            .concat(groupBys.colGroupBys)
+            .map(function (g) {
+                return g.split(':')[0];
+            });
+
+        var fields = Object.keys(this.groupableFields)
+            .map((fieldName, index) => {
+                return {
+                    name: fieldName,
+                    field: this.groupableFields[fieldName],
+                    active: groupedFieldNames.includes(fieldName)
+                }
+            })
+            .sort((left, right) => left.field.string < right.field.string ? -1 : 1);
+        return fields;
     },
+
     /**
      * Returns a description of the pivot table.
      *
@@ -1132,6 +1110,7 @@ var PivotModel = AbstractModel.extend({
             title: "",
             width: 1,
         });
+
         // col groupby cells with group values
         /**
          * Recursive function that generates the header cells corresponding to
@@ -1139,7 +1118,7 @@ var PivotModel = AbstractModel.extend({
          *
          * @param {Object} tree
          */
-        function generateTreeHeaders(tree) {
+        function generateTreeHeaders(tree, fields) {
             var group = tree.root;
             var rowIndex = group.values.length;
             var row = colGroupRows[rowIndex];
@@ -1150,6 +1129,7 @@ var PivotModel = AbstractModel.extend({
                 groupId: groupId,
                 height: isLeaf ? (colGroupBys.length + 1 - rowIndex) : 1,
                 isLeaf: isLeaf,
+                label: rowIndex === 0 ? undefined : fields[colGroupBys[rowIndex - 1].split(':')[0]].string,
                 title: group.labels[group.labels.length - 1] || _t('Total'),
                 width: leafCount * measureCount * (2 * originCount - 1),
             };
@@ -1159,10 +1139,11 @@ var PivotModel = AbstractModel.extend({
             }
 
             _.values(tree.directSubTrees).forEach(function (subTree) {
-                generateTreeHeaders(subTree);
+                generateTreeHeaders(subTree, fields);
             });
         }
-        generateTreeHeaders(this.colGroupTree);
+
+        generateTreeHeaders(this.colGroupTree, this.fields);
         // blank top right cell for 'Total' group (if there is more that one leaf)
         if (leafCounts[JSON.stringify(this.colGroupTree.root.values)] > 1) {
             var groupId = [[], []];
@@ -1205,6 +1186,7 @@ var PivotModel = AbstractModel.extend({
         var title = group.labels[group.labels.length - 1] || _t('Total');
         var indent = group.labels.length;
         var isLeaf = _.isEmpty(tree.directSubTrees);
+        var rowGroupBys = this._getGroupBys().rowGroupBys;
 
         var subGroupMeasurements = columns.map(function (column) {
             var colGroupId = column.groupId;
@@ -1226,6 +1208,7 @@ var PivotModel = AbstractModel.extend({
 
         rows.push({
             title: title,
+            label: indent === 0 ? undefined : this.fields[rowGroupBys[indent - 1].split(':')[0]].string,
             groupId: rowGroupId,
             indent: indent,
             isLeaf: isLeaf,
@@ -1276,17 +1259,17 @@ var PivotModel = AbstractModel.extend({
     _loadData: function () {
         var self = this;
 
-        this.rowGroupTree = {root: {labels: [], values: []}, directSubTrees: {}};
-        this.colGroupTree = {root: {labels: [], values: []}, directSubTrees: {}};
+        this.rowGroupTree = { root: { labels: [], values: [] }, directSubTrees: {} };
+        this.colGroupTree = { root: { labels: [], values: [] }, directSubTrees: {} };
         this.measurements = {};
         this.counts = {};
 
-        var key = JSON.stringify([[],[]]);
+        var key = JSON.stringify([[], []]);
         this.groupDomains = {};
         this.groupDomains[key] = this.data.domains.slice(0);
 
 
-        var group = {rowValues: [], colValues: []};
+        var group = { rowValues: [], colValues: [] };
         var groupBys = this._getGroupBys();
         var leftDivisors = sections(groupBys.rowGroupBys);
         var rightDivisors = sections(groupBys.colGroupBys);
@@ -1305,7 +1288,6 @@ var PivotModel = AbstractModel.extend({
      *
      * @private
      * @param  {Object} group
-        TO DO
      * @param  {Object[]} groupSubdivisions
      */
     _prepareData: function (group, groupSubdivisions) {
@@ -1405,6 +1387,26 @@ var PivotModel = AbstractModel.extend({
         }
     },
     /**
+     * Determine this.data.domains and this.data.origins from
+     * this.data.domain and this.data.timeRanges;
+     *
+     * @private
+     */
+    _computeDerivedParams: function () {
+        const { range, rangeDescription, comparisonRange, comparisonRangeDescription } = this.data.timeRanges;
+        if (range) {
+            this.data.domains = [this.data.domain.concat(range)];
+            this.data.origins = [rangeDescription];
+            if (comparisonRange) {
+                this.data.domains.push(this.data.domain.concat(comparisonRange));
+                this.data.origins.push(comparisonRangeDescription);
+            }
+        } else {
+            this.data.domains = [this.data.domain];
+            this.data.origins = [""];
+        }
+    },
+    /**
      * Make any group in tree a leaf if it was a leaf in oldTree.
      *
      * @private
@@ -1447,7 +1449,7 @@ var PivotModel = AbstractModel.extend({
             return this._getNumberedLabel(value, fieldName);
         }
         if (fieldName && this.fields[fieldName] && (this.fields[fieldName].type === 'selection')) {
-            var selected = _.where(this.fields[fieldName].selection, {0: value})[0];
+            var selected = _.where(this.fields[fieldName].selection, { 0: value })[0];
             return selected ? selected[1] : value;
         }
         return value;
@@ -1487,7 +1489,11 @@ var PivotModel = AbstractModel.extend({
                 // if group is known to be empty for the given origin,
                 // we don't need to fetch data fot that origin.
                 if (!self.counts[key] || self.counts[key][originIndex] > 0) {
-                    var subGroup = {rowValues: group.rowValues, colValues: group.colValues, originIndex: originIndex};
+                    var subGroup = {
+                        rowValues: group.rowValues,
+                        colValues: group.colValues,
+                        originIndex: originIndex
+                    };
                     divisors.forEach(function (divisor) {
                         acc.push(self._getGroupSubdivision(subGroup, divisor[0], divisor[1]));
                     });

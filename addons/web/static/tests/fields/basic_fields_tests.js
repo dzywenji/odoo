@@ -19,6 +19,10 @@ var DebouncedField = basicFields.DebouncedField;
 var JournalDashboardGraph = basicFields.JournalDashboardGraph;
 var _t = core._t;
 
+// Base64 images for testing purpose
+const MY_IMAGE = 'iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==';
+const PRODUCT_IMAGE = 'R0lGODlhDAAMAKIFAF5LAP/zxAAAANyuAP/gaP///wAAAAAAACH5BAEAAAUALAAAAAAMAAwAAAMlWLPcGjDKFYi9lxKBOaGcF35DhWHamZUW0K4mAbiwWtuf0uxFAgA7';
+
 QUnit.module('fields', {}, function () {
 
 QUnit.module('basic_fields', {
@@ -31,6 +35,7 @@ QUnit.module('basic_fields', {
                     display_name: {string: "Displayed name", type: "char", searchable: true},
                     foo: {string: "Foo", type: "char", default: "My little Foo Value", searchable: true, trim: true},
                     bar: {string: "Bar", type: "boolean", default: true, searchable: true},
+                    empty_string: {string: "Empty string", type: "char", default: false, searchable: true, trim: true},
                     txt: {string: "txt", type: "text", default: "My little txt Value\nHo-ho-hoooo Merry Christmas"},
                     int_field: {string: "int_field", type: "integer", sortable: true, searchable: true},
                     qux: {string: "Qux", type: "float", digits: [16,1], searchable: true},
@@ -262,12 +267,14 @@ QUnit.module('basic_fields', {
         assert.containsOnce(form, '.o_field_boolean input:checked',
         "checkbox should now be checked");
         // blindly press enter again, it should uncheck the checkbox
-        $(document.activeElement).trigger({type: "keydown", which: $.ui.keyCode.ENTER});
+        await testUtils.dom.triggerEvent(document.activeElement, "keydown",
+            {which: $.ui.keyCode.ENTER});
         assert.containsNone(form, '.o_field_boolean input:checked',
         "checkbox should not be checked");
         await testUtils.nextTick();
         // blindly press enter again, it should check the checkbox back
-        $(document.activeElement).trigger({type: "keydown", which: $.ui.keyCode.ENTER});
+        await testUtils.dom.triggerEvent(document.activeElement, "keydown",
+            {which: $.ui.keyCode.ENTER});
         assert.containsOnce(form, '.o_field_boolean input:checked',
             "checkbox should still be checked");
 
@@ -328,6 +335,7 @@ QUnit.module('basic_fields', {
         // the checkbox directly in readonly mode !
         $cell = list.$('tr.o_data_row:has(.custom-checkbox input:not(:checked)) td:not(.o_list_record_selector)').first();
         await testUtils.dom.click($cell.find('.custom-checkbox .custom-control-label'));
+        await testUtils.nextTick();
 
         assert.strictEqual(list.$('tbody td:not(.o_list_record_selector) .custom-checkbox input').length, 5,
             "should still have 5 checkboxes");
@@ -903,6 +911,46 @@ QUnit.module('basic_fields', {
         form.destroy();
     });
 
+    QUnit.module('Percentage');
+
+    QUnit.test('percentage widget in form view', async function (assert) {
+        assert.expect(6);
+
+        const form = await createView({
+            View: FormView,
+            model: 'partner',
+            data: this.data,
+            arch: ` <form string="Partners">
+                        <field name="qux" widget="percentage"/>
+                    </form>`,
+            mockRPC: function (route, args) {
+                if (args.method === 'write') {
+                    assert.strictEqual(args.args[1].qux, 0.24, 'the correct float value should be saved');
+                }
+                return this._super(...arguments);
+            },
+            res_id: 1,
+        });
+
+        assert.strictEqual(form.$('.o_field_widget').first().text(), '44.4%',
+            'The value should be displayed properly.');
+
+        await testUtils.form.clickEdit(form);
+        assert.strictEqual(form.$('.o_field_widget[name=qux] input').val(), '44.4',
+            'The input should be rendered without the percentage symbol.');
+        assert.strictEqual(form.$('.o_field_widget[name=qux] span').text(), '%',
+            'The input should be followed by a span containing the percentage symbol.');
+
+        await testUtils.fields.editInput(form.$('.o_field_float_percentage input'), '24');
+        assert.strictEqual(form.$('.o_field_widget[name=qux] input').val(), '24',
+            'The value should not be formated yet.');
+
+        await testUtils.form.clickSave(form);
+        assert.strictEqual(form.$('.o_field_widget').text(), '24%',
+            'The new value should be formatted properly.');
+
+        form.destroy();
+    });
 
     QUnit.module('FieldEmail');
 
@@ -994,6 +1042,53 @@ QUnit.module('basic_fields', {
             "should still have proper mailto prefix");
 
         list.destroy();
+    });
+
+    QUnit.test('email field with empty value', async function (assert) {
+        assert.expect(1);
+
+        var form = await createView({
+            View: FormView,
+            model: 'partner',
+            data: this.data,
+            arch: '<form string="Partners">' +
+                    '<sheet>' +
+                        '<group>' +
+                            '<field name="empty_string" widget="email"/>' +
+                        '</group>' +
+                    '</sheet>' +
+                '</form>',
+            res_id: 1,
+        });
+
+        var $mailtoLink = form.$('a.o_form_uri.o_field_widget.o_text_overflow');
+        assert.strictEqual($mailtoLink.text(), '',
+            "the value should be displayed properly");
+
+        form.destroy();
+    });
+
+    QUnit.test('email field trim user value', async function (assert) {
+        assert.expect(1);
+
+        const form = await createView({
+            View: FormView,
+            model: 'partner',
+            data: this.data,
+            arch: '<form><field name="foo" widget="email"/></form>',
+            res_id: 1,
+            viewOptions: {
+                mode: 'edit',
+            },
+        });
+
+        await testUtils.fields.editInput(form.$('input[name="foo"]'), '  abc@abc.com  ');
+        await testUtils.form.clickSave(form);
+        await testUtils.form.clickEdit(form);
+        assert.strictEqual(form.$('input[name="foo"]').val(), 'abc@abc.com',
+            "Foo value should have been trimmed");
+
+        form.destroy();
     });
 
 
@@ -1604,7 +1699,7 @@ QUnit.module('basic_fields', {
 
         assert.containsOnce(form, 'a.o_form_uri.o_field_widget.o_text_overflow',
             "should have a anchor with correct classes");
-        assert.hasAttrValue(form.$('a.o_form_uri.o_field_widget.o_text_overflow'), 'href', 'yop',
+        assert.hasAttrValue(form.$('a.o_form_uri.o_field_widget.o_text_overflow'), 'href', 'http://yop',
             "should have proper href link");
         assert.hasAttrValue(form.$('a.o_form_uri.o_field_widget.o_text_overflow'), 'target', '_blank',
             "should have target attribute set to _blank");
@@ -1625,7 +1720,7 @@ QUnit.module('basic_fields', {
         await testUtils.form.clickSave(form);
         assert.containsOnce(form, 'a.o_form_uri.o_field_widget.o_text_overflow',
             "should still have a anchor with correct classes");
-        assert.hasAttrValue(form.$('a.o_form_uri.o_field_widget.o_text_overflow'), 'href', 'limbo',
+        assert.hasAttrValue(form.$('a.o_form_uri.o_field_widget.o_text_overflow'), 'href', 'http://limbo',
             "should have proper new href link");
         assert.strictEqual(form.$('a.o_form_uri.o_field_widget.o_text_overflow').text(), 'limbo',
             'the new value should be displayed');
@@ -1651,6 +1746,36 @@ QUnit.module('basic_fields', {
         form.destroy();
     });
 
+    QUnit.test('url widget: href attribute and website_path option', async function (assert) {
+        assert.expect(4);
+
+        this.data.partner.fields.url1 = { string: "Url 1", type: "char", default: "www.url1.com" };
+        this.data.partner.fields.url2 = { string: "Url 2", type: "char", default: "www.url2.com" };
+        this.data.partner.fields.url3 = { string: "Url 3", type: "char", default: "http://www.url3.com" };
+        this.data.partner.fields.url4 = { string: "Url 4", type: "char", default: "https://url4.com" };
+
+        const form = await createView({
+            View: FormView,
+            model: 'partner',
+            data: this.data,
+            arch: `
+                <form>
+                    <field name="url1" widget="url"/>
+                    <field name="url2" widget="url" options="{'website_path': True}"/>
+                    <field name="url3" widget="url"/>
+                    <field name="url4" widget="url"/>
+                </form>`,
+            res_id: 1,
+        });
+
+        assert.strictEqual(form.$('a[name="url1"]').attr('href'), 'http://www.url1.com');
+        assert.strictEqual(form.$('a[name="url2"]').attr('href'), 'www.url2.com');
+        assert.strictEqual(form.$('a[name="url3"]').attr('href'), 'http://www.url3.com');
+        assert.strictEqual(form.$('a[name="url4"]').attr('href'), 'https://url4.com');
+
+        form.destroy();
+    });
+
     QUnit.test('char field in editable list view', async function (assert) {
         assert.expect(10);
 
@@ -1665,7 +1790,7 @@ QUnit.module('basic_fields', {
             "should have 5 cells");
         assert.containsN(list, 'a.o_form_uri.o_field_widget.o_text_overflow', 5,
             "should have 5 anchors with correct classes");
-        assert.hasAttrValue(list.$('a.o_form_uri.o_field_widget.o_text_overflow').first(), 'href', 'yop',
+        assert.hasAttrValue(list.$('a.o_form_uri.o_field_widget.o_text_overflow').first(), 'href', 'http://yop',
             "should have proper href link");
         assert.strictEqual(list.$('tbody td:not(.o_list_record_selector)').first().text(), 'yop',
             "value should be displayed properly as text");
@@ -1684,7 +1809,7 @@ QUnit.module('basic_fields', {
         assert.doesNotHaveClass($cell.parent(), 'o_selected_row', 'should not be in edit mode anymore');
         assert.containsN(list, 'a.o_form_uri.o_field_widget.o_text_overflow', 5,
             "should still have 5 anchors with correct classes");
-        assert.hasAttrValue(list.$('a.o_form_uri.o_field_widget.o_text_overflow').first(), 'href', 'brolo',
+        assert.hasAttrValue(list.$('a.o_form_uri.o_field_widget.o_text_overflow').first(), 'href', 'http://brolo',
             "should have proper new href link");
         assert.strictEqual(list.$('a.o_form_uri.o_field_widget.o_text_overflow').first().text(), 'brolo',
             "value should be properly updated");
@@ -2182,6 +2307,22 @@ QUnit.module('basic_fields', {
         session.get_file = oldGetFile;
     });
 
+    QUnit.test('binary fields: option accepted_file_extensions', async function (assert) {
+        assert.expect(1);
+
+        var form = await createView({
+            View: FormView,
+            model: 'partner',
+            data: this.data,
+            arch: `<form string="Partners">
+                      <field name="document" widget="binary" options="{'accepted_file_extensions': '.dat,.bin'}"/>
+                   </form>`
+        });
+        assert.strictEqual(form.$('input.o_input_file').attr('accept'), '.dat,.bin',
+            "the input should have the correct ``accept`` attribute");
+        form.destroy();
+    });
+
     QUnit.test('binary fields that are readonly in create mode do not download', async function (assert) {
         assert.expect(2);
 
@@ -2399,74 +2540,13 @@ QUnit.module('basic_fields', {
         list.destroy();
     });
 
-    QUnit.test('field changes are correctly debounced in text fields', async function (assert) {
-        var done = assert.async();
-        assert.expect(5);
-
-        this.data.partner.fields.foo.type = 'text';
-
-        var def = testUtils.makeTestPromise();
-        var nbNotifyChanges = 0;
-        var form = await createView({
-            View: FormView,
-            model: 'partner',
-            data: this.data,
-            arch: '<form string="Partners">' +
-                    '<field name="foo"/>' +
-                '</form>',
-            res_id: 2,
-            fieldDebounce: 3,
-        });
-
-        var _onFieldChanged = form._onFieldChanged;
-        form._onFieldChanged = function () {
-            _onFieldChanged.apply(form, arguments);
-            nbNotifyChanges++;
-            def.resolve();
-        };
-
-        await testUtils.form.clickEdit(form);
-
-        testUtils.fields.editInput(form.$('textarea').first(), "1");
-        assert.strictEqual(nbNotifyChanges, 0,
-            "no event should have been triggered");
-        testUtils.fields.editInput(form.$('textarea').first(), "12");
-        assert.strictEqual(nbNotifyChanges, 0,
-            "no event should have been triggered");
-
-        return waitForChangeTriggered().then(async function () {
-            assert.strictEqual(nbNotifyChanges, 1,
-                "one event should have been triggered");
-
-            // add something in the textarea, then focus another input
-            await testUtils.fields.editInput(form.$('textarea').first(), "123");
-            assert.strictEqual(nbNotifyChanges, 2,
-                "one event should have been triggered immediately");
-
-            return waitForChangeTriggered();
-        }).then(function () {
-            assert.strictEqual(nbNotifyChanges, 2,
-                "no extra event should have been triggered");
-
-            form.destroy();
-            done();
-        });
-
-        function waitForChangeTriggered() {
-            return def.then(function () {
-                def = testUtils.makeTestPromise();
-                return concurrency.delay(0);
-            });
-        }
-    });
-
     QUnit.module('FieldImage');
 
     QUnit.test('image fields are correctly rendered', async function (assert) {
         assert.expect(7);
 
         this.data.partner.records[0].__last_update = '2017-02-08 10:00:00';
-        this.data.partner.records[0].document = 'myimage';
+        this.data.partner.records[0].document = MY_IMAGE;
 
         var form = await createView({
             View: FormView,
@@ -2476,13 +2556,13 @@ QUnit.module('basic_fields', {
                     '<field name="document" widget="image" options="{\'size\': [90, 90]}"/> ' +
                 '</form>',
             res_id: 1,
-            mockRPC: function (route, args) {
+            async mockRPC(route, args) {
                 if (route === '/web/dataset/call_kw/partner/read') {
                     assert.deepEqual(args.args[1], ['document', '__last_update', 'display_name'], "The fields document, display_name and __last_update should be present when reading an image");
                 }
-                if (route === 'data:image/png;base64,myimage') {
+                if (route === `data:image/png;base64,${MY_IMAGE}`) {
                     assert.ok(true, "should called the correct route");
-                    return Promise.resolve('wow');
+                    return 'wow';
                 }
                 return this._super.apply(this, arguments);
             },
@@ -2501,13 +2581,94 @@ QUnit.module('basic_fields', {
         form.destroy();
     });
 
+    QUnit.test('image fields are correctly replaced when given an incorrect value', async function (assert) {
+        assert.expect(7);
+
+        this.data.partner.records[0].__last_update = '2017-02-08 10:00:00';
+        this.data.partner.records[0].document = 'incorrect_base64_value';
+
+        testUtils.mock.patch(basicFields.FieldBinaryImage, {
+            // Delay the _render function: this will ensure that the error triggered
+            // by the incorrect base64 value is dispatched before the src is replaced
+            // (see test_utils_mock.removeSrcAttribute), since that function is called
+            // when the element is inserted into the DOM.
+            async _render() {
+                const result = this._super.apply(this, arguments);
+                await concurrency.delay(100);
+                return result;
+            },
+        });
+
+        const form = await createView({
+            View: FormView,
+            model: 'partner',
+            data: this.data,
+            arch: `
+                <form string="Partners">
+                    <field name="document" widget="image" options="{'size': [90, 90]}"/>
+                </form>`,
+            res_id: 1,
+            async mockRPC(route, args) {
+                const _super = this._super;
+                if (route === '/web/static/src/img/placeholder.png') {
+                    assert.step('call placeholder route');
+                }
+                return _super.apply(this, arguments);
+            },
+        });
+
+        assert.hasClass(form.$('div[name="document"]'),'o_field_image',
+            "the widget should have the correct class");
+        assert.containsOnce(form, 'div[name="document"] > img',
+            "the widget should contain an image");
+        assert.hasClass(form.$('div[name="document"] > img'), 'img-fluid',
+            "the image should have the correct class");
+        assert.hasAttrValue(form.$('div[name="document"] > img'), 'width', "90",
+            "the image should correctly set its attributes");
+        assert.strictEqual(form.$('div[name="document"] > img').css('max-width'), "90px",
+            "the image should correctly set its attributes");
+
+        assert.verifySteps(['call placeholder route']);
+
+        form.destroy();
+        testUtils.mock.unpatch(basicFields.FieldBinaryImage);
+    });
+
+    QUnit.test('image: option accepted_file_extensions', async function (assert) {
+        assert.expect(2);
+
+        var form = await createView({
+            View: FormView,
+            model: 'partner',
+            data: this.data,
+            arch: `<form string="Partners">
+                      <field name="document" widget="image" options="{'accepted_file_extensions': '.png,.jpeg'}"/>
+                   </form>`
+        });
+        assert.strictEqual(form.$('input.o_input_file').attr('accept'), '.png,.jpeg',
+            "the input should have the correct ``accept`` attribute");
+        form.destroy();
+
+        var form = await createView({
+            View: FormView,
+            model: 'partner',
+            data: this.data,
+            arch: `<form string="Partners">
+                      <field name="document" widget="image"/>
+                   </form>`
+        });
+        assert.strictEqual(form.$('input.o_input_file').attr('accept'), 'image/*',
+            'the default value for the attribute "accept" on the "image" widget must be "image/*"');
+        form.destroy();
+    });
+
     QUnit.test('image fields in subviews are loaded correctly', async function (assert) {
         assert.expect(6);
 
         this.data.partner.records[0].__last_update = '2017-02-08 10:00:00';
-        this.data.partner.records[0].document = 'myimage';
+        this.data.partner.records[0].document = MY_IMAGE;
         this.data.partner_type.fields.image = {name: 'image', type: 'binary'};
-        this.data.partner_type.records[0].image = 'product_image';
+        this.data.partner_type.records[0].image = PRODUCT_IMAGE;
         this.data.partner.records[0].timmy = [12];
 
         var form = await createView({
@@ -2526,14 +2687,14 @@ QUnit.module('basic_fields', {
                     '</field>' +
                 '</form>',
             res_id: 1,
-            mockRPC: function (route) {
-                if (route === 'data:image/png;base64,myimage') {
+            async mockRPC(route) {
+                if (route === `data:image/png;base64,${MY_IMAGE}`) {
                     assert.step("The view's image should have been fetched");
-                    return Promise.resolve('wow');
+                    return 'wow';
                 }
-                if (route === 'data:image/png;base64,product_image') {
+                if (route === `data:image/gif;base64,${PRODUCT_IMAGE}`) {
                     assert.step("The dialog's image should have been fetched");
-                    return Promise.resolve();
+                    return;
                 }
                 return this._super.apply(this, arguments);
             },
@@ -2556,7 +2717,7 @@ QUnit.module('basic_fields', {
         assert.expect(2);
 
         this.data.partner_type.fields.image = {name: 'image', type: 'binary'};
-        this.data.partner_type.records[0].image = 'product_image';
+        this.data.partner_type.records[0].image = PRODUCT_IMAGE;
         this.data.partner.records[0].timmy = [12];
 
         var form = await createView({
@@ -2571,10 +2732,10 @@ QUnit.module('basic_fields', {
                     '</field>' +
                 '</form>',
             res_id: 1,
-            mockRPC: function (route) {
-                if (route === 'data:image/png;base64,product_image') {
+            async mockRPC(route) {
+                if (route === `data:image/gif;base64,${PRODUCT_IMAGE}`) {
                     assert.ok(true, "The list's image should have been fetched");
-                    return Promise.resolve();
+                    return;
                 }
                 return this._super.apply(this, arguments);
             },
@@ -2883,7 +3044,7 @@ QUnit.module('basic_fields', {
 
     QUnit.module('FieldDateRange');
 
-    QUnit.test('Datetime field', async function (assert) {
+    QUnit.test('Datetime field [REQUIRE FOCUS]', async function (assert) {
         assert.expect(20);
 
         this.data.partner.fields.datetime_end = {string: 'Datetime End', type: 'datetime'};
@@ -2961,7 +3122,7 @@ QUnit.module('basic_fields', {
         form.destroy();
     });
 
-    QUnit.test('Date field', async function (assert) {
+    QUnit.test('Date field [REQUIRE FOCUS]', async function (assert) {
         assert.expect(18);
 
         this.data.partner.fields.date_end = {string: 'Date End', type: 'date'};
@@ -4651,6 +4812,70 @@ QUnit.module('basic_fields', {
         form.destroy();
     });
 
+    QUnit.test('integer field without formatting', async function (assert) {
+        assert.expect(3);
+
+        this.data.partner.records = [{
+            'id': 999,
+            'int_field': 8069,
+        }];
+
+        var form = await createView({
+            View: FormView,
+            model: 'partner',
+            data: this.data,
+            arch: '<form string="Partners">' +
+                '<field name="int_field" options="{\'format\': \'false\'}"/>' +
+            '</form>',
+            res_id: 999,
+            translateParameters: {
+                thousands_sep: ",",
+                grouping: [3, 0],
+            },
+        });
+
+        assert.ok(form.$('.o_form_view').hasClass('o_form_readonly'), 'Form in readonly mode');
+        assert.strictEqual(form.$('.o_field_widget[name=int_field]').text(), '8069',
+            'Integer value must not be formatted');
+        await testUtils.form.clickEdit(form);
+
+        assert.strictEqual(form.$('.o_field_widget').val(), '8069',
+            'Integer value must not be formatted');
+
+        form.destroy();
+    });
+
+    QUnit.test('integer field is formatted by default', async function (assert) {
+        assert.expect(3);
+
+        this.data.partner.records = [{
+            'id': 999,
+            'int_field': 8069,
+        }];
+
+        var form = await createView({
+            View: FormView,
+            model: 'partner',
+            data: this.data,
+            arch: '<form string="Partners">' +
+                '<field name="int_field" />' +
+            '</form>',
+            res_id: 999,
+            translateParameters: {
+                thousands_sep: ",",
+                grouping: [3, 0],
+            },
+        });
+        assert.ok(form.$('.o_form_view').hasClass('o_form_readonly'), 'Form in readonly mode');
+        assert.strictEqual(form.$('.o_field_widget[name=int_field]').text(), '8,069',
+            'Integer value must be formatted by default');
+        await testUtils.form.clickEdit(form);
+
+        assert.strictEqual(form.$('.o_field_widget').val(), '8,069',
+            'Integer value must be formatted by default');
+
+        form.destroy();
+    });
 
     QUnit.module('FieldFloatTime');
 
@@ -4830,6 +5055,7 @@ QUnit.module('basic_fields', {
 
     QUnit.test('phone field in editable list view on normal screens', async function (assert) {
         assert.expect(8);
+        var doActionCount = 0;
 
         var list = await createView({
             View: ListView,
@@ -4844,8 +5070,8 @@ QUnit.module('basic_fields', {
         });
 
         assert.containsN(list, 'tbody td:not(.o_list_record_selector)', 5);
-        assert.strictEqual(list.$('tbody td:not(.o_list_record_selector)').first().text(), 'yop',
-            "value should be displayed properly");
+        assert.strictEqual(list.$('tbody td:not(.o_list_record_selector) a').first().text(), 'yop',
+            "value should be displayed properly with a link to send SMS");
 
         assert.containsN(list, 'a.o_field_widget.o_form_uri', 5,
             "should have the correct classnames");
@@ -4862,7 +5088,7 @@ QUnit.module('basic_fields', {
         await testUtils.dom.click(list.$buttons.find('.o_list_button_save'));
         $cell = list.$('tbody td:not(.o_list_record_selector)').first();
         assert.doesNotHaveClass($cell.parent(), 'o_selected_row', 'should not be in edit mode anymore');
-        assert.strictEqual(list.$('tbody td:not(.o_list_record_selector)').first().text(), 'new',
+        assert.strictEqual(list.$('tbody td:not(.o_list_record_selector) a').first().text(), 'new',
             "value should be properly updated");
         assert.containsN(list, 'a.o_field_widget.o_form_uri', 5,
             "should still have links with correct classes");
@@ -5980,7 +6206,7 @@ QUnit.module('basic_fields', {
 
         // Focusing the field selector input should open the field selector
         // popover
-        await testUtils.dom.triggerEvents($fieldSelector, ['focusin']);
+        await testUtils.dom.triggerEvents($fieldSelector, 'focus');
         var $fieldSelectorPopover = $fieldSelector.find(".o_field_selector_popover");
         assert.ok($fieldSelectorPopover.is(":visible"),
             "field selector popover should be visible");
@@ -6049,7 +6275,7 @@ QUnit.module('basic_fields', {
             "there should be a field selector");
 
         // Focusing its input should open the field selector popover
-        await testUtils.dom.triggerEvents($fieldSelector, ['focusin']);
+        await testUtils.dom.triggerEvents($fieldSelector, 'focus');
         var $fieldSelectorPopover = $fieldSelector.find(".o_field_selector_popover");
         assert.ok($fieldSelectorPopover.is(":visible"),
             "field selector popover should be visible");

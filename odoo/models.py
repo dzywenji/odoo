@@ -22,6 +22,7 @@
 """
 
 import collections
+import contextlib
 import datetime
 import dateutil
 import fnmatch
@@ -33,7 +34,8 @@ import operator
 import pytz
 import re
 import uuid
-from collections import defaultdict, MutableMapping, OrderedDict
+from collections import defaultdict, OrderedDict
+from collections.abc import MutableMapping
 from contextlib import closing
 from inspect import getmembers, currentframe
 from operator import attrgetter, itemgetter
@@ -57,9 +59,9 @@ from .tools import frozendict, lazy_classproperty, lazy_property, ormcache, \
 from .tools.config import config
 from .tools.func import frame_codeinfo
 from .tools.misc import CountingStream, clean_context, DEFAULT_SERVER_DATETIME_FORMAT, DEFAULT_SERVER_DATE_FORMAT, get_lang
-from .tools.safe_eval import safe_eval
 from .tools.translate import _
 from .tools import date_utils
+from .tools import populate
 
 _logger = logging.getLogger(__name__)
 _schema = logging.getLogger(__name__ + '.schema')
@@ -159,7 +161,7 @@ class MetaModel(api.Meta):
             self._module = self._get_addon_name(self.__module__)
 
         # Remember which models to instanciate for this module.
-        if not self._custom:
+        if self._module:
             self.module_to_models[self._module].append(self)
 
         # check for new-api conversion error: leave comma after field definition
@@ -167,7 +169,7 @@ class MetaModel(api.Meta):
             if type(val) is tuple and len(val) == 1 and isinstance(val[0], Field):
                 _logger.error("Trailing comma after field definition: %s.%s", self, key)
             if isinstance(val, Field):
-                val.args = dict(val.args, _module=self._module)
+                val.args['_module'] = self._module
 
     def _get_addon_name(self, full_name):
         # The (OpenERP) module name can be in the ``odoo.addons`` namespace
@@ -325,6 +327,10 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
     on the records of the current model using the ``child_of`` and
     ``parent_of`` domain operators.
     """
+<<<<<<< HEAD
+=======
+    _active_name = None         #: field to use for active records
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     _date_name = 'date'         #: field to use for default calendar view
     _fold_name = 'fold'         #: field to determine folded groups in kanban views
 
@@ -339,7 +345,7 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
     # default values for _transient_vacuum()
     _transient_check_count = 0
     _transient_max_count = lazy_classproperty(lambda _: config.get('osv_memory_count_limit'))
-    _transient_max_hours = lazy_classproperty(lambda _: config.get('osv_memory_age_limit'))
+    _transient_max_hours = lazy_classproperty(lambda _: config.get('transient_age_limit'))
 
     CONCURRENCY_CHECK_FIELD = '__last_update'
 
@@ -350,16 +356,9 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
         """
         pass
 
-    def _reflect(self):
-        """ Reflect the model and its fields in the models 'ir.model' and
-        'ir.model.fields'. Also create entries in 'ir.model.data' if the key
-        'module' is passed to the context.
-        """
-        self.env['ir.model']._reflect_model(self)
-        self.env['ir.model.fields']._reflect_model(self)
-        self.env['ir.model.fields.selection']._reflect_model(self)
-        self.env['ir.model.constraint']._reflect_model(self)
-        self.invalidate_cache()
+    def _valid_field_parameter(self, field, name):
+        """ Return whether the given parameter name is valid for the field. """
+        return name == 'related_sudo'
 
     @api.model
     def _add_field(self, name, field):
@@ -557,7 +556,7 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
         if ModelClass._transient:
             assert ModelClass._log_access, \
                 "TransientModels must have log_access turned on, " \
-                "in order to implement their access rights policy"
+                "in order to implement their vacuum policy"
 
         # link the class to the registry, and update the registry
         ModelClass.pool = pool
@@ -700,10 +699,8 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
         """ Deprecated method to initialize the model. """
         pass
 
-    @api.model
-    @ormcache()
     def _is_an_ordinary_table(self):
-        return tools.table_kind(self.env.cr, self._table) == 'r'
+        return self.pool.is_an_ordinary_table(self)
 
     def __ensure_xml_id(self, skip=False):
         """ Create missing external ids for records in ``self``, and return an
@@ -840,18 +837,35 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
                         current[i] = field.convert_to_export(value, record)
                     else:
                         primary_done.append(name)
-
-                        # in import_compat mode, m2m should always be exported as
-                        # a comma-separated list of xids in a single cell
-                        if import_compatible and field.type == 'many2many' and len(path) > 1 and path[1] == 'id':
-                            xml_ids = [xid for _, xid in value.__ensure_xml_id()]
-                            current[i] = ','.join(xml_ids) or False
-                            continue
-
                         # recursively export the fields that follow name; use
                         # 'display_name' where no subfield is exported
                         fields2 = [(p[1:] or ['display_name'] if p and p[0] == name else [])
                                    for p in fields]
+
+                        # in import_compat mode, m2m should always be exported as
+                        # a comma-separated list of xids or names in a single cell
+                        if import_compatible and field.type == 'many2many':
+                            index = None
+                            # find out which subfield the user wants & its
+                            # location as we might not get it as the first
+                            # column we encounter
+                            for name in ['id', 'name', 'display_name']:
+                                with contextlib.suppress(ValueError):
+                                    index = fields2.index([name])
+                                    break
+                            if index is None:
+                                # not found anything, assume we just want the
+                                # name_get in the first column
+                                name = None
+                                index = i
+
+                            if name == 'id':
+                                xml_ids = [xid for _, xid in value.__ensure_xml_id()]
+                                current[index] = ','.join(xml_ids) or False
+                            else:
+                                current[index] = field.convert_to_export(value, record) or False
+                            continue
+
                         lines2 = value._export_rows(fields2, _is_toplevel_call=False)
                         if lines2:
                             # merge first line with record's main line
@@ -894,6 +908,8 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
 
             This method is used when exporting data via client menu
         """
+        if not (self.env.user._is_admin() or self.env.user.has_group('base.group_allow_export')):
+            raise UserError(_("You don't have the rights to export data. Please contact an Administrator."))
         fields_to_export = [fix_import_export_id_paths(f) for f in fields_to_export]
         return {'datas': self._export_rows(fields_to_export)}
 
@@ -1515,17 +1531,17 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
                 * if some tag other than 'position' is found in parent view
         :raise Invalid ArchitectureError: if there is view type other than form, tree, calendar, search etc defined on the structure
         """
-        View = self.env['ir.ui.view']
+        view = self.env['ir.ui.view'].browse(view_id)
 
         # Get the view arch and all other attributes describing the composition of the view
         result = self._fields_view_get(view_id=view_id, view_type=view_type, toolbar=toolbar, submenu=submenu)
 
         # Override context for postprocessing
         if view_id and result.get('base_model', self._name) != self._name:
-            View = View.with_context(base_model_name=result['base_model'])
+            view = view.with_context(base_model_name=result['base_model'])
 
         # Apply post processing, groups and modifiers etc...
-        xarch, xfields = View.postprocess_and_fields(self._name, etree.fromstring(result['arch']), view_id)
+        xarch, xfields = view.postprocess_and_fields(etree.fromstring(result['arch']), model=self._name)
         result['arch'] = xarch
         result['fields'] = xfields
 
@@ -1765,6 +1781,11 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
         cls.pool._clear_cache()
 
     @api.model
+    def _read_group_expand_full(self, groups, domain, order):
+        """Extend the group to include all targer records by default."""
+        return groups.search([], order=order)
+
+    @api.model
     def _read_group_fill_results(self, domain, groupby, remaining_groupbys,
                                  aggregated_fields, count_field,
                                  read_group_result, read_group_order=None):
@@ -1955,7 +1976,7 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
                 raise ValueError("Invalid field %r on model %r" % (order_field, self._name))
             else:
                 # Cannot order by a field that will not appear in the results (needs to be grouped or aggregated)
-                _logger.warn('%s: read_group order by `%s` ignored, cannot sort on empty columns (not grouped/aggregated)',
+                _logger.warning('%s: read_group order by `%s` ignored, cannot sort on empty columns (not grouped/aggregated)',
                              self._name, order_part)
 
         return groupby_terms, orderby_terms
@@ -2121,7 +2142,7 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
                 date/datetime fields.
         :param int offset: optional number of records to skip
         :param int limit: optional max number of records to return
-        :param list orderby: optional ``order by`` specification, for
+        :param str orderby: optional ``order by`` specification, for
                              overriding the natural sort ordering of the
                              groups, see also :py:meth:`~osv.osv.osv.search`
                              (supported only for many2one fields currently)
@@ -2452,8 +2473,6 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
         # has not been added in database yet!
         self = self.with_context(prefetch_fields=False)
 
-        self.pool.post_init(self._reflect)
-
         cr = self._cr
         update_custom_fields = self._context.get('update_custom_fields', False)
         must_create_table = not tools.table_exists(cr, self._table)
@@ -2461,14 +2480,22 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
 
         if self._auto:
             if must_create_table:
-                tools.create_model_table(cr, self._table, self._description)
+                def make_type(field):
+                    return field.column_type[1] + (" NOT NULL" if field.required else "")
+
+                tools.create_model_table(cr, self._table, self._description, [
+                    (name, make_type(field), field.string)
+                    for name, field in self._fields.items()
+                    if name != 'id' and field.store and field.column_type
+                ])
 
             if self._parent_store:
                 if not tools.column_exists(cr, self._table, 'parent_path'):
                     self._create_parent_columns()
                     parent_path_compute = True
 
-            self._check_removed_columns(log=False)
+            if not must_create_table:
+                self._check_removed_columns(log=False)
 
             # update the database schema for fields
             columns = tools.table_columns(cr, self._table)
@@ -2550,28 +2577,31 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
     @api.model
     def _add_inherited_fields(self):
         """ Determine inherited fields. """
-        # determine candidate inherited fields
-        fields = {}
-        for parent_model, parent_field in self._inherits.items():
-            parent = self.env[parent_model]
-            for name, field in parent._fields.items():
+        if not self._inherits:
+            return
+
+        # determine which fields can be inherited
+        to_inherit = {
+            name: (parent_fname, field)
+            for parent_model_name, parent_fname in self._inherits.items()
+            for name, field in self.env[parent_model_name]._fields.items()
+        }
+
+        # add inherited fields that are not redefined locally
+        for name, (parent_fname, field) in to_inherit.items():
+            if name not in self._fields:
                 # inherited fields are implemented as related fields, with the
                 # following specific properties:
                 #  - reading inherited fields should not bypass access rights
                 #  - copy inherited fields iff their original field is copied
-                fields[name] = field.new(
+                self._add_field(name, field.new(
                     inherited=True,
                     inherited_field=field,
-                    related=(parent_field, name),
+                    related=(parent_fname, name),
                     related_sudo=False,
                     copy=field.copy,
                     readonly=field.readonly,
-                )
-
-        # add inherited fields that are not redefined locally
-        for name, field in fields.items():
-            if name not in self._fields:
-                self._add_field(name, field)
+                ))
 
     @api.model
     def _inherits_check(self):
@@ -2603,8 +2633,16 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
         """ Prepare the setup of the model. """
         cls = type(self)
         cls._setup_done = False
-        # a model's base structure depends on its mro (without registry classes)
-        cls._model_cache_key = tuple(c for c in cls.mro() if getattr(c, 'pool', None) is None)
+
+        # the classes that define this model's base fields and methods
+        cls._model_classes = tuple(c for c in cls.mro() if getattr(c, 'pool', None) is None)
+
+        # reset those attributes on the model's class for _setup_fields() below
+        for attr in ('_rec_name', '_active_name'):
+            try:
+                delattr(cls, attr)
+            except AttributeError:
+                pass
 
     @api.model
     def _setup_base(self):
@@ -2615,8 +2653,9 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
 
         # 1. determine the proper fields of the model: the fields defined on the
         # class and magic fields, not the inherited or custom ones
-        cls0 = cls.pool.model_cache.get(cls._model_cache_key)
-        if cls0 and cls0._model_cache_key == cls._model_cache_key:
+        cls0 = cls.pool.model_cache.get(cls._model_classes)
+
+        if cls0 and cls0._model_classes == cls._model_classes:
             # cls0 is either a model class from another registry, or cls itself.
             # The point is that it has the same base classes. We retrieve stuff
             # from cls0 to optimize the setup of cls. cls0 is guaranteed to be
@@ -2624,18 +2663,24 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
             # therefore two registries are never set up at the same time.
 
             # remove fields that are not proper to cls
-            for name in OrderedSet(cls._fields) - cls0._proper_fields:
+            for name in set(cls._fields).difference(cls0._model_fields):
                 delattr(cls, name)
-                cls._fields.pop(name, None)
-            # collect proper fields on cls0, and add them on cls
-            for name in cls0._proper_fields:
-                field = cls0._fields[name]
-                # regular fields are shared, while related fields are setup from scratch
-                if not field.related:
-                    self._add_field(name, field)
-                else:
-                    self._add_field(name, field.new(**field.args))
-            cls._proper_fields = OrderedSet(cls._fields)
+                del cls._fields[name]
+
+            if cls0 is cls:
+                # simply reset up fields
+                for name, field in cls._fields.items():
+                    field.setup_base(self, name)
+            else:
+                # collect proper fields on cls0, and add them on cls
+                for name in cls0._model_fields:
+                    field = cls0._fields[name]
+                    # regular fields are shared, while related fields are setup from scratch
+                    if not field.related:
+                        self._add_field(name, field)
+                    else:
+                        self._add_field(name, field.new(**field.args))
+                cls._model_fields = list(cls._fields)
 
         else:
             # retrieve fields from parent classes, and duplicate them on cls to
@@ -2648,9 +2693,9 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
                 if not any(field.args.get(k) for k in ('automatic', 'manual', 'inherited')):
                     self._add_field(name, field.new())
             self._add_magic_fields()
-            cls._proper_fields = OrderedSet(cls._fields)
+            cls._model_fields = list(cls._fields)
 
-        cls.pool.model_cache[cls._model_cache_key] = cls
+        cls.pool.model_cache[cls._model_classes] = cls
 
         # 2. add manual fields
         if self.pool._init_modules:
@@ -2664,7 +2709,6 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
         self._add_inherited_fields()
 
         # 4. initialize more field metadata
-        cls._field_computed = {}            # fields computed with the same method
         cls._field_inverses = Collector()   # inverse fields for related fields
 
         cls._setup_done = True
@@ -2672,11 +2716,23 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
         # 5. determine and validate rec_name
         if cls._rec_name:
             assert cls._rec_name in cls._fields, \
-                "Invalid rec_name %s for model %s" % (cls._rec_name, cls._name)
+                "Invalid _rec_name=%r for model %r" % (cls._rec_name, cls._name)
         elif 'name' in cls._fields:
             cls._rec_name = 'name'
         elif 'x_name' in cls._fields:
             cls._rec_name = 'x_name'
+
+        # 6. determine and validate active_name
+        if cls._active_name:
+            assert (cls._active_name in cls._fields
+                    and cls._active_name in ('active', 'x_active')), \
+                ("Invalid _active_name=%r for model %r; only 'active' and "
+                "'x_active' are supported and the field must be present on "
+                "the model") % (cls._active_name, cls._name)
+        elif 'active' in cls._fields:
+            cls._active_name = 'active'
+        elif 'x_active' in cls._fields:
+            cls._active_name = 'x_active'
 
     @api.model
     def _setup_fields(self):
@@ -2708,43 +2764,10 @@ class BaseModel(MetaModel('DummyModel', (object,), {'_register': False})):
             field = cls._fields['display_name']
             field.depends = tuple(name for name in field.depends if name != 'x_name')
 
-        # map each field to the fields computed with the same method
-        groups = defaultdict(list)
-        for field in cls._fields.values():
-            if field.compute:
-                cls._field_computed[field] = group = groups[field.compute]
-                group.append(field)
-        for fields in groups.values():
-            compute_sudo = fields[0].compute_sudo
-            if not all(field.compute_sudo == compute_sudo for field in fields):
-                _logger.warning("%s: inconsistent 'compute_sudo' for computed fields: %s",
-                                self._name, ", ".join(field.name for field in fields))
-
     @api.model
     def _setup_complete(self):
         """ Setup recomputation triggers, and complete the model setup. """
         cls = type(self)
-
-        # The triggers of a field F is a tree that contains the fields that
-        # depend on F, together with the fields to inverse to find out which
-        # records to recompute.
-        #
-        # For instance, assume that G depends on F, H depends on X.F, I depends
-        # on W.X.F, and J depends on Y.F. The triggers of F will be the tree:
-        #
-        #                              [G]
-        #                            X/   \Y
-        #                          [H]     [J]
-        #                        W/
-        #                      [I]
-        #
-        # This tree provides perfect support for the trigger mechanism:
-        # when F is # modified on records,
-        #  - mark G to recompute on records,
-        #  - mark H to recompute on inverse(X, records),
-        #  - mark I to recompute on inverse(W, inverse(X, records)),
-        #  - mark J to recompute on inverse(Y, records).
-        cls._field_triggers = cls.pool.field_triggers
 
         # register constraints and onchange methods
         cls._init_constraints_onchanges()
@@ -2901,11 +2924,20 @@ Fields:
                         stored_fields.add(f.name)
         self._read(stored_fields)
 
-        # retrieve results from records; this takes values from the cache and
-        # computes remaining fields
+        return self._read_format(fnames=fields, load=load)
+
+    def _read_format(self, fnames, load='_classic_read'):
+        """Returns a list of dictionaries mapping field names to their values,
+        with one dictionary per record that exists.
+
+        The output format is similar to the one expected from the `read` method.
+
+        The current method is different from `read` because it retrieves its
+        values from the cache without doing a query when it is avoidable.
+        """
         data = [(record, {'id': record._ids[0]}) for record in self]
         use_name_get = (load == '_classic_read')
-        for name in fields:
+        for name in fnames:
             convert = self._fields[name].convert_to_read
             for record, vals in data:
                 # missing records have their vals empty
@@ -3176,11 +3208,8 @@ Fields:
             # The second part of the check (for property / company-dependent fields) verifies that the records
             # linked via those relation fields are compatible with the company that owns the property value, i.e.
             # the company for which the value is being assigned, i.e:
-            #      `self.property_account_payable_id.company_id == self.env.context['force_company']`
-            if self.env.context.get('force_company'):
-                company = self.env['res.company'].browse(self.env.context['force_company'])
-            else:
-                company = self.env.company
+            #      `self.property_account_payable_id.company_id == self.env.company
+            company = self.env.company
             for name in property_fields:
                 # Special case with `res.users` since an user can belong to multiple companies.
                 corecord = record.sudo()[name]
@@ -3232,9 +3261,6 @@ Record ids: %(records)s
         forbidden = invalid.exists()
         if forbidden:
             # the invalid records are (partially) hidden by access rules
-            if self.is_transient():
-                raise AccessError(_('For this kind of document, you may only access records you created yourself.\n\n(Document type: %s)') % (self._description,))
-
             raise self.env['ir.rule']._make_access_error(operation, forbidden)
 
         # If we get here, the invalid records are not in the database.
@@ -3509,7 +3535,7 @@ Record ids: %(records)s
                     # will automatically invalidate the field from the cache,
                     # forcing its value to be recomputed once dependencies are
                     # up-to-date.
-                    protected.update(self._field_computed.get(field, [field]))
+                    protected.update(self.pool.field_computed.get(field, [field]))
             if fname == 'company_id' or (field.relational and field.check_company):
                 check_company = True
 
@@ -3716,7 +3742,7 @@ Record ids: %(records)s
                     inversed_fields.add(field)
                 # protect non-readonly computed fields against (re)computation
                 if field.compute and not field.readonly:
-                    protected.update(self._field_computed.get(field, [field]))
+                    protected.update(self.pool.field_computed.get(field, [field]))
 
             data_list.append(data)
 
@@ -3918,7 +3944,7 @@ Record ids: %(records)s
 
         if field.store and any(self._ids):
             # check constraints of the fields that have been computed
-            fnames = [f.name for f in self._field_computed[field]]
+            fnames = [f.name for f in self.pool.field_computed[field]]
             self.filtered('id')._validate_fields(fnames)
 
     def _parent_store_create(self):
@@ -4082,9 +4108,8 @@ Record ids: %(records)s
             data['record'] = record
 
         # create or update XMLIDs
-        if to_create or to_update:
-            imd_data_list = [data for data in data_list if data.get('xml_id')]
-            imd._update_xmlids(imd_data_list, update)
+        imd_data_list = [data for data in data_list if data.get('xml_id')]
+        imd._update_xmlids(imd_data_list, update)
 
         return original_self.concat(*(data['record'] for data in data_list))
 
@@ -4099,13 +4124,13 @@ Record ids: %(records)s
         :return: the query expressing the given domain as provided in domain
         :rtype: osv.query.Query
         """
-        # if the object has a field named 'active', filter out all inactive
-        # records unless they were explicitely asked for
-        if 'active' in self._fields and active_test and self._context.get('active_test', True):
+        # if the object has an active field ('active', 'x_active'), filter out all
+        # inactive records unless they were explicitely asked for
+        if self._active_name and active_test and self._context.get('active_test', True):
             # the item[0] trick below works for domain items and '&'/'|'/'!'
             # operators too
-            if not any(item[0] == 'active' for item in domain):
-                domain = [('active', '=', 1)] + domain
+            if not any(item[0] == self._active_name for item in domain):
+                domain = [(self._active_name, '=', 1)] + domain
 
         if domain:
             e = expression.expression(domain, self)
@@ -4157,15 +4182,6 @@ Record ids: %(records)s
                 for table in tables:
                     if table not in query.tables:
                         query.tables.append(table)
-
-        if self._transient:
-            # One single implicit access rule for transient models: owner only!
-            # This is ok because we assert that TransientModels always have
-            # log_access enabled, so that 'create_uid' is always there.
-            domain = [('create_uid', '=', self._uid)]
-            tquery = self._where_calc(domain, active_test=False)
-            apply_rule(tquery.where_clause, tquery.where_clause_params, tquery.tables)
-            return
 
         # apply main rules on the object
         Rule = self.env['ir.rule']
@@ -4351,8 +4367,8 @@ Record ids: %(records)s
                 if field.relational:
                     self.env[field.comodel_name]._flush_search([], seen=seen)
 
-        if 'active' in self:
-            to_flush[self._name].add('active')
+        if self._active_name:
+            to_flush[self._name].add(self._active_name)
 
         for model_name, field_names in to_flush.items():
             self.env[model_name].flush(field_names)
@@ -4587,8 +4603,8 @@ Record ids: %(records)s
             return self
         query = """SELECT id FROM "%s" WHERE id IN %%s""" % self._table
         self._cr.execute(query, [tuple(ids)])
-        ids = [r[0] for r in self._cr.fetchall()]
-        return self.browse(ids + new_ids)
+        valid_ids = set([r[0] for r in self._cr.fetchall()] + new_ids)
+        return self.browse(i for i in self._ids if i in valid_ids)
 
     def _check_recursion(self, parent=None):
         """
@@ -4765,59 +4781,6 @@ Record ids: %(records)s
         return True
 
     @api.model
-    def resolve_2many_commands(self, field_name, commands, fields=None):
-        """ Serializes one2many and many2many commands into record dictionaries
-            (as if all the records came from the database via a read()).  This
-            method is aimed at onchange methods on one2many and many2many fields.
-
-            Because commands might be creation commands, not all record dicts
-            will contain an ``id`` field.  Commands matching an existing record
-            will have an ``id``.
-
-            :param field_name: name of the one2many or many2many field matching the commands
-            :type field_name: str
-            :param commands: one2many or many2many commands to execute on ``field_name``
-            :type commands: list((int|False, int|False, dict|False))
-            :param fields: list of fields to read from the database, when applicable
-            :type fields: list(str)
-            :returns: records in a shape similar to that returned by ``read()``
-                (except records may be missing the ``id`` field if they don't exist in db)
-            :rtype: list(dict)
-        """
-        result = []                     # result (list of dict)
-        record_ids = []                 # ids of records to read
-        updates = defaultdict(dict)     # {id: vals} of updates on records
-
-        for command in commands or []:
-            if not isinstance(command, (list, tuple)):
-                record_ids.append(command)
-            elif command[0] == 0:
-                result.append(command[2])
-            elif command[0] == 1:
-                record_ids.append(command[1])
-                updates[command[1]].update(command[2])
-            elif command[0] in (2, 3):
-                record_ids = [id for id in record_ids if id != command[1]]
-            elif command[0] == 4:
-                record_ids.append(command[1])
-            elif command[0] == 5:
-                result, record_ids = [], []
-            elif command[0] == 6:
-                result, record_ids = [], list(command[2])
-
-        # read the records and apply the updates
-        field = self._fields[field_name]
-        records = self.env[field.comodel_name].browse(record_ids)
-        for data in records.read(fields):
-            data.update(updates.get(data['id'], {}))
-            result.append(data)
-
-        return result
-
-    # for backward compatibility
-    resolve_o2m_commands_to_record_dicts = resolve_2many_commands
-
-    @api.model
     def search_read(self, domain=None, fields=None, offset=0, limit=None, order=None):
         """Perform a :meth:`search` followed by a :meth:`read`.
 
@@ -4860,23 +4823,22 @@ Record ids: %(records)s
         return [index[record.id] for record in records if record.id in index]
 
     def toggle_active(self):
-        """ Inverse the value of the field ``active`` on the records in ``self``. """
-        for record in self:
-            record.active = not record.active
+        """ Inverse the value of the field ``(x_)active`` on the records in ``self``. """
+        active_recs = self.filtered(self._active_name)
+        active_recs[self._active_name] = False
+        (self - active_recs)[self._active_name] = True
 
     def action_archive(self):
+        """ Set (x_)active=False on a recordset, by calling toggle_active to
+            take the corresponding actions according to the model
         """
-            Set active=False on a recordset, by calling toggle_active to take the
-            corresponding actions according to the model
-        """
-        return self.filtered(lambda record: record.active).toggle_active()
+        return self.filtered(lambda record: record[self._active_name]).toggle_active()
 
     def action_unarchive(self):
+        """ Set (x_)active=True on a recordset, by calling toggle_active to
+            take the corresponding actions according to the model
         """
-            Set active=True on a recordset, by calling toggle_active to take the
-            corresponding actions according to the model
-        """
-        return self.filtered(lambda record: not record.active).toggle_active()
+        return self.filtered(lambda record: not record[self._active_name]).toggle_active()
 
     def _register_hook(self):
         """ stuff to do right after the registry is built """
@@ -5059,6 +5021,40 @@ Record ids: %(records)s
             return self
         return self.with_env(self.env(user=user, su=False))
 
+    def with_company(self, company):
+        """ with_company(company)
+
+        Return a new version of this recordset with a modified context, such that::
+
+            result.env.company = company
+            result.env.companies = self.env.companies | company
+
+        :param company: main company of the new environment.
+        :type company: :class:`~odoo.addons.base.models.res_company` or int
+
+        .. warning::
+
+            When using an unauthorized company for current user,
+            accessing the company(ies) on the environment may trigger
+            an AccessError if not done in a sudoed environment.
+        """
+        if not company:
+            # With company = None/False/0/[]/empty recordset: keep current environment
+            return self
+
+        company_id = int(company)
+        allowed_company_ids = self.env.context.get('allowed_company_ids', [])
+        if allowed_company_ids and company_id == allowed_company_ids[0]:
+            return self
+        # Copy the allowed_company_ids list
+        # to avoid modifying the context of the current environment.
+        allowed_company_ids = list(allowed_company_ids)
+        if company_id in allowed_company_ids:
+            allowed_company_ids.remove(company_id)
+        allowed_company_ids.insert(0, company_id)
+
+        return self.with_context(allowed_company_ids=allowed_company_ids)
+
     def with_context(self, *args, **kwargs):
         """ with_context([context][, **overrides]) -> records
 
@@ -5079,9 +5075,29 @@ Record ids: %(records)s
 
             The returned recordset has the same prefetch object as ``self``.
         """
+<<<<<<< HEAD
         context = dict(args[0] if args else self._context, **kwargs)
         if 'allowed_company_ids' not in context and 'allowed_company_ids' in self._context:
             context['allowed_company_ids'] = self._context.get('allowed_company_ids')
+=======
+        if (args and 'force_company' in args[0]) or 'force_company' in kwargs:
+            _logger.warning(
+                "Context key 'force_company' is no longer supported. "
+                "Use with_company(company) instead.",
+                stack_info=True,
+            )
+        if (args and 'company' in args[0]) or 'company' in kwargs:
+            _logger.warning(
+                "Context key 'company' is not recommended, because "
+                "of its special meaning in @depends_context.",
+                stack_info=True,
+            )
+        context = dict(args[0] if args else self._context, **kwargs)
+        if 'allowed_company_ids' not in context and 'allowed_company_ids' in self._context:
+            # Force 'allowed_company_ids' to be kept when context is overridden
+            # without 'allowed_company_ids'
+            context['allowed_company_ids'] = self._context['allowed_company_ids']
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         return self.with_env(self.env(context=context))
 
     def with_prefetch(self, prefetch_ids=None):
@@ -5184,9 +5200,15 @@ Record ids: %(records)s
 
             # returns a list of summing two fields for each record in the set
             records.mapped(lambda r: r.field1 + r.field2)
+<<<<<<< HEAD
 
         The provided function can be a string to get field values:
 
+=======
+
+        The provided function can be a string to get field values:
+
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         .. code-block:: python3
 
             # returns a list of names
@@ -5203,7 +5225,7 @@ Record ids: %(records)s
         if isinstance(func, str):
             recs = self
             for name in func.split('.'):
-                recs = recs._mapped_func(operator.itemgetter(name))
+                recs = recs._fields[name].mapped(recs)
             return recs
         else:
             return self._mapped_func(func)
@@ -5240,6 +5262,8 @@ Record ids: %(records)s
         if isinstance(func, str):
             name = func
             func = lambda rec: any(rec.mapped(name))
+            # populate cache
+            self.mapped(name)
         return self.browse([rec.id for rec in self if func(rec)])
 
     def filtered_domain(self, domain):
@@ -5340,6 +5364,7 @@ Record ids: %(records)s
 
     def sorted(self, key=None, reverse=False):
         """Return the recordset ``self`` ordered by ``key``.
+<<<<<<< HEAD
 
         :param key: either a function of one argument that returns a
             comparison key for each record, or a field name, or ``None``, in
@@ -5349,6 +5374,17 @@ Record ids: %(records)s
 
         .. code-block:: python3
 
+=======
+
+        :param key: either a function of one argument that returns a
+            comparison key for each record, or a field name, or ``None``, in
+            which case records are ordered according the default model's order
+        :type key: callable or str or None
+        :param bool reverse: if ``True``, return the result in reverse order
+
+        .. code-block:: python3
+
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             # sort records by name
             records.sorted(key=lambda r: r.name)
         """
@@ -5580,12 +5616,10 @@ Record ids: %(records)s
         return set(self._ids) >= set(other._ids)
 
     def __int__(self):
-        return self.id
+        return self.id or 0
 
-    def __str__(self):
-        return "%s%s" % (self._name, getattr(self, '_ids', ""))
     def __repr__(self):
-        return str(self)
+        return "%s%s" % (self._name, getattr(self, '_ids', ""))
 
     def __hash__(self):
         if hasattr(self, '_ids'):
@@ -5690,13 +5724,33 @@ Record ids: %(records)s
         """
         if not self or not fnames:
             return
+
+        # The triggers of a field F is a tree that contains the fields that
+        # depend on F, together with the fields to inverse to find out which
+        # records to recompute.
+        #
+        # For instance, assume that G depends on F, H depends on X.F, I depends
+        # on W.X.F, and J depends on Y.F. The triggers of F will be the tree:
+        #
+        #                              [G]
+        #                            X/   \Y
+        #                          [H]     [J]
+        #                        W/
+        #                      [I]
+        #
+        # This tree provides perfect support for the trigger mechanism:
+        # when F is # modified on records,
+        #  - mark G to recompute on records,
+        #  - mark H to recompute on inverse(X, records),
+        #  - mark I to recompute on inverse(W, inverse(X, records)),
+        #  - mark J to recompute on inverse(Y, records).
         if len(fnames) == 1:
-            tree = self._field_triggers.get(self._fields[next(iter(fnames))])
+            tree = self.pool.field_triggers.get(self._fields[next(iter(fnames))])
         else:
             # merge dependency trees to evaluate all triggers at once
             tree = {}
             for fname in fnames:
-                node = self._field_triggers.get(self._fields[fname])
+                node = self.pool.field_triggers.get(self._fields[fname])
                 if node:
                     trigger_tree_merge(tree, node)
         if tree:
@@ -5787,7 +5841,11 @@ Record ids: %(records)s
                     # mark the field as computed on missing records, otherwise
                     # they remain forever in the todo list, and lead to an
                     # infinite loop...
+<<<<<<< HEAD
                     for f in recs._field_computed[field]:
+=======
+                    for f in recs.pool.field_computed[field]:
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                         self.env.remove_to_compute(f, recs - existing)
             else:
                 self.env.cache.invalidate([(field, recs._ids)])
@@ -5823,7 +5881,7 @@ Record ids: %(records)s
                     yield from val
                 else:
                     yield from traverse(val)
-        return traverse(self._field_triggers.get(field, {}))
+        return traverse(self.pool.field_triggers.get(field, {}))
 
     def _has_onchange(self, field, other_fields):
         """ Return whether ``field`` should trigger an onchange event in the
@@ -5873,6 +5931,10 @@ Record ids: %(records)s
                 res['value'].pop('id', None)
                 self.update({key: val for key, val in res['value'].items() if key in self._fields})
             if res.get('domain'):
+                _logger.warning(
+                    "onchange method %s returned a domain, this is deprecated",
+                    method.__qualname__
+                )
                 result.setdefault('domain', {}).update(res['domain'])
             if res.get('warning'):
                 result['warnings'].add((
@@ -6055,8 +6117,12 @@ Record ids: %(records)s
         # make a snapshot based on the initial values of record
         snapshot0 = Snapshot(record, nametree)
 
-        # store changed values in cache, and update snapshot0
-        record._update_cache(changed_values, validate=False)
+        # store changed values in cache; also trigger recomputations based on
+        # subfields (e.g., line.a has been modified, line.b is computed stored
+        # and depends on line.a, but line.b is not in the form view)
+        record._update_cache(changed_values, validate=True)
+
+        # update snapshot0 with changed values
         for name in names:
             snapshot0.fetch(name)
 
@@ -6116,6 +6182,73 @@ Record ids: %(records)s
             result['warning'] = dict(title=title, message=message, type='dialog')
 
         return result
+
+    def _get_placeholder_filename(self, field=None):
+        """ Returns the filename of the placeholder to use,
+            set on web/static/src/img by default, or the
+            complete path to access it (eg: module/path/to/image.png).
+        """
+        return 'placeholder.png'
+
+    def _populate_factories(self):
+        """ Return a list of pairs ``(field_name, factory)``, ``factory`` is a function that creates
+        a generator of values (dict of field values).  Its API suggested by::
+
+            # generator yield values by iterating on base_generator and adding a value
+            # for the given field in the dicts yielded by base_generator
+            generator = factory(base_generator, field_name, model_name)
+            # suggested usage
+            for values in generator:
+                model.create(values)
+        """
+        return []
+
+    @property
+    def _populate_sizes(self):
+        """ Return a dict mapping symbolic sizes (``'small'``, ``'medium'``, ``'large'``) to integers,
+        giving the minimal number of records that method ``_populate`` should create.
+        """
+        return {
+            'small': 10,  # minimal representative set
+            'medium': 100,  # average database load
+            'large': 1000, # maxi database load
+        }
+
+    @property
+    def _populate_dependencies(self):
+        return []
+
+    def _populate(self, size):
+        """ Create records to populate this model.
+        
+        :param size: symbolic size for the number of records: ``'small'``, ``'medium'`` or ``'large'``
+        """
+        batch_size = 1000
+        min_size = self._populate_sizes[size]
+
+        record_count = 0
+        create_values = []
+        complete = False
+        field_generators = self._populate_factories()
+        if not field_generators:
+            return self.browse() # maybe create an automatic generator?
+            
+        records_batches = []
+        generator = populate.chain_factories(field_generators, self._name)
+        while record_count <= min_size or not complete:
+            values = next(generator)
+            complete = values.pop('__complete')
+            create_values.append(values)
+            record_count += 1
+            if len(create_values) >= batch_size:
+                _logger.info('Batch: %s/%s', record_count, min_size)
+                records_batches.append(self.create(create_values))
+                create_values = []
+
+        if create_values:
+            records_batches.append(self.create(create_values))
+        return self.concat(*records_batches)
+
 
 collections.Set.register(BaseModel)
 # not exactly true as BaseModel doesn't have __reversed__, index or count

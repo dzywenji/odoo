@@ -9,6 +9,7 @@ var core = require('web.core');
 var viewDialogs = require('web.view_dialogs');
 
 var _t = core._t;
+const Qweb = core.qweb;
 
 /**
  * Chat Composer for the Chatter
@@ -48,6 +49,20 @@ var ChatterComposer = BasicComposer.extend({
      * @override
      */
     _clearComposerOnSend: function () {},
+    /**
+     * Updates suggested partners in DOM
+     *
+     * @param {Array} suggestedPartners list of 'recipient' partners
+     */
+    updateSuggestedPartners(suggestedPartners) {
+        this.suggestedPartners = suggestedPartners;
+        if (!this.options.isLog) {
+            const $suggestedPartners = $(Qweb.render('mail.chatter.ComposerSuggestedPartners', {
+                widget: this,
+            }));
+            this.$('.o_composer_suggested_partners').replaceWith($suggestedPartners);
+        }
+    },
 
     //--------------------------------------------------------------------------
     // Private
@@ -205,14 +220,14 @@ var ChatterComposer = BasicComposer.extend({
         return new Promise(function (resolve, reject) {
             self._super().then(function (message) {
                 message = _.extend(message, {
-                    subtype: 'mail.mt_comment',
+                    subtype_xmlid: 'mail.mt_comment',
                     message_type: 'comment',
                     context: _.defaults({}, self.context, session.user_context),
                 });
 
                 // Subtype
                 if (self.options.isLog) {
-                    message.subtype = 'mail.mt_note';
+                    message.subtype_xmlid = 'mail.mt_note';
                 }
 
                 // Partner_ids

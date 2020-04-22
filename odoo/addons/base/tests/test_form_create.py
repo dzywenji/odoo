@@ -1,4 +1,9 @@
 # -*- coding: utf-8 -*-
+<<<<<<< HEAD
+=======
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
+
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 from odoo.tests import TransactionCase, tagged, Form
 
 
@@ -12,6 +17,25 @@ class TestFormCreate(TransactionCase):
     def test_create_res_partner(self):
         partner_form = Form(self.env['res.partner'])
         partner_form.name = 'a partner'
+<<<<<<< HEAD
+=======
+        # YTI: Clean that brol
+        if hasattr(self.env['res.partner'], 'property_account_payable_id'):
+            property_account_payable_id = self.env['account.account'].create({
+                'name': 'Test Account',
+                'user_type_id': self.env.ref('account.data_account_type_payable').id,
+                'code': 'TestAccountPayable',
+                'reconcile': True
+            })
+            property_account_receivable_id = self.env['account.account'].create({
+                'name': 'Test Account',
+                'user_type_id': self.env.ref('account.data_account_type_receivable').id,
+                'code': 'TestAccountReceivable',
+                'reconcile': True
+            })
+            partner_form.property_account_payable_id = property_account_payable_id
+            partner_form.property_account_receivable_id = property_account_receivable_id
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         partner_form.save()
 
     def test_create_res_users(self):

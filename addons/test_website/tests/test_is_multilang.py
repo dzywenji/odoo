@@ -20,7 +20,14 @@ class TestIsMultiLang(odoo.tests.HttpCase):
         for data in [None, {'post': True}]: # GET / POST
             body = lxml.html.fromstring(self.url_open('/fr/multi_url', data=data).content)
 
+<<<<<<< HEAD
             self.assertEquals(fr_prefix + '/get', body.find('./a[@id="get"]').get('href'))
             self.assertEquals(fr_prefix + '/post', body.find('./form[@id="post"]').get('action'))
             self.assertEquals(fr_prefix + '/get_post', body.find('./a[@id="get_post"]').get('href'))
             self.assertEquals('/get_post_nomultilang', body.find('./a[@id="get_post_nomultilang"]').get('href'))
+=======
+            self.assertEqual(fr_prefix + '/get', body.find('./a[@id="get"]').get('href'))
+            self.assertEqual(fr_prefix + '/post', body.find('./form[@id="post"]').get('action'))
+            self.assertEqual(fr_prefix + '/get_post', body.find('./a[@id="get_post"]').get('href'))
+            self.assertEqual('/get_post_nomultilang', body.find('./a[@id="get_post_nomultilang"]').get('href'))
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

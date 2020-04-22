@@ -104,6 +104,7 @@ class WebsiteTest(Home):
     def test_denied_error_http(self, **kwargs):
         raise AccessDenied("This is an access denied http test")
 
+<<<<<<< HEAD
     @http.route(['/get'], type='http', auth="public", methods=['GET'], website=True)
     def get_method(self, **kw):
         return request.make_response('get')
@@ -119,3 +120,26 @@ class WebsiteTest(Home):
     @http.route(['/get_post_nomultilang'], type='http', auth="public", methods=['GET', 'POST'], website=True, multilang=False)
     def get_post_method_no_multilang(self, **kw):
         return request.make_response('get_post_nomultilang')
+=======
+    @http.route(['/get'], type='http', auth="public", methods=['GET'], website=True, sitemap=False)
+    def get_method(self, **kw):
+        return request.make_response('get')
+
+    @http.route(['/post'], type='http', auth="public", methods=['POST'], website=True, sitemap=False)
+    def post_method(self, **kw):
+        return request.make_response('post')
+
+    @http.route(['/get_post'], type='http', auth="public", methods=['GET', 'POST'], website=True, sitemap=False)
+    def get_post_method(self, **kw):
+        return request.make_response('get_post')
+
+    @http.route(['/get_post_nomultilang'], type='http', auth="public", methods=['GET', 'POST'], website=True, multilang=False, sitemap=False)
+    def get_post_method_no_multilang(self, **kw):
+        return request.make_response('get_post_nomultilang')
+
+    # Test Perfs
+
+    @http.route(['/empty_controller_test'], type='http', auth='public', website=True, multilang=False, sitemap=False)
+    def empty_controller_test(self, **kw):
+        return 'Basic Controller Content'
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

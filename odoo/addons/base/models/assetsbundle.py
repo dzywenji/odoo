@@ -186,10 +186,10 @@ class AssetsBundle(object):
     def checksum(self):
         """
         Not really a full checksum.
-        We compute a SHA1 on the rendered bundle + max linked files last_modified date
+        We compute a SHA512/256 on the rendered bundle + max linked files last_modified date
         """
         check = u"%s%s" % (json.dumps(self.files, sort_keys=True), self.last_modified)
-        return hashlib.sha1(check.encode('utf-8')).hexdigest()
+        return hashlib.sha512(check.encode('utf-8')).hexdigest()[:64]
 
     def _get_asset_template_url(self):
         return "/web/content/{id}-{unique}/{extra}{name}{sep}{type}"
@@ -284,7 +284,7 @@ class AssetsBundle(object):
             'res_id': False,
             'type': 'binary',
             'public': True,
-            'datas': base64.b64encode(content.encode('utf8')),
+            'raw': content.encode('utf8'),
         }
         attachment = ira.with_user(SUPERUSER_ID).create(values)
 
@@ -425,7 +425,7 @@ class AssetsBundle(object):
                         outdated = True
                         break
                     if asset._content is None:
-                        asset._content = attachment.datas and base64.b64decode(attachment.datas).decode('utf8') or ''
+                        asset._content = (attachment.raw or b'').decode('utf8')
                         if not asset._content and attachment.file_size > 0:
                             asset._content = None # file missing, force recompile
 
@@ -478,7 +478,11 @@ class AssetsBundle(object):
                         url = asset.html_url
                         with self.env.cr.savepoint():
                             self.env['ir.attachment'].sudo().create(dict(
+<<<<<<< HEAD
                                 datas=base64.b64encode(asset.content.encode('utf8')),
+=======
+                                raw=asset.content.encode('utf8'),
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                                 mimetype='text/css',
                                 type='binary',
                                 name=fname,

@@ -1,5 +1,10 @@
 import odoo.tests
+<<<<<<< HEAD
 from odoo.tests.common import HOST, PORT
+=======
+from odoo.tests.common import HOST
+from odoo.tools import config
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 
 @odoo.tests.common.tagged('post_install', '-at_install')
@@ -38,6 +43,7 @@ class TestWebsiteAttachment(odoo.tests.HttpCase):
         })
 
         req = self.url_open('/web/image/test.an_image_url')
+<<<<<<< HEAD
         self.assertEquals(req.status_code, 200)
 
         base = "http://%s:%s" % (HOST, PORT)
@@ -48,3 +54,15 @@ class TestWebsiteAttachment(odoo.tests.HttpCase):
 
         req = self.opener.get(base + '/web/image/test.an_image_redirect_301', allow_redirects=True)
         self.assertEquals(req.status_code, 200)
+=======
+        self.assertEqual(req.status_code, 200)
+
+        base = "http://%s:%s" % (HOST, config['http_port'])
+
+        req = self.opener.get(base + '/web/image/test.an_image_redirect_301', allow_redirects=False)
+        self.assertEqual(req.status_code, 301)
+        self.assertEqual(req.headers['Location'], base + '/web/image/test.an_image_url')
+
+        req = self.opener.get(base + '/web/image/test.an_image_redirect_301', allow_redirects=True)
+        self.assertEqual(req.status_code, 200)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

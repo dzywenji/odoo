@@ -6,12 +6,13 @@
 from odoo.tests import Form, tagged
 from odoo.addons.stock_account.tests.test_stockvaluationlayer import TestStockValuationCommon
 from odoo.addons.stock_account.tests.test_stockvaluation import _create_accounting_data
+from odoo.addons.stock_account.tests.common import StockAccountTestCommon
 
 
-class TestStockValuationLC(TestStockValuationCommon):
+class TestStockValuationLCCommon(TestStockValuationCommon, StockAccountTestCommon):
     @classmethod
     def setUpClass(cls):
-        super(TestStockValuationLC, cls).setUpClass()
+        super(TestStockValuationLCCommon, cls).setUpClass()
         cls.productlc1 = cls.env['product.product'].create({
             'name': 'product1',
             'type': 'service',
@@ -76,7 +77,7 @@ class TestStockValuationLC(TestStockValuationCommon):
         return lc
 
 
-class TestStockValuationLCFIFO(TestStockValuationLC):
+class TestStockValuationLCFIFO(TestStockValuationLCCommon):
     def setUp(self):
         super(TestStockValuationLCFIFO, self).setUp()
         self.product1.product_tmpl_id.categ_id.property_cost_method = 'fifo'
@@ -189,9 +190,13 @@ class TestStockValuationLCFIFO(TestStockValuationLC):
         self.assertEqual(self.product1.quantity_svl, 10)
         move2 = self._make_out_move(self.product1, 1)
         self.assertEqual(move2.stock_valuation_layer_ids.value, -115)
+<<<<<<< HEAD
+
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 
-class TestStockValuationLCAVCO(TestStockValuationLC):
+class TestStockValuationLCAVCO(TestStockValuationLCCommon):
     def setUp(self):
         super(TestStockValuationLCAVCO, self).setUp()
         self.product1.product_tmpl_id.categ_id.property_cost_method = 'average'
@@ -233,11 +238,15 @@ class TestStockValuationLCAVCO(TestStockValuationLC):
         self.assertEqual(self.product1.quantity_svl, 19)
 
 
-class TestStockValuationLCFIFOVB(TestStockValuationLC):
+class TestStockValuationLCFIFOVB(TestStockValuationLCCommon):
     @classmethod
     def setUpClass(cls):
         super(TestStockValuationLCFIFOVB, cls).setUpClass()
+<<<<<<< HEAD
         cls.vendor1 = cls.  env['res.partner'].create({'name': 'vendor1'})
+=======
+        cls.vendor1 = cls.env['res.partner'].create({'name': 'vendor1'})
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         cls.vendor1.property_account_payable_id = cls.payable_account
         cls.vendor2 = cls.env['res.partner'].create({'name': 'vendor2'})
         cls.vendor2.property_account_payable_id = cls.payable_account
@@ -256,8 +265,8 @@ class TestStockValuationLCFIFOVB(TestStockValuationLC):
 
         with rfq.order_line.new() as po_line:
             po_line.product_id = self.product1
-            po_line.price_unit = 10
             po_line.product_qty = 10
+            po_line.price_unit = 10
             po_line.taxes_id.clear()
 
         rfq = rfq.save()
@@ -266,7 +275,7 @@ class TestStockValuationLCFIFOVB(TestStockValuationLC):
         # Process the receipt
         receipt = rfq.picking_ids
         wiz = receipt.button_validate()
-        wiz = self.env['stock.immediate.transfer'].browse(wiz['res_id']).process()
+        wiz = Form(self.env['stock.immediate.transfer'].with_context(wiz['context'])).save().process()
         self.assertEqual(rfq.order_line.qty_received, 10)
 
         input_aml = self._get_stock_input_move_lines()[-1]
@@ -277,9 +286,8 @@ class TestStockValuationLCFIFOVB(TestStockValuationLC):
         self.assertEqual(valuation_aml.credit, 0)
 
         # Create a vebdor bill for the RFQ
-        action = rfq.action_view_invoice()
-        vb = Form(self.env['account.move'].with_context(action['context']))
-        vb = vb.save()
+        action = rfq.action_create_invoice()
+        vb = self.env['account.move'].search([('id', '=', action['res_id'])])
         vb.post()
 
         input_aml = self._get_stock_input_move_lines()[-1]
@@ -291,7 +299,7 @@ class TestStockValuationLCFIFOVB(TestStockValuationLC):
 
         # Create a vendor bill for a landed cost product, post it and validate a landed cost
         # linked to this vendor bill. LC; 1@50
-        lcvb = Form(self.env['account.move'].with_context(default_type='in_invoice'))
+        lcvb = Form(self.env['account.move'].with_context(default_move_type='in_invoice'))
         lcvb.partner_id = self.vendor2
         with lcvb.invoice_line_ids.new() as inv_line:
             inv_line.product_id = self.productlc1
@@ -344,8 +352,13 @@ class TestStockValuationLCFIFOVB(TestStockValuationLC):
 
         with rfq.order_line.new() as po_line:
             po_line.product_id = self.product1
+<<<<<<< HEAD
             po_line.price_unit = 10
             po_line.product_qty = 10
+=======
+            po_line.product_qty = 10
+            po_line.price_unit = 10
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             po_line.taxes_id.clear()
 
         rfq = rfq.save()
@@ -354,7 +367,12 @@ class TestStockValuationLCFIFOVB(TestStockValuationLC):
         # Process the receipt
         receipt = rfq.picking_ids
         wiz = receipt.button_validate()
+<<<<<<< HEAD
         wiz = self.env['stock.immediate.transfer'].browse(wiz['res_id']).process()
+=======
+        wiz = Form(self.env['stock.immediate.transfer'].with_context(wiz['context'])).save()
+        wiz.process()
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         self.assertEqual(rfq.order_line.qty_received, 10)
 
         input_aml = self._get_stock_input_move_lines()[-1]
@@ -364,9 +382,15 @@ class TestStockValuationLCFIFOVB(TestStockValuationLC):
         self.assertEqual(valuation_aml.debit, 100)
         self.assertEqual(valuation_aml.credit, 0)
 
+<<<<<<< HEAD
         # Create a vebdor bill for the RFQ and add to it the landed cost
         action = rfq.action_view_invoice()
         vb = Form(self.env['account.move'].with_context(action['context']))
+=======
+        # Create a vendor bill for the RFQ and add to it the landed cost
+        vb = Form(self.env['account.move'].with_context(default_move_type='in_invoice'))
+        vb.partner_id = self.vendor1
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         with vb.invoice_line_ids.new() as inv_line:
             inv_line.product_id = self.productlc1
             inv_line.price_unit = 50
@@ -396,8 +420,8 @@ class TestStockValuationLCFIFOVB(TestStockValuationLC):
 
         with rfq.order_line.new() as po_line:
             po_line.product_id = self.product1
-            po_line.price_unit = 10
             po_line.product_qty = 10
+            po_line.price_unit = 10
             po_line.taxes_id.clear()
 
         rfq = rfq.save()
@@ -406,7 +430,7 @@ class TestStockValuationLCFIFOVB(TestStockValuationLC):
         # Process the receipt
         receipt = rfq.picking_ids
         wiz = receipt.button_validate()
-        wiz = self.env['stock.immediate.transfer'].browse(wiz['res_id']).process()
+        wiz = Form(self.env['stock.immediate.transfer'].with_context(wiz['context'])).save().process()
         self.assertEqual(rfq.order_line.qty_received, 10)
 
         input_aml = self._get_stock_input_move_lines()[-1]
@@ -417,9 +441,8 @@ class TestStockValuationLCFIFOVB(TestStockValuationLC):
         self.assertEqual(valuation_aml.credit, 0)
 
         # Create a vebdor bill for the RFQ
-        action = rfq.action_view_invoice()
-        vb = Form(self.env['account.move'].with_context(action['context']))
-        vb = vb.save()
+        action = rfq.action_create_invoice()
+        vb = self.env['account.move'].search([('id', '=', action['res_id'])])
         vb.post()
 
         expense_aml = self._get_expense_move_lines()[-1]
@@ -432,7 +455,7 @@ class TestStockValuationLCFIFOVB(TestStockValuationLC):
 
         # Create a vendor bill for a landed cost product, post it and validate a landed cost
         # linked to this vendor bill. LC; 1@50
-        lcvb = Form(self.env['account.move'].with_context(default_type='in_invoice'))
+        lcvb = Form(self.env['account.move'].with_context(default_move_type='in_invoice'))
         lcvb.partner_id = self.vendor2
         with lcvb.invoice_line_ids.new() as inv_line:
             inv_line.product_id = self.productlc1

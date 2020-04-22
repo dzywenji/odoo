@@ -21,6 +21,7 @@ class TestSaleMatrixUi(common.TestMatrixCommon):
         # Ensures some dynamic create variants have been created by the matrix
         # Ensures a SO has been created with exactly x lines ...
 
+<<<<<<< HEAD
         self.assertEquals(len(self.matrix_template.product_variant_ids), 8)
         self.assertEquals(len(self.matrix_template.product_variant_ids.product_template_attribute_value_ids), 6)
         self.assertEquals(len(self.matrix_template.attribute_line_ids.product_template_value_ids), 8)
@@ -28,6 +29,15 @@ class TestSaleMatrixUi(common.TestMatrixCommon):
 
         self.matrix_template.flush()
         self.assertEquals(round(self.matrix_template.sales_count, 2), 56.8)
+=======
+        self.assertEqual(len(self.matrix_template.product_variant_ids), 8)
+        self.assertEqual(len(self.matrix_template.product_variant_ids.product_template_attribute_value_ids), 6)
+        self.assertEqual(len(self.matrix_template.attribute_line_ids.product_template_value_ids), 8)
+        self.env['sale.order.line'].search([('product_id', 'in', self.matrix_template.product_variant_ids.ids)]).order_id.action_confirm()
+
+        self.matrix_template.flush()
+        self.assertEqual(round(self.matrix_template.sales_count, 2), 56.8)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         for variant in self.matrix_template.product_variant_ids:
             # 5 and 9.2 because of no variant attributes
             self.assertIn(round(variant.sales_count, 2), [5, 9.2])
@@ -35,7 +45,11 @@ class TestSaleMatrixUi(common.TestMatrixCommon):
         # Ensure no duplicate line has been created on the SO.
         # NB: the *2 is because the no_variant attribute doesn't create a variant
         # but still gives different order lines.
+<<<<<<< HEAD
         self.assertEquals(
+=======
+        self.assertEqual(
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             len(self.env['sale.order.line'].search([('product_id', 'in', self.matrix_template.product_variant_ids.ids)])),
             len(self.matrix_template.product_variant_ids)*2
         )

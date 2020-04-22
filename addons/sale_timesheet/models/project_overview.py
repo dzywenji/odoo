@@ -5,6 +5,7 @@ import itertools
 import json
 
 from odoo import fields, _, models
+from odoo.osv import expression
 from odoo.tools import float_round
 from odoo.tools.misc import get_lang
 
@@ -76,6 +77,11 @@ class Project(models.Model):
         # rates from non-invoiced timesheets that are linked to canceled so
         dashboard_values['rates']['canceled'] = float_round(100 * total_canceled_hours / (dashboard_total_hours or 1), precision_rounding=hour_rounding)
 
+        other_revenues = self.env['account.analytic.line'].read_group([
+            ('account_id', 'in', self.analytic_account_id.ids),
+            ('amount', '>=', 0),
+            ('project_id', '=', False)], ['amount'], [])[0].get('amount', 0)
+
         # profitability, using profitability SQL report
         profit = dict.fromkeys(['invoiced', 'to_invoice', 'cost', 'expense_cost', 'expense_amount_untaxed_invoiced', 'total'], 0.0)
         profitability_raw_data = self.env['project.profitability.report'].read_group([('project_id', 'in', self.ids)], ['project_id', 'amount_untaxed_to_invoice', 'amount_untaxed_invoiced', 'timesheet_cost', 'expense_cost', 'expense_amount_untaxed_invoiced'], ['project_id'])
@@ -85,6 +91,7 @@ class Project(models.Model):
             profit['cost'] += data.get('timesheet_cost', 0.0)
             profit['expense_cost'] += data.get('expense_cost', 0.0)
             profit['expense_amount_untaxed_invoiced'] += data.get('expense_amount_untaxed_invoiced', 0.0)
+        profit['other_revenues'] = other_revenues or 0
         profit['total'] = sum([profit[item] for item in profit.keys()])
         dashboard_values['profit'] = profit
 
@@ -102,7 +109,9 @@ class Project(models.Model):
         aal_employee_ids = self.env['account.analytic.line'].read_group([('project_id', 'in', self.ids), ('employee_id', '!=', False)], ['employee_id'], ['employee_id'])
         employee_ids.extend(list(map(lambda x: x['employee_id'][0], aal_employee_ids)))
 
-        employees = self.env['hr.employee'].sudo().browse(employee_ids)
+        # Retrieve the employees for which the current user can see theirs timesheets
+        employee_domain = expression.AND([[('company_id', 'in', self.env.companies.ids)], self.env['account.analytic.line']._domain_employee_id()])
+        employees = self.env['hr.employee'].sudo().browse(employee_ids).filtered_domain(employee_domain)
         repartition_domain = [('project_id', 'in', self.ids), ('employee_id', '!=', False), ('timesheet_invoice_type', '!=', False)]  # force billable type
         # repartition data, without timesheet on cancelled so
         repartition_data = self.env['account.analytic.line'].read_group(repartition_domain + ['|', ('so_line', '=', False), ('so_line.state', '!=', 'cancel')], ['employee_id', 'timesheet_invoice_type', 'unit_amount'], ['employee_id', 'timesheet_invoice_type'], lazy=False)
@@ -146,12 +155,12 @@ class Project(models.Model):
         #
         # Table grouped by SO / SOL / Employees
         #
-        timesheet_forecast_table_rows = self._table_get_line_values()
+        timesheet_forecast_table_rows = self._table_get_line_values(employees)
         if timesheet_forecast_table_rows:
             values['timesheet_forecast_table'] = timesheet_forecast_table_rows
         return values
 
-    def _table_get_line_values(self):
+    def _table_get_line_values(self, employees=None):
         """ return the header and the rows informations of the table """
         if not self:
             return False
@@ -193,9 +202,11 @@ class Project(models.Model):
             if not is_milestone:
                 rows_sale_line[sale_line_row_key][-2] = sale_line.product_uom._compute_quantity(sale_line.product_uom_qty, uom_hour, raise_if_failure=False) if sale_line else 0.0
 
+        rows_sale_line_all_data = {}
+        if not employees:
+            employees = self.env['hr.employee'].sudo().search(self.env['account.analytic.line']._domain_employee_id())
         for row_key, row_employee in rows_employee.items():
-            sale_line_id = row_key[1]
-            sale_order_id = row_key[0]
+            sale_order_id, sale_line_id, employee_id = row_key
             # sale line row
             sale_line_row_key = (sale_order_id, sale_line_id)
             if sale_line_row_key not in rows_sale_line:
@@ -205,35 +216,26 @@ class Project(models.Model):
                 if not is_milestone:
                     rows_sale_line[sale_line_row_key][-2] = sale_line.product_uom._compute_quantity(sale_line.product_uom_qty, uom_hour, raise_if_failure=False) if sale_line else 0.0
 
-            for index in range(len(rows_employee[row_key])):
-                if index != 0:
-                    rows_sale_line[sale_line_row_key][index] += rows_employee[row_key][index]
-                    if not rows_sale_line[sale_line_row_key][0].get('is_milestone'):
-                        rows_sale_line[sale_line_row_key][-1] = rows_sale_line[sale_line_row_key][-2] - rows_sale_line[sale_line_row_key][5]
-                    else:
-                        rows_sale_line[sale_line_row_key][-1] = 0
+            if sale_line_row_key not in rows_sale_line_all_data:
+                rows_sale_line_all_data[sale_line_row_key] = [0] * len(row_employee)
+            for index in range(1, len(row_employee)):
+                if employee_id in employees.ids:
+                    rows_sale_line[sale_line_row_key][index] += row_employee[index]
+                rows_sale_line_all_data[sale_line_row_key][index] += row_employee[index]
+            if not rows_sale_line[sale_line_row_key][0].get('is_milestone'):
+                rows_sale_line[sale_line_row_key][-1] = rows_sale_line[sale_line_row_key][-2] - rows_sale_line_all_data[sale_line_row_key][5]
+            else:
+                rows_sale_line[sale_line_row_key][-1] = 0
 
         rows_sale_order = {}  # so -> [INFO, before, M1, M2, M3, Done, M3, M4, M5, After, Forecasted]
-        rows_sale_order_done_sold = {key : dict(sold=0.0, done=0.0) for key in set(map_sol_so.values()) | set([None])}  # SO id -> {'sold':0.0, 'done': 0.0}
         for row_key, row_sale_line in rows_sale_line.items():
             sale_order_id = row_key[0]
             # sale order row
             if sale_order_id not in rows_sale_order:
                 rows_sale_order[sale_order_id] = [{'label': map_so_names.get(sale_order_id, _('No Sales Order')), 'canceled': map_so_cancel.get(sale_order_id, False), 'res_id': sale_order_id, 'res_model': 'sale.order', 'type': 'sale_order'}] + default_row_vals[:]  # INFO, before, M1, M2, M3, Done, M3, M4, M5, After, Forecasted
 
-            for index in range(len(rows_sale_line[row_key])):
-                if index != 0:
-                    rows_sale_order[sale_order_id][index] += rows_sale_line[row_key][index]
-
-            # do not sum the milestone SO line for sold and done (for remaining computation)
-            if not rows_sale_line[row_key][0].get('is_milestone'):
-                rows_sale_order_done_sold[sale_order_id]['sold'] += rows_sale_line[row_key][-2]
-                rows_sale_order_done_sold[sale_order_id]['done'] += rows_sale_line[row_key][5]
-
-        # remaining computation of SO row, as Sold - Done (timesheet total)
-        for sale_order_id, done_sold_vals in rows_sale_order_done_sold.items():
-            if sale_order_id in rows_sale_order:
-                rows_sale_order[sale_order_id][-1] = done_sold_vals['sold'] - done_sold_vals['done']
+            for index in range(1, len(row_sale_line)):
+                rows_sale_order[sale_order_id][index] += row_sale_line[index]
 
         # group rows SO, SOL and their related employee rows.
         timesheet_forecast_table_rows = []
@@ -243,7 +245,7 @@ class Project(models.Model):
                 if sale_order_id == sale_line_row_key[0]:
                     timesheet_forecast_table_rows.append(sale_line_row)
                     for employee_row_key, employee_row in rows_employee.items():
-                        if sale_order_id == employee_row_key[0] and sale_line_row_key[1] == employee_row_key[1]:
+                        if sale_order_id == employee_row_key[0] and sale_line_row_key[1] == employee_row_key[1] and employee_row_key[2] in employees.ids:
                             timesheet_forecast_table_rows.append(employee_row)
 
         # complete table data
@@ -259,7 +261,7 @@ class Project(models.Model):
             month_index = fields.Date.from_string(date).month
             return babel.dates.get_month_names('abbreviated', locale=get_lang(self.env).code)[month_index]
 
-        header_names = [_('Name'), _('Before')] + [_to_short_month_name(date) for date in ts_months] + [_('Total'), _('Sold'), _('Remaining')]
+        header_names = [_('Sales Order'), _('Before')] + [_to_short_month_name(date) for date in ts_months] + [_('Total'), _('Sold'), _('Remaining')]
 
         result = []
         for name in header_names:
@@ -417,6 +419,8 @@ class Project(models.Model):
         # if only one project, add it in the context as default value
         tasks_domain = [('project_id', 'in', self.ids)]
         tasks_context = self.env.context
+        late_tasks_domain = [('project_id', 'in', self.ids), ('date_deadline', '<', fields.Date.to_string(fields.Date.today())), ('date_end', '=', False)]
+        overtime_tasks_domain = [('project_id', 'in', self.ids), ('overtime', '>', 0), ('planned_hours', '>', 0)]
 
         # filter out all the projects that have no tasks
         task_projects_ids = self.env['project.task'].read_group([('project_id', 'in', self.ids)], ['project_id'], ['project_id'])
@@ -433,6 +437,26 @@ class Project(models.Model):
                 domain=tasks_domain,
                 context=tasks_context
             )
+        })
+        stat_buttons.append({
+            'name': _("Late Tasks"),
+            'count': self.env['project.task'].search_count(late_tasks_domain),
+            'icon': 'fa fa-tasks',
+            'action': _to_action_data(
+                action=self.env.ref('project.action_view_task'),
+                domain=late_tasks_domain,
+                context=tasks_context,
+            ),
+        })
+        stat_buttons.append({
+            'name': _("Tasks in Overtime"),
+            'count': self.env['project.task'].search_count(overtime_tasks_domain),
+            'icon': 'fa fa-tasks',
+            'action': _to_action_data(
+                action=self.env.ref('project.action_view_task'),
+                domain=overtime_tasks_domain,
+                context=tasks_context,
+            ),
         })
 
         if self.env.user.has_group('sales_team.group_sale_salesman_all_leads'):
@@ -457,7 +481,7 @@ class Project(models.Model):
 
                 invoice_ids = self.env['sale.order'].search_read([('id', 'in', sale_orders.ids)], ['invoice_ids'])
                 invoice_ids = list(itertools.chain(*[i['invoice_ids'] for i in invoice_ids]))
-                invoice_ids = self.env['account.move'].search_read([('id', 'in', invoice_ids), ('type', '=', 'out_invoice')], ['id'])
+                invoice_ids = self.env['account.move'].search_read([('id', 'in', invoice_ids), ('move_type', '=', 'out_invoice')], ['id'])
                 invoice_ids = list(map(lambda x: x['id'], invoice_ids))
 
                 if invoice_ids:
@@ -467,7 +491,7 @@ class Project(models.Model):
                         'icon': 'fa fa-pencil-square-o',
                         'action': _to_action_data(
                             action=self.env.ref('account.action_move_out_invoice_type'),
-                            domain=[('id', 'in', invoice_ids), ('type', '=', 'out_invoice')],
+                            domain=[('id', 'in', invoice_ids), ('move_type', '=', 'out_invoice')],
                             context={'create': False, 'delete': False}
                         )
                     })

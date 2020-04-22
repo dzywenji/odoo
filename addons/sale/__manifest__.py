@@ -35,14 +35,18 @@ This module contains all the common features of Sales Management and eCommerce.
         'views/product_attribute_views.xml',
         'views/product_views.xml',
         'views/utm_campaign_views.xml',
+        'wizard/sale_order_cancel_views.xml',
         'wizard/sale_payment_link_views.xml',
     ],
     'demo': [
         'data/product_product_demo.xml',
         'data/sale_demo.xml',
+<<<<<<< HEAD
     ],
     'qweb': [
         "static/src/xml/account_reconciliation.xml",
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     ],
     'installable': True,
     'auto_install': False

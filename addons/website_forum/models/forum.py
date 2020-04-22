@@ -34,6 +34,14 @@ class Forum(models.Model):
         ('discussions', 'Discussions')],
         string='Forum Mode', required=True, default='questions',
         help='Questions mode: only one answer allowed\n Discussions mode: multiple answers allowed')
+    privacy = fields.Selection([
+        ('public', 'Public'),
+        ('connected', 'Signed In'),
+        ('private', 'Some users')],
+        help="Public: Forum is pubic\nSigned In: Forum is visible for signed in users\nSome users: Forum and their content are hidden for non members of selected group",
+        default='public')
+    authorized_group_id = fields.Many2one('res.groups', 'Authorized Group')
+    menu_id = fields.Many2one('website.menu', 'Menu', copy=False)
     active = fields.Boolean(default=True)
     faq = fields.Html('Guidelines', default=_get_default_faq, translate=html_translate, sanitize=False)
     description = fields.Text('Description', translate=True)
@@ -153,6 +161,20 @@ class Forum(models.Model):
         return super(Forum, self.with_context(mail_create_nolog=True, mail_create_nosubscribe=True)).create(values)
 
     def write(self, vals):
+        if 'privacy' in vals:
+            if not vals['privacy']:
+                # The forum is neither public, neither private, remove menu to avoid conflict
+                self.menu_id.unlink()
+            elif vals['privacy'] == 'public':
+                # The forum is public, the menu must be also public
+                vals['authorized_group_id'] = False
+                self.menu_id.write({'group_ids': [(5, 0, 0)]})
+            elif vals['privacy'] == 'connected':
+                vals['authorized_group_id'] = False
+                self.menu_id.write({'group_ids': [(6, 0, [self.env.ref('base.group_portal').id, self.env.ref('base.group_user').id])]})
+        if 'authorized_group_id' in vals and vals['authorized_group_id']:
+            self.menu_id.write({'group_ids': [(6, 0, [vals['authorized_group_id']])]})
+
         res = super(Forum, self).write(vals)
         if 'active' in vals:
             # archiving/unarchiving a forum does it on its posts, too
@@ -462,7 +484,7 @@ class Post(models.Model):
 
         tag_ids = False
         if 'tag_ids' in vals:
-            tag_ids = set(tag.get('id') for tag in self.resolve_2many_commands('tag_ids', vals['tag_ids']))
+            tag_ids = set(self.new({'tag_ids': vals['tag_ids']}).tag_ids.ids)
 
         for post in self:
             if 'state' in vals:
@@ -497,12 +519,12 @@ class Post(models.Model):
         if 'content' in vals or 'name' in vals:
             for post in self:
                 if post.parent_id:
-                    body, subtype = _('Answer Edited'), 'website_forum.mt_answer_edit'
+                    body, subtype_xmlid = _('Answer Edited'), 'website_forum.mt_answer_edit'
                     obj_id = post.parent_id
                 else:
-                    body, subtype = _('Question Edited'), 'website_forum.mt_question_edit'
+                    body, subtype_xmlid = _('Question Edited'), 'website_forum.mt_question_edit'
                     obj_id = post
-                obj_id.message_post(body=body, subtype=subtype)
+                obj_id.message_post(body=body, subtype_xmlid=subtype_xmlid)
         if 'active' in vals:
             answers = self.env['forum.post'].with_context(active_test=False).search([('parent_id', 'in', self.ids)])
             if answers:
@@ -717,7 +739,7 @@ class Post(models.Model):
             'email_from': self_sudo.create_uid.email_formatted,  # use sudo here because of access to res.users model
             'body': tools.html_sanitize(self.content, sanitize_attributes=True, strip_style=True, strip_classes=True),
             'message_type': 'comment',
-            'subtype': 'mail.mt_comment',
+            'subtype_xmlid': 'mail.mt_comment',
             'date': self.create_date,
         }
         # done with the author user to have create_uid correctly set

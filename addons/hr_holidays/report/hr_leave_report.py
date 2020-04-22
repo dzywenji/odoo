@@ -51,7 +51,7 @@ class LeaveReport(models.Model):
                 leaves.date_to as date_to, leaves.payslip_status as payslip_status
                 from (select
                     allocation.employee_id as employee_id,
-                    allocation.name as name,
+                    allocation.private_name as name,
                     allocation.number_of_days as number_of_days,
                     allocation.category_id as category_id,
                     allocation.department_id as department_id,
@@ -65,7 +65,7 @@ class LeaveReport(models.Model):
                 from hr_leave_allocation as allocation
                 union all select
                     request.employee_id as employee_id,
-                    request.name as name,
+                    request.private_name as name,
                     (request.number_of_days * -1) as number_of_days,
                     request.category_id as category_id,
                     request.department_id as department_id,
@@ -123,6 +123,10 @@ class LeaveReport(models.Model):
 
     @api.model
     def read_group(self, domain, fields, groupby, offset=0, limit=None, orderby=False, lazy=True):
+<<<<<<< HEAD
         if not self.user_has_groups('hr_holidays.group_hr_holidays_user') and 'name' in groupby:
+=======
+        if not self.user_has_groups('hr_holidays.group_hr_holidays_user') and 'private_name' in groupby:
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             raise exceptions.UserError(_('Such grouping is not allowed.'))
         return super(LeaveReport, self).read_group(domain, fields, groupby, offset=offset, limit=limit, orderby=orderby, lazy=lazy)

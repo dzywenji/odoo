@@ -50,7 +50,7 @@ class WebsiteBlog(http.Controller):
             tzinfo = pytz.timezone(request.context.get('tz', 'utc') or 'utc')
 
             group['month'] = babel.dates.format_datetime(start, format='MMMM', tzinfo=tzinfo, locale=locale)
-            group['year'] = babel.dates.format_datetime(start, format='YYYY', tzinfo=tzinfo, locale=locale)
+            group['year'] = babel.dates.format_datetime(start, format='yyyy', tzinfo=tzinfo, locale=locale)
 
         return OrderedDict((year, [m for m in months]) for year, months in itertools.groupby(groups, lambda g: g['year']))
 
@@ -139,11 +139,11 @@ class WebsiteBlog(http.Controller):
         '/blog/page/<int:page>',
         '/blog/tag/<string:tag>',
         '/blog/tag/<string:tag>/page/<int:page>',
-        '''/blog/<model("blog.blog", "[('website_id', 'in', (False, current_website_id))]"):blog>''',
+        '''/blog/<model("blog.blog"):blog>''',
         '''/blog/<model("blog.blog"):blog>/page/<int:page>''',
         '''/blog/<model("blog.blog"):blog>/tag/<string:tag>''',
         '''/blog/<model("blog.blog"):blog>/tag/<string:tag>/page/<int:page>''',
-    ], type='http', auth="public", website=True)
+    ], type='http', auth="public", website=True, sitemap=True)
     def blog(self, blog=None, tag=None, page=1, **opt):
         Blog = request.env['blog.blog']
         if blog and not blog.can_access_from_current_website():
@@ -171,7 +171,11 @@ class WebsiteBlog(http.Controller):
 
         return request.render("website_blog.blog_post_short", values)
 
+<<<<<<< HEAD
     @http.route(['''/blog/<model("blog.blog", "[('website_id', 'in', (False, current_website_id))]"):blog>/feed'''], type='http', auth="public", website=True)
+=======
+    @http.route(['''/blog/<model("blog.blog"):blog>/feed'''], type='http', auth="public", website=True, sitemap=True)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     def blog_feed(self, blog, limit='15', **kwargs):
         v = {}
         v['blog'] = blog
@@ -182,8 +186,8 @@ class WebsiteBlog(http.Controller):
         return r
 
     @http.route([
-        '''/blog/<model("blog.blog", "[('website_id', 'in', (False, current_website_id))]"):blog>/post/<model("blog.post", "[('blog_id','=',blog[0])]"):blog_post>''',
-    ], type='http', auth="public", website=True)
+        '''/blog/<model("blog.blog"):blog>/post/<model("blog.post", "[('blog_id','=',blog.id)]"):blog_post>''',
+    ], type='http', auth="public", website=True, sitemap=True)
     def blog_post(self, blog, blog_post, tag_id=None, page=1, enable_editor=None, **post):
         """ Prepare all values to display the blog.
 

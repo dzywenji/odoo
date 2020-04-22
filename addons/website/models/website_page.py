@@ -58,15 +58,16 @@ class Page(models.Model):
 
         return most_specific_page == page_to_test
 
-    @api.model
-    def get_page_info(self, id):
-        return self.browse(id).read(
-            ['id', 'name', 'url', 'website_published', 'website_indexed', 'date_publish', 'menu_ids', 'is_homepage', 'website_id'],
-        )
-
-    def get_view_identifier(self):
-        """ Get identifier of this page view that may be used to render it """
-        return self.view_id.id
+    def get_page_properties(self):
+        self.ensure_one()
+        res = self.read([
+            'id', 'name', 'url', 'website_published', 'website_indexed', 'date_publish',
+            'menu_ids', 'is_homepage', 'website_id', 'visibility', 'visibility_group'
+        ])[0]
+        if not res['visibility_group']:
+            res['visibility_group'] = self.env.ref('base.group_user').name_get()[0]
+        res['visibility_password'] = res['visibility'] == 'password' and self.visibility_password_display or ''
+        return res
 
     @api.model
     def save_page_info(self, website_id, data):
@@ -117,7 +118,12 @@ class Page(models.Model):
             'website_indexed': data['website_indexed'],
             'date_publish': data['date_publish'] or None,
             'is_homepage': data['is_homepage'],
+            'visibility': data['visibility'],
+            'visibility_group': data['visibility'] == "restricted_group" and data['visibility_group'],
         }
+        if 'visibility_pwd' in data:
+            w_vals['visibility_password_display'] = data['visibility_pwd'] or ''
+
         page.with_context(no_cow=True).write(w_vals)
 
         # Create redirect if needed
@@ -144,19 +150,24 @@ class Page(models.Model):
         return super(Page, self).copy(default=default)
 
     @api.model
-    def clone_page(self, page_id, clone_menu=True):
+    def clone_page(self, page_id, page_name=None, clone_menu=True):
         """ Clone a page, given its identifier
             :param page_id : website.page identifier
         """
         page = self.browse(int(page_id))
-        new_page = page.copy(dict(name=page.name, website_id=self.env['website'].get_current_website().id))
+        copy_param = dict(name=page_name or page.name, website_id=self.env['website'].get_current_website().id)
+        if page_name:
+            page_url = '/' + slugify(page_name, max_length=1024, path=True)
+            copy_param['url'] = self.env['website'].get_unique_path(page_url)
+
+        new_page = page.copy(copy_param)
         # Should not clone menu if the page was cloned from one website to another
         # Eg: Cloning a generic page (no website) will create a page with a website, we can't clone menu (not same container)
         if clone_menu and new_page.website_id == page.website_id:
             menu = self.env['website.menu'].search([('page_id', '=', page_id)], limit=1)
             if menu:
                 # If the page being cloned has a menu, clone it too
-                menu.copy({'url': new_page.url, 'name': menu.name, 'page_id': new_page.id})
+                menu.copy({'url': new_page.url, 'name': new_page.name, 'page_id': new_page.id})
 
         return new_page.url + '?enable_editor=1'
 

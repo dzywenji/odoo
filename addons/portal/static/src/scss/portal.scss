@@ -5,6 +5,7 @@
 
 // ======  Variables =========
 $o-theme-navbar-logo-height: $nav-link-height !default;
+$o-theme-navbar-fixed-logo-height: $nav-link-height !default;
 
 // Portal toolbar (filters, search bar)
 $o-portal-mobile-toolbar: true; // Enable/Disable custom design
@@ -28,6 +29,7 @@ body {
     // Set frontend direction that will be flipped with
     // rtlcss for right-to-left text direction.
     direction: ltr;
+<<<<<<< HEAD
 }
 
 #wrapwrap {
@@ -43,6 +45,8 @@ body {
     > main {
         flex: 1 0 auto;
     }
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 }
 
 header {
@@ -62,7 +66,6 @@ header {
                 height: $o-theme-navbar-logo-height;
 
                 @include media-breakpoint-down(sm) {
-                    height: auto;
                     max-height: min($o-theme-navbar-logo-height, 5rem);
                 }
             }
@@ -534,6 +537,18 @@ form label {
 
         &:hover .o_portal_chatter_attachment_delete {
             opacity: 1;
+        }
+    }
+
+    .o_portal_message_internal_off {
+        .btn-danger {
+            display: none;
+        }
+    }
+
+    .o_portal_message_internal_on {
+        .btn-success {
+            display: none;
         }
     }
 }

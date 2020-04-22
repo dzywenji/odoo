@@ -13,7 +13,7 @@ import re
 import tarfile
 import tempfile
 import threading
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from datetime import datetime
 from os.path import join
 
@@ -24,7 +24,6 @@ from lxml import etree, html
 import odoo
 from . import config, pycompat
 from .misc import file_open, get_iso_codes, SKIPPED_ELEMENT_TYPES
-from .osutil import walksymlinks
 
 _logger = logging.getLogger(__name__)
 
@@ -648,13 +647,13 @@ class PoFileReader:
                     continue
                 _logger.error("malformed po file: unknown occurrence: %s", occurrence)
 
-def TranslationFileWriter(target, fileformat='po', lang=None, modules=None):
+def TranslationFileWriter(target, fileformat='po', lang=None):
     """ Iterate over translation file to return Odoo translation entries """
     if fileformat == 'csv':
         return CSVFileWriter(target)
 
     if fileformat == 'po':
-        return PoFileWriter(target, modules=modules, lang=lang)
+        return PoFileWriter(target, lang=lang)
 
     if fileformat == 'tgz':
         return TarFileWriter(target, lang=lang)
@@ -678,13 +677,34 @@ class CSVFileWriter:
 
 class PoFileWriter:
     """ Iterate over po file to return Odoo translation entries """
-    def __init__(self, target, modules, lang):
-        import odoo.release as release
+    def __init__(self, target, lang):
 
         self.buffer = target
         self.lang = lang
         self.po = polib.POFile()
 
+    def write_rows(self, rows):
+        # we now group the translations by source. That means one translation per source.
+        grouped_rows = {}
+        modules = set([])
+        for module, type, name, res_id, src, trad, comments in rows:
+            row = grouped_rows.setdefault(src, {})
+            row.setdefault('modules', set()).add(module)
+            if not row.get('translation') and trad != src:
+                row['translation'] = trad
+            row.setdefault('tnrs', []).append((type, name, res_id))
+            row.setdefault('comments', set()).update(comments)
+            modules.add(module)
+
+        for src, row in sorted(grouped_rows.items()):
+            if not self.lang:
+                # translation template, so no translation value
+                row['translation'] = ''
+            elif not row.get('translation'):
+                row['translation'] = ''
+            self.add_entry(row['modules'], sorted(row['tnrs']), src, row['translation'], row['comments'])
+
+        import odoo.release as release
         self.po.header = "Translation of %s.\n" \
                     "This file contains the translation of the following modules:\n" \
                     "%s" % (release.description, ''.join("\t* %s\n" % m for m in modules))
@@ -701,25 +721,6 @@ class PoFileWriter:
             'Content-Transfer-Encoding': '',
             'Plural-Forms': '',
         }
-
-    def write_rows(self, rows):
-        # we now group the translations by source. That means one translation per source.
-        grouped_rows = {}
-        for module, type, name, res_id, src, trad, comments in rows:
-            row = grouped_rows.setdefault(src, {})
-            row.setdefault('modules', set()).add(module)
-            if not row.get('translation') and trad != src:
-                row['translation'] = trad
-            row.setdefault('tnrs', []).append((type, name, res_id))
-            row.setdefault('comments', set()).update(comments)
-
-        for src, row in sorted(grouped_rows.items()):
-            if not self.lang:
-                # translation template, so no translation value
-                row['translation'] = ''
-            elif not row.get('translation'):
-                row['translation'] = ''
-            self.add_entry(row['modules'], row['tnrs'], src, row['translation'], row['comments'])
 
         # buffer expects bytes
         self.buffer.write(str(self.po).encode())
@@ -764,7 +765,7 @@ class TarFileWriter:
 
         for mod, modrows in rows_by_module.items():
             with io.BytesIO() as buf:
-                po = PoFileWriter(buf, modules=[mod], lang=self.lang)
+                po = PoFileWriter(buf, lang=self.lang)
                 po.write_rows(modrows)
                 buf.seek(0)
 
@@ -782,14 +783,10 @@ class TarFileWriter:
         self.tar.close()
 
 # Methods to export the translation file
-
 def trans_export(lang, modules, buffer, format, cr):
-
-    translations = trans_generate(lang, modules, cr)
-    modules = set(t[0] for t in translations)
-    writer = TranslationFileWriter(buffer, fileformat=format, lang=lang, modules=modules)
-    writer.write_rows(translations)
-    del translations
+    reader = TranslationModuleReader(cr, modules=modules, lang=lang)
+    writer = TranslationFileWriter(buffer, fileformat=format, lang=lang)
+    writer.write_rows(reader)
 
 
 def trans_parse_rml(de):
@@ -845,10 +842,26 @@ def _extract_translatable_qweb_terms(element, callback):
                 and "t-js" not in el.attrib
                 and not ("t-jquery" in el.attrib and "t-operation" not in el.attrib)
                 and el.get("t-translation", '').strip() != "off"):
+
             _push(callback, el.text, el.sourceline)
+<<<<<<< HEAD
             for att in ('title', 'alt', 'label', 'placeholder', 'aria-label'):
                 if att in el.attrib:
                     _push(callback, el.attrib[att], el.sourceline)
+=======
+            # Do not export terms contained on the Component directive of OWL
+            # attributes in this context are most of the time variables,
+            # not real HTML attributes.
+            # Node tags starting with a capital letter are considered OWL Components
+            # and a widespread convention and good practice for DOM tags is to write
+            # them all lower case.
+            # https://www.w3schools.com/html/html5_syntax.asp
+            # https://github.com/odoo/owl/blob/master/doc/reference/component.md#composition
+            if not el.tag[0].isupper() and 't-component' not in el.attrib:
+                for att in ('title', 'alt', 'label', 'placeholder', 'aria-label'):
+                    if att in el.attrib:
+                        _push(callback, el.attrib[att], el.sourceline)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             _extract_translatable_qweb_terms(el, callback)
         _push(callback, el.tail, el.sourceline)
 
@@ -873,15 +886,58 @@ def babel_extract_qweb(fileobj, keywords, comment_tags, options):
     _extract_translatable_qweb_terms(tree.getroot(), handle_text)
     return result
 
+ImdInfo = namedtuple('ExternalId', ['name', 'model', 'res_id', 'module'])
 
-def trans_generate(lang, modules, cr):
-    env = odoo.api.Environment(cr, odoo.SUPERUSER_ID, {})
-    to_translate = set()
 
+<<<<<<< HEAD
     def push_translation(module, type, name, id, source, comments=None, record_id=None):
         """ Insert a translation that will be used in the file generation
         In po file will create an entry
         #: <type>:<name>:<res_id>
+=======
+class TranslationModuleReader:
+    """ Retrieve translated records per module
+
+    :param cr: cursor to database to export
+    :param modules: list of modules to filter the exported terms, can be ['all']
+                    records with no external id are always ignored
+    :param lang: language code to retrieve the translations
+                 retrieve source terms only if not set
+    """
+
+    def __init__(self, cr, modules=None, lang=None):
+        self._cr = cr
+        self._modules = modules or ['all']
+        self._lang = lang
+        self.env = odoo.api.Environment(cr, odoo.SUPERUSER_ID, {})
+        self._to_translate = []
+        self._path_list = [(path, True) for path in odoo.addons.__path__]
+        self._installed_modules = [
+            m['name']
+            for m in self.env['ir.module.module'].search_read([('state', '=', 'installed')], fields=['name'])
+        ]
+
+        self._export_translatable_records()
+        self._export_translatable_resources()
+
+
+    def __iter__(self):
+        """ Export ir.translation values for all retrieved records """
+
+        IrTranslation = self.env['ir.translation']
+        for module, source, name, res_id, ttype, comments, record_id in self._to_translate:
+            trans = (
+                IrTranslation._get_source(name if type != "code" else None, ttype, self._lang, source, res_id=record_id)
+                if self._lang
+                else ""
+            )
+            yield (module, ttype, name, res_id, source, encode(trans) or '', comments)
+
+    def _push_translation(self, module, ttype, name, res_id, source, comments=None, record_id=None):
+        """ Insert a translation that will be used in the file generation
+        In po file will create an entry
+        #: <ttype>:<name>:<res_id>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         #, <comment>
         msgid "<source>"
         record_id is the database id of the record being translated
@@ -893,7 +949,9 @@ def trans_generate(lang, modules, cr):
         sanitized_term = re.sub(r'\W+', '', sanitized_term)
         if not sanitized_term or len(sanitized_term) <= 1:
             return
+        self._to_translate.append((module, source, name, res_id, ttype, tuple(comments or ()), record_id))
 
+<<<<<<< HEAD
         tnx = (module, source, name, id, type, tuple(comments or ()), record_id)
         to_translate.add(tnx)
 
@@ -916,21 +974,79 @@ def trans_generate(lang, modules, cr):
 
     if 'all_installed' in modules:
         query += ' WHERE module IN ( SELECT name FROM ir_module_module WHERE state = \'installed\') '
+=======
+    def _get_translatable_records(self, records):
+        """ Filter the records that are translatable
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
-    if 'all' not in modules:
-        query += ' WHERE module IN %s'
-        query_param = (tuple(modules),)
-    else:
-        query += ' WHERE module != %s'
-        query_param = ('__export__',)
+        A record is considered as untranslatable if:
+        - it does not exist
+        - the model is flagged with _translate=False
+        - it is a field of a model flagged with _translate=False
+        - it is a selection of a field of a model flagged with _translate=False
 
-    query += ' GROUP BY model, res_id, module ORDER BY module, model, min(name)'
+        :param records: a list of namedtuple ImdInfo belonging to the same model
+        """
+        model = next(iter(records)).model
+        if model not in self.env:
+            _logger.error("Unable to find object %r", model)
+            return self.browse()
 
-    cr.execute(query, query_param)
+        if not self.env[model]._translate:
+            return self.env[model].browse()
 
-    for (xml_name, model, res_id, module) in cr.fetchall():
-        xml_name = "%s.%s" % (module, xml_name)
+        res_ids = [r.res_id for r in records]
+        records = self.env[model].browse(res_ids).exists()
+        if len(records) < len(res_ids):
+            missing_ids = set(records.ids) - set(res_ids)
+            _logger.warning("Unable to find objects %r with id %d", model, ', '.join(missing_ids))
+            if not records:
+                return records
 
+        if model == 'ir.model.fields.selection':
+            fields = defaultdict(list)
+            for selection in records:
+                fields[selection.field_id] = selection
+            for field, selection in fields.items():
+                field_name = field.name
+                field_model = self.env.get(field.model)
+                if (field_model is None or not field_model._translate or
+                        field_name not in field_model._fields):
+                    # the selection is linked to a model with _translate=False, remove it
+                    records -= selection
+        elif model == 'ir.model.fields':
+            for field in records:
+                field_name = field.name
+                field_model = self.env.get(field.model)
+                if (field_model is None or not field_model._translate or
+                        field_name not in field_model._fields):
+                    # the field is linked to a model with _translate=False, remove it
+                    records -= field
+
+        return records
+
+
+    def _export_translatable_records(self):
+        """ Export translations of all translated records having an external id """
+
+        query = """SELECT min(name), model, res_id, module
+                     FROM ir_model_data
+                    WHERE module = ANY(%s)
+                 GROUP BY model, res_id, module
+                 ORDER BY module, model, min(name)"""
+
+        if 'all' not in self._modules:
+            query_param = list(self._modules)
+        else:
+            query_param = self._installed_modules
+
+        self._cr.execute(query, (query_param,))
+
+        records_per_model = defaultdict(dict)
+        for (xml_name, model, res_id, module) in self._cr.fetchall():
+            records_per_model[model][res_id] = ImdInfo(xml_name, model, res_id, module)
+
+<<<<<<< HEAD
         if model not in env:
             _logger.error(u"Unable to find object %r", model)
             continue
@@ -972,6 +1088,28 @@ def trans_generate(lang, modules, cr):
 
     def get_module_from_path(path):
         for (mp, rec) in path_list:
+=======
+        for model, imd_per_id in records_per_model.items():
+            records = self._get_translatable_records(imd_per_id.values())
+            if not records:
+                continue
+
+            for record in records:
+                xml_name = "%s.%s" % (imd_per_id[record.id].module, imd_per_id[record.id].name)
+                for field_name, field in record._fields.items():
+                    if field.translate:
+                        name = model + "," + field_name
+                        try:
+                            value = record[field_name] or ''
+                        except Exception:
+                            continue
+                        for term in set(field.get_trans_terms(value)):
+                            trans_type = 'model_terms' if callable(field.translate) else 'model'
+                            self._push_translation(module, trans_type, name, xml_name, term, record_id=record.id)
+
+    def _get_module_from_path(self, path):
+        for (mp, rec) in self._path_list:
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             mp = os.path.join(mp, '')
             dirname = os.path.join(os.path.dirname(path), '')
             if rec and path.startswith(mp) and dirname != mp:
@@ -979,22 +1117,24 @@ def trans_generate(lang, modules, cr):
                 return path.split(os.path.sep)[0]
         return 'base' # files that are not in a module are considered as being in 'base' module
 
-    def verified_module_filepaths(fname, path, root):
+    def _verified_module_filepaths(self, fname, path, root):
         fabsolutepath = join(root, fname)
         frelativepath = fabsolutepath[len(path):]
         display_path = "addons%s" % frelativepath
-        module = get_module_from_path(fabsolutepath)
-        if ('all' in modules or module in modules) and module in installed_modules:
+        module = self._get_module_from_path(fabsolutepath)
+        if ('all' in self._modules or module in self._modules) and module in self._installed_modules:
             if os.path.sep != '/':
                 display_path = display_path.replace(os.path.sep, '/')
             return module, fabsolutepath, frelativepath, display_path
         return None, None, None, None
 
-    def babel_extract_terms(fname, path, root, extract_method="python", trans_type='code',
+    def _babel_extract_terms(self, fname, path, root, extract_method="python", trans_type='code',
                                extra_comments=None, extract_keywords={'_': None}):
-        module, fabsolutepath, _, display_path = verified_module_filepaths(fname, path, root)
+
+        module, fabsolutepath, _, display_path = self._verified_module_filepaths(fname, path, root)
+        if not module:
+            return
         extra_comments = extra_comments or []
-        if not module: return
         src_file = open(fabsolutepath, 'rb')
         options = {}
         if extract_method == 'python':
@@ -1004,13 +1144,14 @@ def trans_generate(lang, modules, cr):
                 # Babel 0.9.6 yields lineno, message, comments
                 # Babel 1.3 yields lineno, message, comments, context
                 lineno, message, comments = extracted[:3]
-                push_translation(module, trans_type, display_path, lineno,
+                self._push_translation(module, trans_type, display_path, lineno,
                                  encode(message), comments + extra_comments)
         except Exception:
             _logger.exception("Failed to extract terms from %s", fabsolutepath)
         finally:
             src_file.close()
 
+<<<<<<< HEAD
     for (path, recursive) in path_list:
         _logger.debug("Scanning files of modules at %s", path)
         for root, dummy, files in walksymlinks(path):
@@ -1046,38 +1187,93 @@ def trans_generate(lang, modules, cr):
 
 
 def trans_load(cr, filename, lang, verbose=True, module_name=None, context=None):
+=======
+    def _export_translatable_resources(self):
+        """ Export translations for static terms
+        
+        This will include:
+        - the python strings marked with _() or _lt()
+        - the javascript strings marked with _t() or _lt() inside static/src/js/
+        - the strings inside Qweb files inside static/src/xml/
+        """
+
+        # Also scan these non-addon paths
+        for bin_path in ['osv', 'report', 'modules', 'service', 'tools']:
+            self._path_list.append((os.path.join(config['root_path'], bin_path), True))
+        # non-recursive scan for individual files in root directory but without
+        # scanning subdirectories that may contain addons
+        self._path_list.append((config['root_path'], False))
+        _logger.debug("Scanning modules at paths: %s", self._path_list)
+
+        for (path, recursive) in self._path_list:
+            _logger.debug("Scanning files of modules at %s", path)
+            for root, dummy, files in os.walk(path, followlinks=True):
+                for fname in fnmatch.filter(files, '*.py'):
+                    self._babel_extract_terms(fname, path, root,
+                                              extract_keywords={'_': None, '_lt': None})
+                # Javascript source files in the static/src/js directory, rest is ignored (libs)
+                if fnmatch.fnmatch(root, '*/static/src/js*'):
+                    for fname in fnmatch.filter(files, '*.js'):
+                        self._babel_extract_terms(fname, path, root, 'javascript',
+                                                  extra_comments=[WEB_TRANSLATION_COMMENT],
+                                                  extract_keywords={'_t': None, '_lt': None})
+                # QWeb template files
+                if fnmatch.fnmatch(root, '*/static/src/xml*'):
+                    for fname in fnmatch.filter(files, '*.xml'):
+                        self._babel_extract_terms(fname, path, root, 'odoo.tools.translate:babel_extract_qweb',
+                                                  extra_comments=[WEB_TRANSLATION_COMMENT])
+                if not recursive:
+                    # due to topdown, first iteration is in first level
+                    break
+
+
+def trans_load(cr, filename, lang, verbose=True, create_empty_translation=False, overwrite=False):
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     try:
         with file_open(filename, mode='rb') as fileobj:
             _logger.info("loading %s", filename)
             fileformat = os.path.splitext(filename)[-1][1:].lower()
-            result = trans_load_data(cr, fileobj, fileformat, lang, verbose=verbose, module_name=module_name, context=context)
-            return result
+            return trans_load_data(cr, fileobj, fileformat, lang,
+                                   verbose=verbose,
+                                   create_empty_translation=create_empty_translation,
+                                   overwrite=overwrite)
     except IOError:
         if verbose:
             _logger.error("couldn't read translation file %s", filename)
         return None
 
 
-def trans_load_data(cr, fileobj, fileformat, lang, lang_name=None, verbose=True, module_name=None, context=None):
-    """Populates the ir_translation table."""
+def trans_load_data(cr, fileobj, fileformat, lang,
+                    verbose=True, create_empty_translation=False, overwrite=False):
+    """Populates the ir_translation table.
+
+    :param fileobj: buffer open to a translation file
+    :param fileformat: format of the `fielobj` file, one of 'po' or 'csv'
+    :param lang: language code of the translations contained in `fileobj`
+                 language must be present and activated in the database
+    :param verbose: increase log output
+    :param create_empty_translation: create an ir.translation record, even if no value
+                                     is provided in the translation entry
+    :param overwrite: if an ir.translation already exists for a term, replace it with
+                      the one in `fileobj`
+    """
     if verbose:
         _logger.info('loading translation file for language %s', lang)
 
-    env = odoo.api.Environment(cr, odoo.SUPERUSER_ID, context or {})
-    Lang = env['res.lang']
-    Translation = env['ir.translation']
+    env = odoo.api.Environment(cr, odoo.SUPERUSER_ID, {})
 
     try:
-        if not Lang.search_count([('code', '=', lang)]):
-            # lets create the language with locale information
-            Lang.load_lang(lang=lang, lang_name=lang_name)
+        if not env['res.lang']._lang_get(lang):
+            _logger.error("Couldn't read translation for lang '%s', language not found", lang)
+            return None
 
         # now, the serious things: we read the language file
         fileobj.seek(0)
         reader = TranslationFileReader(fileobj, fileformat=fileformat)
 
-        # read the rest of the file
-        irt_cursor = Translation._get_import_cursor()
+        # read the rest of the file with a cursor-like object for fast inserting translations"
+        Translation = env['ir.translation']
+        irt_cursor = Translation._get_import_cursor(overwrite)
 
         def process_row(row):
             """Process a single PO (or POT) entry."""
@@ -1090,11 +1286,8 @@ def trans_load_data(cr, fileobj, fileformat, lang, lang_name=None, verbose=True,
             dic.update(row)
 
             # do not import empty values
-            if not env.context.get('create_empty_translation', False) and not dic['value']:
+            if not create_empty_translation and not dic['value']:
                 return
-
-            if dic['type'] == 'code' and module_name:
-                dic['module'] = module_name
 
             irt_cursor.push(dic)
 

@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 import babel.dates
 import pytz
+<<<<<<< HEAD
+=======
+from lxml import etree
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 import base64
 
 from odoo import _, api, fields, models
@@ -13,7 +17,9 @@ from odoo.exceptions import UserError
 class IrActionsActWindowView(models.Model):
     _inherit = 'ir.actions.act_window.view'
 
-    view_mode = fields.Selection(selection_add=[('qweb', 'QWeb')])
+    view_mode = fields.Selection(selection_add=[
+        ('qweb', 'QWeb')
+    ], ondelete={'qweb': 'cascade'})
 
 
 class Base(models.AbstractModel):
@@ -203,9 +209,11 @@ class Base(models.AbstractModel):
     def fields_view_get(self, view_id=None, view_type='form', toolbar=False, submenu=False):
         r = super().fields_view_get(view_id, view_type, toolbar, submenu)
         # avoid leaking the raw (un-rendered) template, also avoids bloating
-        # the response payload for no reason
+        # the response payload for no reason. Only send the root node,
+        # to send attributes such as `js_class`.
         if r['type'] == 'qweb':
-            r['arch'] = '<qweb/>'
+            root = etree.fromstring(r['arch'])
+            r['arch'] = etree.tostring(etree.Element('qweb', root.attrib))
         return r
 
     @api.model

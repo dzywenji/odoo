@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
+import odoo.tools
 from odoo.tests import common
 
 
@@ -53,7 +54,11 @@ class TestXMLRPC(common.HttpCase):
         )
 
     def _json_call(self, *args):
+<<<<<<< HEAD
         self.opener.post("http://%s:%s/jsonrpc" % (common.HOST, common.PORT), json={
+=======
+        self.opener.post("http://%s:%s/jsonrpc" % (common.HOST, odoo.tools.config['http_port']), json={
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             'jsonrpc': '2.0',
             'id': None,
             'method': 'call',

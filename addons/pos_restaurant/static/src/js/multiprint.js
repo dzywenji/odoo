@@ -340,12 +340,12 @@ models.Order = models.Order.extend({
     },
     export_as_JSON: function(){
         var json = _super_order.export_as_JSON.apply(this,arguments);
-        json.multiprint_resume = this.saved_resume;
+        json.multiprint_resume = JSON.stringify(this.saved_resume);
         return json;
     },
     init_from_JSON: function(json){
         _super_order.init_from_JSON.apply(this,arguments);
-        this.saved_resume = json.multiprint_resume;
+        this.saved_resume = json.multiprint_resume && JSON.parse(json.multiprint_resume);
     },
 });
 

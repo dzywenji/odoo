@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
 
-import json
-import time
+from odoo.addons.mail.tests import common as mail_common
+from odoo.tests import common
 
+<<<<<<< HEAD
 from contextlib import contextmanager
 from functools import partial
 
@@ -10,28 +12,29 @@ from odoo import api
 from odoo.addons.bus.models.bus import json_dump
 from odoo.tests import common, tagged, new_test_user
 from odoo.tools import formataddr
+=======
+mail_new_test_user = mail_common.mail_new_test_user
 
-mail_new_test_user = partial(new_test_user, context={'mail_create_nolog': True, 'mail_create_nosubscribe': True, 'mail_notrack': True, 'no_reset_password': True})
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
-
-class BaseFunctionalTest(common.SavepointCase):
-
-    _test_context = {
-        'mail_create_nolog': True,
-        'mail_create_nosubscribe': True,
-        'mail_notrack': True,
-        'no_reset_password': True
-    }
+class TestMailCommon(common.SavepointCase, mail_common.MailCase):
 
     @classmethod
     def setUpClass(cls):
-        super(BaseFunctionalTest, cls).setUpClass()
-
-        cls.user_employee = mail_new_test_user(cls.env, login='employee', groups='base.group_user', signature='--\nErnest', name='Ernest Employee')
-        cls.partner_employee = cls.user_employee.partner_id
-
+        super(TestMailCommon, cls).setUpClass()
+        # give default values for all email aliases and domain
+        cls._init_mail_gateway()
+        # ensure admin configuration
         cls.user_admin = cls.env.ref('base.user_admin')
+        cls.user_admin.write({'notification_type': 'inbox'})
         cls.partner_admin = cls.env.ref('base.partner_admin')
+        cls.company_admin = cls.user_admin.company_id
+        cls.company_admin.write({'email': 'company@example.com'})
+        # test standard employee
+        cls.user_employee = mail_new_test_user(
+            cls.env, login='employee', groups='base.group_user', company_id=cls.company_admin.id,
+            name='Ernest Employee', notification_type='inbox', signature='--\nErnest')
+        cls.partner_employee = cls.user_employee.partner_id
 
     @classmethod
     def _create_channel_listener(cls):
@@ -39,8 +42,11 @@ class BaseFunctionalTest(common.SavepointCase):
 
     @classmethod
     def _create_portal_user(cls):
-        cls.user_portal = mail_new_test_user(cls.env, login='chell', groups='base.group_portal', name='Chell Gladys')
+        cls.user_portal = mail_new_test_user(
+            cls.env, login='portal_test', groups='base.group_portal', company_id=cls.company_admin.id,
+            name='Chell Gladys', notification_type='email')
         cls.partner_portal = cls.user_portal.partner_id
+        return cls.user_portal
 
     @classmethod
     def _create_template(cls, model, template_values=None):
@@ -49,159 +55,26 @@ class BaseFunctionalTest(common.SavepointCase):
             'subject': 'About ${object.name}',
             'body_html': '<p>Hello ${object.name}</p>',
             'model_id': cls.env['ir.model']._get(model).id,
-            'user_signature': False,
         }
         if template_values:
             create_values.update(template_values)
         cls.email_template = cls.env['mail.template'].create(create_values)
         return cls.email_template
 
-    @classmethod
-    def _init_mail_gateway(cls):
-        cls.alias_domain = 'test.com'
-        cls.alias_catchall = 'catchall.test'
-        cls.alias_bounce = 'bounce.test'
-        cls.env['ir.config_parameter'].set_param('mail.bounce.alias', cls.alias_bounce)
-        cls.env['ir.config_parameter'].set_param('mail.catchall.domain', cls.alias_domain)
-        cls.env['ir.config_parameter'].set_param('mail.catchall.alias', cls.alias_catchall)
+    def flush_tracking(self):
+        """ Force the creation of tracking values. """
+        self.env['base'].flush()
+        self.cr.precommit()
+
+
+class TestMailMultiCompanyCommon(TestMailCommon):
 
     @classmethod
-    def _reset_mail_context(cls, record):
-        return record.with_context(
-            mail_create_nolog=False,
-            mail_create_nosubscribe=False,
-            mail_notrack=False
-        )
-
-    def _clear_bus(self):
-        self.env['bus.bus'].search([]).unlink()
-
-    @contextmanager
-    def assertNotifications(self, **counters):
-        """ Counters: 'partner_attribute': 'inbox' or 'email' """
-        try:
-            init = {}
-            partners = self.env['res.partner']
-            for partner_attribute in counters.keys():
-                partners |= getattr(self, partner_attribute)
-            init_notifs = self.env['mail.notification'].sudo().search([('res_partner_id', 'in', partners.ids)])
-            for partner in partners:
-                if partner.user_ids:
-                    init[partner] = {
-                        'na_counter': len([n for n in init_notifs if n.res_partner_id == partner and not n.is_read]),
-                    }
-            if hasattr(self, '_init_mock_build_email'):
-                self._init_mock_build_email()
-            yield
-        finally:
-            new_notifications = self.env['mail.notification'].sudo().search([
-                ('res_partner_id', 'in', partners.ids),
-                ('id', 'not in', init_notifs.ids)
-            ])
-            new_messages = new_notifications.mapped('mail_message_id')
-
-            for partner_attribute in counters.keys():
-                counter, notif_type, notif_read = counters[partner_attribute]
-                partner = getattr(self, partner_attribute)
-                partner_notif = new_notifications.filtered(lambda n: n.res_partner_id == partner and (n.is_read == (notif_read not in ['unread', ''])))
-
-                self.assertEqual(len(partner_notif), counter)
-
-                if partner.user_ids:
-                    expected = init[partner]['na_counter'] + counter if notif_read == 'unread' else init[partner]['na_counter']
-                    real = self.env['mail.notification'].sudo().search_count([
-                        ('res_partner_id', '=', partner.id),
-                        ('is_read', '=', False)
-                    ])
-                    self.assertEqual(expected, real, 'Invalid number of notification for %s: %s instead of %s' %
-                                                     (partner.name, real, expected))
-                if partner_notif:
-                    self.assertTrue(all(n.notification_type == notif_type for n in partner_notif))
-                    self.assertTrue(all(n.is_read == (notif_read == 'read') for n in partner_notif),
-                                    'Invalid read status for %s' % partner.name)
-
-            # for simplification, limitate to single message asserts
-            if hasattr(self, 'assertEmails') and len(new_messages) == 1:
-                self.assertEmails(new_messages.author_id, new_notifications.filtered(lambda n: n.notification_type == 'email').mapped('res_partner_id'))
-
-    def assertBusNotification(self, channels, message_items=None, init=True):
-        """ Check for bus notifications. Basic check is about used channels.
-        Verifying content is optional.
-
-        :param channels: list of channel
-        :param message_items: if given, list of message making a valid pair (channel,
-          message) to be found in bus.bus
-        """
-        def check_content(returned_value, expected_value):
-            if isinstance(expected_value, list):
-                done = []
-                for expected_item in expected_value:
-                    for returned_item in returned_value:
-                        if check_content(returned_item, expected_item):
-                            done.append(expected_item)
-                            break
-                    else:
-                        return False
-                return len(done) == len(expected_value)
-            elif isinstance(expected_value, dict):
-                return all(k in returned_value for k in expected_value.keys()) and all(
-                    check_content(returned_value[key], val)
-                    for key, val in expected_value.items()
-                )
-            else:
-                return returned_value == expected_value
-
-        if init:
-            self.assertEqual(len(self.env['bus.bus'].search([])), len(channels))
-        notifications = self.env['bus.bus'].search([('channel', 'in', [json_dump(channel) for channel in channels])])
-        notif_messages = [json.loads(n.message) for n in notifications]
-        self.assertEqual(len(notifications), len(channels))
-
-        for expected in message_items or []:
-            for notification in notif_messages:
-                found_keys, not_found_keys = [], []
-                if not all(k in notification for k in expected.keys()):
-                    continue
-                for expected_key, expected_value in expected.items():
-                    done = check_content(notification[expected_key], expected_value)
-                    if done:
-                        found_keys.append(expected_key)
-                    else:
-                        not_found_keys.append(expected_key)
-                if set(found_keys) == set(expected.keys()):
-                    break
-            else:
-                raise AssertionError('Keys %s not found (expected: %s - returned: %s)' % (not_found_keys, repr(expected), repr(notif_messages)))
-
-    def assertTracking(self, message, data):
-        tracking_values = message.sudo().tracking_value_ids
-        for field_name, value_type, old_value, new_value in data:
-            tracking = tracking_values.filtered(lambda track: track.field == field_name)
-            self.assertEqual(len(tracking), 1)
-            if value_type in ('char', 'integer'):
-                self.assertEqual(tracking.old_value_char, old_value)
-                self.assertEqual(tracking.new_value_char, new_value)
-            elif value_type in ('many2one'):
-                self.assertEqual(tracking.old_value_integer, old_value and old_value.id or False)
-                self.assertEqual(tracking.new_value_integer, new_value and new_value.id or False)
-                self.assertEqual(tracking.old_value_char, old_value and old_value.display_name or '')
-                self.assertEqual(tracking.new_value_char, new_value and new_value.display_name or '')
-            else:
-                self.assertEqual(1, 0)
-
-    @contextmanager
-    def sudo(self, login):
-        old_uid = self.uid
-        try:
-            user = self.env['res.users'].sudo().search([('login', '=', login)])
-            # switch user
-            self.uid = user.id
-            self.env = self.env(user=self.uid)
-            yield
-        finally:
-            # back
-            self.uid = old_uid
-            self.env = self.env(user=self.uid)
+    def setUpClass(cls):
+        super(TestMailMultiCompanyCommon, cls).setUpClass()
+        cls.company_2 = cls.env['res.company'].create({
+            'name': 'Second Test Company',
+        })
 
 
 class TestRecipients(common.SavepointCase):
@@ -227,6 +100,7 @@ class TestRecipients(common.SavepointCase):
             'country_id': cls.env.ref('base.be').id,
             'mobile': '+32 456 22 11 00',
         })
+<<<<<<< HEAD
 
 
 class MockEmails(common.SingleTransactionCase):
@@ -384,3 +258,5 @@ class Moderation(MockEmails, BaseFunctionalTest):
             'subtype_id': self.env['mail.message.subtype'].search([('name', '=', 'Discussions')]).id
             })
         return message
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

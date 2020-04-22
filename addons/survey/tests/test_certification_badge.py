@@ -2,13 +2,13 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from odoo.addons.survey.tests import common
-from odoo.tests.common import HttpCase
 from psycopg2 import IntegrityError
 from odoo.exceptions import AccessError
 from odoo.tools import mute_logger
 
 
-class TestCertificationBadge(common.SurveyCase, HttpCase):
+class TestCertificationBadge(common.TestSurveyCommon):
+
     def setUp(self):
         super(TestCertificationBadge, self).setUp()
         self.certification_survey = self.env['survey.survey'].with_user(self.survey_manager).create({
@@ -16,7 +16,7 @@ class TestCertificationBadge(common.SurveyCase, HttpCase):
             'access_mode': 'public',
             'users_login_required': True,
             'scoring_type': 'scoring_with_answers',
-            'certificate': True,
+            'certification': True,
             'state': 'open',
         })
 
@@ -25,7 +25,7 @@ class TestCertificationBadge(common.SurveyCase, HttpCase):
             'access_mode': 'public',
             'users_login_required': True,
             'scoring_type': 'scoring_with_answers',
-            'certificate': True,
+            'certification': True,
             'state': 'open',
         })
 
@@ -49,6 +49,21 @@ class TestCertificationBadge(common.SurveyCase, HttpCase):
             'rule_auth': 'nobody',
             'level': None,
         })
+
+    def test_archive(self):
+        """ Archive status of survey is propagated to its badges. """
+        self.certification_survey.write({
+            'certification_give_badge': True,
+            'certification_badge_id': self.certification_badge.id
+        })
+
+        self.certification_survey.action_archive()
+        self.assertFalse(self.certification_survey.active)
+        self.assertFalse(self.certification_badge.active)
+
+        self.certification_survey.action_unarchive()
+        self.assertTrue(self.certification_survey.active)
+        self.assertTrue(self.certification_badge.active)
 
     def test_give_badge_without_badge(self):
         with mute_logger('odoo.sql_db'):
@@ -101,7 +116,7 @@ class TestCertificationBadge(common.SurveyCase, HttpCase):
     def test_badge_configuration(self):
         # add a certification badge on a new survey
         challenge = self.env['gamification.challenge'].search([('reward_id', '=', self.certification_badge.id)])
-        self.assertEquals(len(challenge), 0, """A challenge should not exist or be linked to the certification badge 
+        self.assertEqual(len(challenge), 0, """A challenge should not exist or be linked to the certification badge 
             if the certification badge have not been activated on a certification survey""")
 
         self.certification_survey.write({
@@ -110,13 +125,13 @@ class TestCertificationBadge(common.SurveyCase, HttpCase):
         })
 
         challenge = self.env['gamification.challenge'].search([('reward_id', '=', self.certification_badge.id)])
-        self.assertEquals(len(challenge), 1,
+        self.assertEqual(len(challenge), 1,
             "A challenge should be created if the certification badge is activated on a certification survey")
         challenge_line = self.env['gamification.challenge.line'].search([('challenge_id', '=', challenge.id)])
-        self.assertEquals(len(challenge_line), 1,
+        self.assertEqual(len(challenge_line), 1,
             "A challenge_line should be created if the certification badge is activated on a certification survey")
         goal = challenge_line.definition_id
-        self.assertEquals(len(goal), 1,
+        self.assertEqual(len(goal), 1,
             "A goal should be created if the certification badge is activated on a certification survey")
 
         # don't give badge anymore
@@ -127,13 +142,13 @@ class TestCertificationBadge(common.SurveyCase, HttpCase):
                          'The certification badge should be inactive if give_badge is false.')
 
         challenge = self.env['gamification.challenge'].search([('id', '=', challenge.id)])
-        self.assertEquals(len(challenge), 0,
+        self.assertEqual(len(challenge), 0,
             "The challenge should be deleted if the certification badge is unset from the certification survey")
         challenge_line = self.env['gamification.challenge.line'].search([('id', '=', challenge_line.id)])
-        self.assertEquals(len(challenge_line), 0,
+        self.assertEqual(len(challenge_line), 0,
             "The challenge_line should be deleted if the certification badge is unset from the certification survey")
         goal = self.env['gamification.goal'].search([('id', '=', goal.id)])
-        self.assertEquals(len(goal), 0,
+        self.assertEqual(len(goal), 0,
             "The goal should be deleted if the certification badge is unset from the certification survey")
 
         # re active the badge in the survey
@@ -142,13 +157,13 @@ class TestCertificationBadge(common.SurveyCase, HttpCase):
                          'The certification badge should be active if give_badge is true.')
 
         challenge = self.env['gamification.challenge'].search([('reward_id', '=', self.certification_badge.id)])
-        self.assertEquals(len(challenge), 1,
+        self.assertEqual(len(challenge), 1,
             "A challenge should be created if the certification badge is activated on a certification survey")
         challenge_line = self.env['gamification.challenge.line'].search([('challenge_id', '=', challenge.id)])
-        self.assertEquals(len(challenge_line), 1,
+        self.assertEqual(len(challenge_line), 1,
             "A challenge_line should be created if the certification badge is activated on a certification survey")
         goal = challenge_line.definition_id
-        self.assertEquals(len(goal), 1,
+        self.assertEqual(len(goal), 1,
             "A goal should be created if the certification badge is activated on a certification survey")
 
     def test_certification_badge_access(self):
@@ -168,7 +183,7 @@ class TestCertificationBadge(common.SurveyCase, HttpCase):
             'access_mode': 'public',
             'users_login_required': True,
             'scoring_type': 'scoring_with_answers',
-            'certificate': True,
+            'certification': True,
             'certification_give_badge': True,
             'certification_badge_id': self.certification_badge.id,
             'state': 'open'
@@ -183,11 +198,11 @@ class TestCertificationBadge(common.SurveyCase, HttpCase):
         self.assertEqual(len(certification_surveys), 3, 'There should be 3 certification survey created')
 
         challenges = self.env['gamification.challenge'].search([('reward_id', 'in', certification_surveys.mapped('certification_badge_id').ids)])
-        self.assertEquals(len(challenges), 3, "3 challenges should be created")
+        self.assertEqual(len(challenges), 3, "3 challenges should be created")
         challenge_lines = self.env['gamification.challenge.line'].search([('challenge_id', 'in', challenges.ids)])
-        self.assertEquals(len(challenge_lines), 3, "3 challenge_lines should be created")
+        self.assertEqual(len(challenge_lines), 3, "3 challenge_lines should be created")
         goals = challenge_lines.mapped('definition_id')
-        self.assertEquals(len(goals), 3, "3 goals should be created")
+        self.assertEqual(len(goals), 3, "3 goals should be created")
 
         # Test write multi
         certification_surveys.write({'certification_give_badge': False})
@@ -196,11 +211,11 @@ class TestCertificationBadge(common.SurveyCase, HttpCase):
                              'Every badge should be inactive if the 3 survey does not give badge anymore')
 
         challenges = self.env['gamification.challenge'].search([('id', 'in', challenges.ids)])
-        self.assertEquals(len(challenges), 0, "The 3 challenges should be deleted")
+        self.assertEqual(len(challenges), 0, "The 3 challenges should be deleted")
         challenge_lines = self.env['gamification.challenge.line'].search([('id', 'in', challenge_lines.ids)])
-        self.assertEquals(len(challenge_lines), 0, "The 3 challenge_lines should be deleted")
+        self.assertEqual(len(challenge_lines), 0, "The 3 challenge_lines should be deleted")
         goals = self.env['gamification.goal'].search([('id', 'in', goals.ids)])
-        self.assertEquals(len(goals), 0, "The 3 goals should be deleted")
+        self.assertEqual(len(goals), 0, "The 3 goals should be deleted")
 
         certification_surveys.write({'certification_give_badge': True})
         for survey in certification_surveys:
@@ -208,8 +223,8 @@ class TestCertificationBadge(common.SurveyCase, HttpCase):
                              'Every badge should be reactivated if the 3 survey give badges again')
 
         challenges = self.env['gamification.challenge'].search([('reward_id', 'in', certification_surveys.mapped('certification_badge_id').ids)])
-        self.assertEquals(len(challenges), 3, "3 challenges should be created")
+        self.assertEqual(len(challenges), 3, "3 challenges should be created")
         challenge_lines = self.env['gamification.challenge.line'].search([('challenge_id', 'in', challenges.ids)])
-        self.assertEquals(len(challenge_lines), 3, "3 challenge_lines should be created")
+        self.assertEqual(len(challenge_lines), 3, "3 challenge_lines should be created")
         goals = challenge_lines.mapped('definition_id')
-        self.assertEquals(len(goals), 3, "3 goals should be created")
+        self.assertEqual(len(goals), 3, "3 goals should be created")

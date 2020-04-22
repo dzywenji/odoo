@@ -46,6 +46,7 @@ class TestExpenseMultiCompany(TestExpenseMultiCompanyCommon):
         self.assertEqual(expense.company_id.id, self.env.company.id)
 
         expense.with_context(allowed_company_ids=[self.company_B.id, self.env.company.id], company_id=self.company_B.id).action_submit_sheet()
+<<<<<<< HEAD
         self.assertEquals(expense.state, 'submit', 'Expense is not in Reported state')
         self.assertEqual(expense.company_id.id, self.env.company.id)
 
@@ -54,11 +55,25 @@ class TestExpenseMultiCompany(TestExpenseMultiCompanyCommon):
 
         expense.with_context(allowed_company_ids=[self.company_B.id, self.env.company.id], company_id=self.company_B.id).action_sheet_move_create()
         self.assertEquals(expense.state, 'post', 'Expense is not in Waiting Payment state')
+=======
+        self.assertEqual(expense.state, 'submit', 'Expense is not in Reported state')
+        self.assertEqual(expense.company_id.id, self.env.company.id)
+
+        expense.with_context(allowed_company_ids=[self.company_B.id, self.env.company.id], company_id=self.company_B.id).approve_expense_sheets()
+        self.assertEqual(expense.state, 'approve', 'Expense is not in Approved state')
+
+        expense.with_context(allowed_company_ids=[self.company_B.id, self.env.company.id], company_id=self.company_B.id).action_sheet_move_create()
+        self.assertEqual(expense.state, 'post', 'Expense is not in Waiting Payment state')
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         self.assertTrue(expense.account_move_id.id, 'Expense Journal Entry is not created')
 
         exp_move_lines = expense.account_move_id.line_ids
         payable_move_lines = exp_move_lines.filtered(lambda l: l.account_id.internal_type == 'payable')
+<<<<<<< HEAD
         self.assertEquals(len(payable_move_lines), 1)
+=======
+        self.assertEqual(len(payable_move_lines), 1)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         self.assertEqual(payable_move_lines[0].company_id.id, expense.company_id.id, 'The company of the move line should be the same as the one from the expense.')
 
         #The company on the payment should be the same as the one on the expense, even if we are in a another company

@@ -102,7 +102,7 @@
                        invisible="1"/>
                 <field name="inventory_quantity" string="On Hand Quantity"
                        readonly="0"/>
-                <field name="reserved_quantity" optional="hide"/>
+                <field name="available_quantity" optional="show"/>
                 <field name="product_uom_id" groups="uom.group_uom"/>
                 <field name='company_id' groups="base.group_multi_company" optional="show"/>
             </tree>
@@ -122,7 +122,7 @@
                        invisible="context.get('hide_lot', False)"/>
                 <field name="package_id" groups="stock.group_tracking_lot"/>
                 <field name="owner_id" groups="stock.group_tracking_owner"/>
-                <field name="reserved_quantity" string="Reserved"/>
+                <field name="available_quantity"/>
                 <field name="quantity"/>
                 <field name="product_uom_id" groups="uom.group_uom"/>
                 <field name='company_id' groups="base.group_multi_company"/>
@@ -166,12 +166,6 @@
         </field>
     </record>
 
-    <record model="ir.actions.act_window" id="product_template_open_quants"> <!-- Not used -->
-        <field name="name">Stock On Hand</field>
-        <field name="context">{'search_default_internal_loc': 1, 'search_default_productgroup':1, 'search_default_locationgroup':1}</field>
-        <field name="domain">[('product_id.product_tmpl_id', '=', active_id)]</field>
-        <field name="res_model">stock.quant</field>
-    </record>
     <record model="ir.actions.act_window" id="location_open_quants"> <!-- Used in location -->
         <field name="context">{'search_default_productgroup': 1}</field>
         <field name="domain">[('location_id', 'child_of', active_ids)]</field>

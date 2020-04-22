@@ -54,17 +54,24 @@
                         <td><span t-field="invoice.invoice_date"/></td>
                         <td class='d-none d-md-table-cell'><span t-field="invoice.invoice_date_due"/></td>
                         <td class="tx_status">
+<<<<<<< HEAD
                             <t t-if="invoice.state == 'posted' and invoice.invoice_payment_state != 'paid'">
                                 <span class="badge badge-pill badge-info"><i class="fa fa-fw fa-clock-o" aria-label="Opened" title="Opened" role="img"></i><span class="d-none d-md-inline"> Waiting for Payment</span></span>
                             </t>
                             <t t-if="invoice.state == 'posted' and invoice.invoice_payment_state == 'paid'">
+=======
+                            <t t-if="invoice.state == 'posted' and invoice.payment_state != 'paid'">
+                                <span class="badge badge-pill badge-info"><i class="fa fa-fw fa-clock-o" aria-label="Opened" title="Opened" role="img"></i><span class="d-none d-md-inline"> Waiting for Payment</span></span>
+                            </t>
+                            <t t-if="invoice.state == 'posted' and invoice.payment_state == 'paid'">
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                                 <span class="badge badge-pill badge-success"><i class="fa fa-fw fa-check" aria-label="Paid" title="Paid" role="img"></i><span class="d-none d-md-inline"> Paid</span></span>
                             </t>
                             <t t-if="invoice.state == 'cancel'">
                                 <span class="badge badge-pill badge-warning"><i class="fa fa-fw fa-remove" aria-label="Cancelled" title="Cancelled" role="img"></i><span class="d-none d-md-inline"> Cancelled</span></span>
                             </t>
                         </td>
-                        <td class="text-right"><span t-esc="-invoice.amount_residual if invoice.type == 'out_refund' else invoice.amount_residual" t-options='{"widget": "monetary", "display_currency": invoice.currency_id}'/></td>
+                        <td class="text-right"><span t-esc="-invoice.amount_residual if invoice.move_type == 'out_refund' else invoice.amount_residual" t-options='{"widget": "monetary", "display_currency": invoice.currency_id}'/></td>
                     </tr>
                 </t>
             </tbody>
@@ -74,7 +81,7 @@
 
     <template id="portal_invoice_page" name="Invoice Portal Template" inherit_id="portal.portal_sidebar" primary="True">
         <xpath expr="//div[hasclass('o_portal_sidebar')]" position="inside">
-            <t t-set="o_portal_fullwidth_alert" groups="sales_team.group_sale_salesman,account.group_account_invoice">
+            <t t-set="o_portal_fullwidth_alert" groups="sales_team.group_sale_salesman,account.group_account_invoice,account.group_account_readonly">
                 <t t-call="portal.portal_back_in_edit_mode">
                     <t t-set="backend_url" t-value="'/web#model=%s&amp;id=%s&amp;action=%s&amp;view_type=form' % (invoice._name, invoice.id, invoice.env.ref('account.action_move_out_invoice_type').id)"/>
                 </t>
@@ -89,7 +96,11 @@
                             <b t-if="invoice.amount_residual > 0" t-field="invoice.amount_residual"/>
                             <b t-else="1" t-field="invoice.amount_total"/>
                         </h2>
+<<<<<<< HEAD
                         <div class="small" t-if="invoice.invoice_payment_state != 'paid' and invoice.type == 'out_invoice'"><i class="fa fa-clock-o"/><span class="o_portal_sidebar_timeago ml4" t-att-datetime="invoice.invoice_date_due"/></div>
+=======
+                        <div class="small" t-if="invoice.payment_state != 'paid' and invoice.move_type == 'out_invoice'"><i class="fa fa-clock-o"/><span class="o_portal_sidebar_timeago ml4" t-att-datetime="invoice.invoice_date_due"/></div>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                     </t>
 
                     <t t-set="entries">

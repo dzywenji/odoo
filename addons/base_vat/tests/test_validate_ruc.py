@@ -1,4 +1,5 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
+<<<<<<< HEAD
 
 import logging
 _logger = logging.getLogger(__name__)
@@ -17,6 +18,13 @@ except ImportError:
     "Install it to support more countries, for example with `easy_install vatnumber`.")
     vatnumber = lambda: False
     vatnumber.check_vies = lambda: False  # dummy method for mock
+=======
+from odoo.tests import common
+from odoo.exceptions import ValidationError
+from unittest.mock import patch
+
+from stdnum.eu import vat
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 class TestStructure(common.TransactionCase):
 
@@ -61,6 +69,10 @@ class TestStructure(common.TransactionCase):
             return vat_number == 'BE0987654321'
 
         # reactivate it and correct the vat number
+<<<<<<< HEAD
         with patch.object(vatnumber, 'check_vies', mock_check_vies):
+=======
+        with patch.object(vat, 'check_vies', mock_check_vies):
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             self.env.user.company_id.vat_check_vies = True
             company.vat = "BE0987654321"

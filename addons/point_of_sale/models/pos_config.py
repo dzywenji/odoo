@@ -4,7 +4,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from odoo import api, fields, models, _
+from odoo import api, fields, models, tools, _
 from odoo.exceptions import ValidationError, UserError
 
 
@@ -107,9 +107,9 @@ class PosConfig(models.Model):
         'stock.picking.type',
         string='Operation Type',
         default=_default_picking_type_id,
+        required=True,
         domain="[('code', '=', 'outgoing'), ('warehouse_id.company_id', '=', company_id)]",
         ondelete='restrict')
-    use_existing_lots = fields.Boolean(related='picking_type_id.use_existing_lots', readonly=False)
     journal_id = fields.Many2one(
         'account.journal', string='Sales Journal',
         domain=[('type', '=', 'sale')],
@@ -126,7 +126,7 @@ class PosConfig(models.Model):
     iface_vkeyboard = fields.Boolean(string='Virtual KeyBoard', help=u"Don’t turn this option on if you take orders on smartphones or tablets. \n Such devices already benefit from a native keyboard.")
     iface_customer_facing_display = fields.Boolean(string='Customer Facing Display', help="Show checkout to customers with a remotely-connected screen.")
     iface_print_via_proxy = fields.Boolean(string='Print via Proxy', help="Bypass browser printing and prints via the hardware proxy.")
-    iface_scan_via_proxy = fields.Boolean(string='Scan via Proxy', help="Enable barcode scanning with a remotely connected barcode scanner.")
+    iface_scan_via_proxy = fields.Boolean(string='Scan via Proxy', help="Enable barcode scanning with a remotely connected barcode scanner and card swiping with a Vantiv card reader.")
     iface_big_scrollbars = fields.Boolean('Large Scrollbars', help='For imprecise industrial touchscreens.')
     iface_print_auto = fields.Boolean(string='Automatic Receipt Printing', default=False,
         help='The receipt will automatically be printed at the end of each order.')
@@ -214,6 +214,18 @@ class PosConfig(models.Model):
     company_has_template = fields.Boolean(string="Company has chart of accounts", compute="_compute_company_has_template")
     current_user_id = fields.Many2one('res.users', string='Current Session Responsible', compute='_compute_current_session_user')
     other_devices = fields.Boolean(string="Other Devices", help="Connect devices to your PoS without an IoT Box.")
+    rounding_method = fields.Many2one('account.cash.rounding', string="Cash rounding")
+    cash_rounding = fields.Boolean(string="Cash Rounding")
+    only_round_cash_method = fields.Boolean(string="Only apply rounding on cash")
+    has_active_session = fields.Boolean(compute='_compute_current_session')
+
+    @api.depends('use_pricelist', 'available_pricelist_ids')
+    def _compute_allowed_pricelist_ids(self):
+        for config in self:
+            if config.use_pricelist:
+                config.allowed_pricelist_ids = config.available_pricelist_ids.ids
+            else:
+                config.allowed_pricelist_ids = self.env['product.pricelist'].search([]).ids
 
     @api.depends('use_pricelist', 'available_pricelist_ids')
     def _compute_allowed_pricelist_ids(self):
@@ -249,8 +261,13 @@ class PosConfig(models.Model):
         """If there is an open session, store it to current_session_id / current_session_State.
         """
         for pos_config in self:
+<<<<<<< HEAD
+=======
+            opened_sessions = pos_config.session_ids.filtered(lambda s: not s.state == 'closed')
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             session = pos_config.session_ids.filtered(lambda s: not s.state == 'closed' and not s.rescue)
             # sessions ordered by id desc
+            pos_config.has_active_session = opened_sessions and True or False
             pos_config.current_session_id = session and session[0].id or False
             pos_config.current_session_state = session and session[0].state or False
 
@@ -306,10 +323,21 @@ class PosConfig(models.Model):
         if open_session:
             raise ValidationError(_("You are not allowed to change the cash control status while a session is already opened."))
 
+    @api.constrains('rounding_method')
+    def _check_rounding_method_strategy(self):
+        if self.cash_rounding and self.rounding_method.strategy != 'add_invoice_line':
+            raise ValidationError(_("Cash rounding strategy must be: 'Add a rounding line'"))
+
     @api.constrains('company_id', 'journal_id')
     def _check_company_journal(self):
         if self.journal_id and self.journal_id.company_id.id != self.company_id.id:
             raise ValidationError(_("The sales journal and the point of sale must belong to the same company."))
+
+    def _check_profit_loss_cash_journal(self):
+        if self.cash_control and self.payment_method_ids:
+            for method in self.payment_method_ids:
+                if method.is_cash_count and (not method.cash_journal_id.loss_account_id or not method.cash_journal_id.profit_account_id):
+                    raise ValidationError(_("You need a loss and profit account on your cash journal."))
 
     @api.constrains('company_id', 'invoice_journal_id')
     def _check_company_invoice_journal(self):
@@ -448,13 +476,25 @@ class PosConfig(models.Model):
     def write(self, vals):
         opened_session = self.mapped('session_ids').filtered(lambda s: s.state != 'closed')
         if opened_session:
-            raise UserError(_('Unable to modify this PoS Configuration because there is an open PoS Session based on it.'))
+            str = []
+            for key in self._get_forbidden_change_fields():
+                if key in vals.keys():
+                    str.append(key)
+            if len(str) > 0:
+                raise UserError(
+                    _("Unable to modify this PoS Configuration because you can't modify " + ", ".join(str)) + " while a session is open.")
         result = super(PosConfig, self).write(vals)
 
         self.sudo()._set_fiscal_position()
         self.sudo()._check_modules_to_install()
         self.sudo()._check_groups_implied()
         return result
+
+    def _get_forbidden_change_fields(self):
+        forbidden_keys = ['module_pos_hr', 'cash_control', 'module_pos_restaurant', 'available_pricelist_ids',
+                          'limit_categories', 'iface_available_categ_ids', 'use_pricelist', 'module_pos_discount',
+                          'payment_method_ids', 'iface_tipproduc']
+        return forbidden_keys
 
     def unlink(self):
         # Delete the pos.config records first then delete the sequences linked to them
@@ -508,10 +548,10 @@ class PosConfig(models.Model):
     # Methods to open the POS
     def open_ui(self):
         """Open the pos interface with config_id as an extra argument.
-    
+
         In vanilla PoS each user can only have one active session, therefore it was not needed to pass the config_id
         on opening a session. It is also possible to login to sessions created by other users.
-        
+
         :returns: dict
         """
         self.ensure_one()
@@ -523,7 +563,7 @@ class PosConfig(models.Model):
             'target': 'self',
         }
 
-    def open_session_cb(self):
+    def open_session_cb(self, check_coa=True):
         """ new session button
 
         create one if none exist
@@ -531,13 +571,14 @@ class PosConfig(models.Model):
         """
         self.ensure_one()
         if not self.current_session_id:
-            if not self.company_has_template:
+            if check_coa and not tools.config['test_enable'] and not self.company_has_template:
                 raise UserError(_("A Chart of Accounts is not yet installed in your current company. Please install a "
                                   "Chart of Accounts through the Invoicing/Accounting settings before launching a PoS session." ))
             self._check_company_journal()
             self._check_company_invoice_journal()
             self._check_company_payment()
             self._check_currencies()
+            self._check_profit_loss_cash_journal()
             self.env['pos.session'].create({
                 'user_id': self.env.uid,
                 'config_id': self.id

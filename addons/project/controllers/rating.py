@@ -9,7 +9,11 @@ from odoo.http import request
 
 class RatingProject(http.Controller):
 
+<<<<<<< HEAD
     @http.route(['/project/rating'], type='http', auth="public", website=True)
+=======
+    @http.route(['/project/rating'], type='http', auth="public", website=True, sitemap=True)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     def index(self, **kw):
         projects = request.env['project.project'].sudo().search([('rating_status', '!=', 'no'), ('portal_show_rating', '=', True)])
         values = {'projects': projects}
@@ -87,6 +91,10 @@ class RatingProject(http.Controller):
 
         return request.render('project.rating_project_rating_page', {
             'project': project,
-            'ratings': request.env['rating.rating'].sudo().search([('consumed', '=', True), ('parent_res_model', '=', 'project.project'), ('parent_res_id', '=', project_id)], order='write_date DESC', limit=50),
+            'ratings': request.env['rating.rating'].sudo().search([
+                ('consumed', '=', True),
+                ('parent_res_model', '=', 'project.project'),
+                ('parent_res_id', '=', project_id)
+            ], order='write_date DESC', limit=50),
             'statistics': self._calculate_period_partner_stats(project_id),
         })

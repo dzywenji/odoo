@@ -15,10 +15,11 @@ var testUtils = require('web.test_utils');
 var widgetRegistry = require('web.widget_registry');
 var Widget = require('web.Widget');
 
+
 var _t = core._t;
+const cpHelpers = testUtils.controlPanel;
 var createActionManager = testUtils.createActionManager;
 var createView = testUtils.createView;
-
 
 QUnit.module('Views', {
     beforeEach: function () {
@@ -176,22 +177,22 @@ QUnit.module('Views', {
     });
 
     QUnit.test('list with delete="0"', async function (assert) {
-        assert.expect(4);
+        assert.expect(3);
 
-        var list = await createView({
+        const list = await createView({
             View: ListView,
             model: 'foo',
             data: this.data,
-            viewOptions: {hasSidebar: true},
+            viewOptions: {hasActionMenus: true},
             arch: '<tree delete="0"><field name="foo"/></tree>',
         });
 
-        assert.isNotVisible(list.sidebar.$el, 'sidebar should be invisible');
+
+        assert.containsNone(list.el, 'div.o_control_panel .o_cp_action_menus');
         assert.ok(list.$('tbody td.o_list_record_selector').length, 'should have at least one record');
 
         await testUtils.dom.click(list.$('tbody td.o_list_record_selector:first input'));
-        assert.isVisible(list.sidebar.$el, 'sidebar should be visible');
-        assert.notOk(list.sidebar.$('a:contains(Delete)').length, 'sidebar should not have Delete button');
+        assert.containsNone(list.el, 'div.o_control_panel .o_cp_action_menus .o_dropdown_menu');
 
         list.destroy();
     });
@@ -203,7 +204,7 @@ QUnit.module('Views', {
             View: ListView,
             model: 'foo',
             data: this.data,
-            viewOptions: {hasSidebar: true},
+            viewOptions: {hasActionMenus: true},
             arch: '<tree editable="top" edit="0"><field name="foo"/></tree>',
         });
 
@@ -211,6 +212,40 @@ QUnit.module('Views', {
 
         await testUtils.dom.click(list.$('tr td:not(.o_list_record_selector)').first());
         assert.containsNone(list, 'tbody tr.o_selected_row', "should not have editable row");
+
+        list.destroy();
+    });
+
+    QUnit.test('list with export button', async function (assert) {
+        assert.expect(4);
+
+        const list = await createView({
+            View: ListView,
+            model: 'foo',
+            data: this.data,
+            viewOptions: {hasActionMenus: true},
+            arch: '<tree><field name="foo"/></tree>',
+            session: {
+                async user_has_group(group) {
+                    if (group === 'base.group_allow_export') {
+                        return true;
+                    }
+                    return this._super(...arguments);
+                },
+            },
+        });
+
+        assert.containsNone(list.el, 'div.o_control_panel .o_cp_action_menus');
+        assert.ok(list.$('tbody td.o_list_record_selector').length, 'should have at least one record');
+
+        await testUtils.dom.click(list.$('tbody td.o_list_record_selector:first input'));
+        assert.containsOnce(list.el, 'div.o_control_panel .o_cp_action_menus');
+        await cpHelpers.toggleActionMenu(list);
+        assert.deepEqual(
+            cpHelpers.getMenuItemTexts(list),
+            ['Export', 'Delete'],
+            'action menu should have Export button'
+        );
 
         list.destroy();
     });
@@ -762,33 +797,31 @@ QUnit.module('Views', {
                 }
                 return this._super.apply(this,arguments);
             },
-            intercepts: {
-                load_filters: function (event) {
-                    return Promise.resolve([
-                        {
-                            context: "{}",
-                            domain: "[]",
-                            id: 7,
-                            is_default: true,
-                            name: "My favorite",
-                            sort: "[\"date asc\", \"foo desc\"]",
-                            user_id: [2, "Mitchell Admin"],
-                        }, {
-                            context: "{}",
-                            domain: "[]",
-                            id: 8,
-                            is_default: false,
-                            name: "My second favorite",
-                            sort: "[\"date desc\", \"foo asc\"]",
-                            user_id: [2, "Mitchell Admin"],
-                        }
-                    ]).then(event.data.on_success);
-                },
-            },
+            favoriteFilters : [
+                {
+                    context: "{}",
+                    domain: "[]",
+                    id: 7,
+                    is_default: true,
+                    name: "My favorite",
+                    sort: "[\"date asc\", \"foo desc\"]",
+                    user_id: [2, "Mitchell Admin"],
+                }, {
+                    context: "{}",
+                    domain: "[]",
+                    id: 8,
+                    is_default: false,
+                    name: "My second favorite",
+                    sort: "[\"date desc\", \"foo asc\"]",
+                    user_id: [2, "Mitchell Admin"],
+                }
+            ]
         });
 
-        await testUtils.dom.click(list.$('.o_control_panel .o_search_options button.o_favorites_menu_button'));
-        await testUtils.dom.click(list.$('.o_control_panel .o_search_options .o_favorites_menu .o_menu_item').eq(1));
+
+        await cpHelpers.toggleFavoriteMenu(list);
+        await cpHelpers.toggleMenuItem(list, "My second favorite");
+
         list.destroy();
     });
 
@@ -843,9 +876,10 @@ QUnit.module('Views', {
             assert.ok("list view should trigger 'open_record' event");
         });
 
-        testUtils.dom.click(list.$('tr td:not(.o_list_record_selector)').first());
+        await testUtils.dom.click(list.$('tr td:not(.o_list_record_selector)').first());
         list.update({groupBy: ['foo']});
         await testUtils.nextTick();
+
         assert.containsN(list, 'tr.o_group_header', 3, "list should be grouped");
         await testUtils.dom.click(list.$('th.o_group_name').first());
 
@@ -1007,11 +1041,13 @@ QUnit.module('Views', {
             domain: [['foo', '=', 'yop']],
         });
 
+
         assert.containsN(list, 'tbody tr', 4,
             "list should contain 4 rows");
         assert.containsOnce(list, '.o_data_row',
             "list should contain one record (and thus 3 empty rows)");
-        assert.strictEqual(list.pager.$('.o_pager_value').text(), '1-1',
+
+        assert.strictEqual(cpHelpers.getPagerValue(list), '1-1',
             "pager should be correct");
 
         await testUtils.dom.click(list.$buttons.find('.o_list_button_add'));
@@ -1020,7 +1056,7 @@ QUnit.module('Views', {
             "list should still contain 4 rows");
         assert.containsN(list, '.o_data_row', 2,
             "list should contain two record (and thus 2 empty rows)");
-        assert.strictEqual(list.pager.$('.o_pager_value').text(), '1-2',
+        assert.strictEqual(cpHelpers.getPagerValue(list), '1-2',
             "pager should be correct");
 
         await testUtils.dom.click(list.$buttons.find('.o_list_button_discard'));
@@ -1029,7 +1065,7 @@ QUnit.module('Views', {
             "list should still contain 4 rows");
         assert.containsOnce(list, '.o_data_row',
             "list should contain one record (and thus 3 empty rows)");
-        assert.strictEqual(list.pager.$('.o_pager_value').text(), '1-1',
+        assert.strictEqual(cpHelpers.getPagerValue(list), '1-1',
             "pager should be correct");
         assert.verifySteps(['destroy'],
             "should have destroyed the widget of the removed line");
@@ -1243,8 +1279,76 @@ QUnit.module('Views', {
         list.destroy();
     });
 
+    QUnit.test('selection box is properly displayed (single page)', async function (assert) {
+        assert.expect(11);
+
+        var list = await createView({
+            View: ListView,
+            model: 'foo',
+            data: this.data,
+            arch: '<tree><field name="foo"/><field name="bar"/></tree>',
+        });
+
+        assert.containsN(list, '.o_data_row', 4);
+        assert.containsNone(list.$('.o_cp_buttons'), '.o_list_selection_box');
+
+        // select a record
+        await testUtils.dom.click(list.$('.o_data_row:first .o_list_record_selector input'));
+        assert.containsOnce(list.$('.o_cp_buttons'), '.o_list_selection_box');
+        assert.containsNone(list.$('.o_list_selection_box'), '.o_list_select_domain');
+        assert.strictEqual(list.$('.o_list_selection_box').text().trim(), '1 selected');
+
+        // select all records of first page
+        await testUtils.dom.click(list.$('thead .o_list_record_selector input'));
+        assert.containsOnce(list.$('.o_cp_buttons'), '.o_list_selection_box');
+        assert.containsNone(list.$('.o_list_selection_box'), '.o_list_select_domain');
+        assert.strictEqual(list.$('.o_list_selection_box').text().trim(), '4 selected');
+
+        // unselect a record
+        await testUtils.dom.click(list.$('.o_data_row:nth(1) .o_list_record_selector input'));
+        assert.containsOnce(list.$('.o_cp_buttons'), '.o_list_selection_box');
+        assert.containsNone(list.$('.o_list_selection_box'), '.o_list_select_domain');
+        assert.strictEqual(list.$('.o_list_selection_box').text().trim(), '3 selected');
+
+        list.destroy();
+    });
+
+    QUnit.test('selection box is properly displayed (multi pages)', async function (assert) {
+        assert.expect(10);
+
+        var list = await createView({
+            View: ListView,
+            model: 'foo',
+            data: this.data,
+            arch: '<tree limit="3"><field name="foo"/><field name="bar"/></tree>',
+        });
+
+        assert.containsN(list, '.o_data_row', 3);
+        assert.containsNone(list.$('.o_cp_buttons'), '.o_list_selection_box');
+
+        // select a record
+        await testUtils.dom.click(list.$('.o_data_row:first .o_list_record_selector input'));
+        assert.containsOnce(list.$('.o_cp_buttons'), '.o_list_selection_box');
+        assert.containsNone(list.$('.o_list_selection_box'), '.o_list_select_domain');
+        assert.strictEqual(list.$('.o_list_selection_box').text().trim(), '1 selected');
+
+        // select all records of first page
+        await testUtils.dom.click(list.$('thead .o_list_record_selector input'));
+        assert.containsOnce(list.$('.o_cp_buttons'), '.o_list_selection_box');
+        assert.containsOnce(list.$('.o_list_selection_box'), '.o_list_select_domain');
+        assert.strictEqual(list.$('.o_list_selection_box').text().replace(/\s+/g, ' ').trim(),
+            '3 selected Select all 4');
+
+        // select all domain
+        await testUtils.dom.click(list.$('.o_list_selection_box .o_list_select_domain'));
+        assert.containsOnce(list.$('.o_cp_buttons'), '.o_list_selection_box');
+        assert.strictEqual(list.$('.o_list_selection_box').text().trim(), 'All 4 selected');
+
+        list.destroy();
+    });
+
     QUnit.test('selection is reset on reload', async function (assert) {
-        assert.expect(5);
+        assert.expect(8);
 
         var list = await createView({
             View: ListView,
@@ -1256,6 +1360,7 @@ QUnit.module('Views', {
                 '</tree>',
         });
 
+        assert.containsNone(list.$('.o_cp_buttons'), '.o_list_selection_box');
         assert.strictEqual(list.$('tfoot td:nth(2)').text(), '32',
             "total should be 32 (no record selected)");
 
@@ -1263,6 +1368,7 @@ QUnit.module('Views', {
         var $firstRowSelector = list.$('tbody .o_list_record_selector input').first();
         testUtils.dom.click($firstRowSelector);
         assert.ok($firstRowSelector.is(':checked'), "first row should be selected");
+        assert.containsOnce(list.$('.o_cp_buttons'), '.o_list_selection_box');
         assert.strictEqual(list.$('tfoot td:nth(2)').text(), '10',
             "total should be 10 (first record selected)");
 
@@ -1271,6 +1377,7 @@ QUnit.module('Views', {
         $firstRowSelector = list.$('tbody .o_list_record_selector input').first();
         assert.notOk($firstRowSelector.is(':checked'),
             "first row should no longer be selected");
+        assert.containsNone(list.$('.o_cp_buttons'), '.o_list_selection_box');
         assert.strictEqual(list.$('tfoot td:nth(2)').text(), '32',
             "total should be 32 (no more record selected)");
 
@@ -1278,39 +1385,43 @@ QUnit.module('Views', {
     });
 
     QUnit.test('selection is kept on render without reload', async function (assert) {
-        assert.expect(6);
+        assert.expect(10);
 
         var list = await createView({
             View: ListView,
             model: 'foo',
             data: this.data,
             groupBy: ['foo'],
-            viewOptions: {hasSidebar: true},
+            viewOptions: {hasActionMenus: true},
             arch: '<tree>' +
                     '<field name="foo"/>' +
                     '<field name="int_field" sum="Sum"/>' +
                 '</tree>',
         });
 
-        assert.isNotVisible(list.sidebar);
+        assert.containsNone(list.el, 'div.o_control_panel .o_cp_action_menus');
+        assert.containsNone(list.$('.o_cp_buttons'), '.o_list_selection_box');
 
         // open blip grouping and check all lines
         await testUtils.dom.click(list.$('.o_group_header:contains("blip (2)")'));
         await testUtils.dom.click(list.$('.o_data_row:first input'));
-        assert.isVisible(list.sidebar);
+        assert.containsOnce(list.el, 'div.o_control_panel .o_cp_action_menus');
+        assert.containsOnce(list.$('.o_cp_buttons'), '.o_list_selection_box');
 
         // open yop grouping and verify blip are still checked
         await testUtils.dom.click(list.$('.o_group_header:contains("yop (1)")'));
         assert.containsOnce(list, '.o_data_row input:checked',
             "opening a grouping does not uncheck others");
-        assert.isVisible(list.sidebar);
+        assert.containsOnce(list.el, 'div.o_control_panel .o_cp_action_menus');
+        assert.containsOnce(list.$('.o_cp_buttons'), '.o_list_selection_box');
 
         // close and open blip grouping and verify blip are unchecked
         await testUtils.dom.click(list.$('.o_group_header:contains("blip (2)")'));
         await testUtils.dom.click(list.$('.o_group_header:contains("blip (2)")'));
         assert.containsNone(list, '.o_data_row input:checked',
             "opening and closing a grouping uncheck its elements");
-        assert.isNotVisible(list.sidebar);
+        assert.containsNone(list.el, 'div.o_control_panel .o_cp_action_menus');
+        assert.containsNone(list.$('.o_cp_buttons'), '.o_list_selection_box');
 
         list.destroy();
     });
@@ -1599,10 +1710,9 @@ QUnit.module('Views', {
                 limit: 2,
             },
         });
-
         var widthPage1 = list.$(`th[data-name=foo]`)[0].offsetWidth;
 
-        await testUtils.dom.click(list.$('.o_pager_next'));
+        await cpHelpers.pagerNext(list);
 
         var widthPage2 = list.$(`th[data-name=foo]`)[0].offsetWidth;
         assert.ok(widthPage1 > widthPage2,
@@ -1613,7 +1723,7 @@ QUnit.module('Views', {
 
     QUnit.test('width of some of the fields should be hardcoded if no data', async function (assert) {
         const assertions = [
-            { field: 'bar', expected: 50, type: 'Boolean' },
+            { field: 'bar', expected: 70, type: 'Boolean' },
             { field: 'int_field', expected: 74, type: 'Integer' },
             { field: 'qux', expected: 92, type: 'Float' },
             { field: 'date', expected: 92, type: 'Date' },
@@ -1653,7 +1763,7 @@ QUnit.module('Views', {
 
     QUnit.test('width of some fields should be hardcoded if no data, and list initially invisible', async function (assert) {
         const assertions = [
-            { field: 'bar', expected: 50, type: 'Boolean' },
+            { field: 'bar', expected: 70, type: 'Boolean' },
             { field: 'int_field', expected: 74, type: 'Integer' },
             { field: 'qux', expected: 92, type: 'Float' },
             { field: 'date', expected: 92, type: 'Date' },
@@ -2083,7 +2193,7 @@ QUnit.module('Views', {
 
     QUnit.test('width of some of the fields should be hardcoded if no data (grouped case)', async function (assert) {
         const assertions = [
-            { field: 'bar', expected: 50, type: 'Boolean' },
+            { field: 'bar', expected: 70, type: 'Boolean' },
             { field: 'int_field', expected: 74, type: 'Integer' },
             { field: 'qux', expected: 92, type: 'Float' },
             { field: 'date', expected: 92, type: 'Date' },
@@ -2477,24 +2587,126 @@ QUnit.module('Views', {
             View: ListView,
             model: 'foo',
             data: this.data,
-            viewOptions: {hasSidebar: true},
+            viewOptions: {hasActionMenus: true},
             arch: '<tree><field name="foo"/></tree>',
         });
 
-        assert.isNotVisible(list.sidebar.$el, 'sidebar should be invisible');
+
+        assert.containsNone(list.el, 'div.o_control_panel .o_cp_action_menus');
         assert.containsN(list, 'tbody td.o_list_record_selector', 4, "should have 4 records");
 
         await testUtils.dom.click(list.$('tbody td.o_list_record_selector:first input'));
 
-        assert.isVisible(list.sidebar.$el, 'sidebar should be visible');
+        assert.containsOnce(list.el, 'div.o_control_panel .o_cp_action_menus');
 
-        await testUtils.dom.click(list.sidebar.$('.o_dropdown_toggler_btn:contains(Action)'));
-        await testUtils.dom.click(list.sidebar.$('a:contains(Delete)'));
+        await cpHelpers.toggleActionMenu(list);
+        await cpHelpers.toggleMenuItem(list, "Delete");
         assert.hasClass($('body'),'modal-open', 'body should have modal-open clsss');
 
         await testUtils.dom.click($('body .modal button span:contains(Ok)'));
 
         assert.containsN(list, 'tbody td.o_list_record_selector', 3, "should have 3 records");
+        list.destroy();
+    });
+
+    QUnit.test('delete all records matching the domain', async function (assert) {
+        assert.expect(6);
+
+        this.data.foo.records.push({id: 5, bar: true, foo: "xxx"});
+
+        var list = await createView({
+            View: ListView,
+            model: 'foo',
+            data: this.data,
+            arch: '<tree limit="2"><field name="foo"/></tree>',
+            domain: [['bar', '=', true]],
+            mockRPC: function (route, args) {
+                if (args.method === 'unlink') {
+                    assert.deepEqual(args.args[0], [1, 2, 3, 5]);
+                }
+                return this._super.apply(this, arguments);
+            },
+            services: {
+                notification: NotificationService.extend({
+                    notify: function () {
+                        throw new Error('should not display a notification');
+                    },
+                }),
+            },
+            viewOptions: {
+                hasActionMenus: true,
+            },
+        });
+
+        assert.containsNone(list, 'div.o_control_panel .o_cp_action_menus');
+        assert.containsN(list, 'tbody td.o_list_record_selector', 2, "should have 2 records");
+
+        await testUtils.dom.click(list.$('thead .o_list_record_selector input'));
+
+        assert.containsOnce(list, 'div.o_control_panel .o_cp_action_menus');
+        assert.containsOnce(list, '.o_list_selection_box .o_list_select_domain');
+
+        await testUtils.dom.click(list.$('.o_list_selection_box .o_list_select_domain'));
+        await cpHelpers.toggleActionMenu(list);
+        await cpHelpers.toggleMenuItem(list, "Delete");
+
+        assert.strictEqual($('.modal').length, 1, 'a confirm modal should be displayed');
+        await testUtils.dom.click($('.modal-footer .btn-primary'));
+
+        list.destroy();
+    });
+
+    QUnit.test('delete all records matching the domain (limit reached)', async function (assert) {
+        assert.expect(8);
+
+        this.data.foo.records.push({id: 5, bar: true, foo: "xxx"});
+        this.data.foo.records.push({id: 6, bar: true, foo: "yyy"});
+
+        var list = await createView({
+            View: ListView,
+            model: 'foo',
+            data: this.data,
+            arch: '<tree limit="2"><field name="foo"/></tree>',
+            domain: [['bar', '=', true]],
+            mockRPC: function (route, args) {
+                if (args.method === 'unlink') {
+                    assert.deepEqual(args.args[0], [1, 2, 3, 5]);
+                }
+                return this._super.apply(this, arguments);
+            },
+            services: {
+                notification: NotificationService.extend({
+                    notify: function () {
+                        assert.step('notify');
+                    },
+                }),
+            },
+            session: {
+                active_ids_limit: 4,
+            },
+            viewOptions: {
+                hasActionMenus: true,
+            },
+        });
+
+
+        assert.containsNone(list, 'div.o_control_panel .o_cp_action_menus');
+        assert.containsN(list, 'tbody td.o_list_record_selector', 2, "should have 2 records");
+
+        await testUtils.dom.click(list.$('thead .o_list_record_selector input'));
+
+        assert.containsOnce(list, 'div.o_control_panel .o_cp_action_menus');
+        assert.containsOnce(list, '.o_list_selection_box .o_list_select_domain');
+
+        await testUtils.dom.click(list.$('.o_list_selection_box .o_list_select_domain'));
+        await cpHelpers.toggleActionMenu(list);
+        await cpHelpers.toggleMenuItem(list, "Delete");
+
+        assert.strictEqual($('.modal').length, 1, 'a confirm modal should be displayed');
+        await testUtils.dom.click($('.modal-footer .btn-primary'));
+
+        assert.verifySteps(['notify']);
+
         list.destroy();
     });
 
@@ -2508,7 +2720,7 @@ QUnit.module('Views', {
             View: ListView,
             model: 'foo',
             data: this.data,
-            viewOptions: {hasSidebar: true},
+            viewOptions: {hasActionMenus: true},
             arch: '<tree><field name="foo"/></tree>',
             mockRPC: function (route) {
                 assert.step(route);
@@ -2520,26 +2732,134 @@ QUnit.module('Views', {
             },
         });
 
-        assert.isNotVisible(list.sidebar.$el, 'sidebar should be invisible');
+
+        assert.containsNone(list.el, 'div.o_control_panel .o_cp_action_menus');
         assert.containsN(list, 'tbody td.o_list_record_selector', 4, "should have 4 records");
 
-        testUtils.dom.click(list.$('tbody td.o_list_record_selector:first input'));
+        await testUtils.dom.click(list.$('tbody td.o_list_record_selector:first input'));
 
-        assert.isVisible(list.sidebar.$el, 'sidebar should be visible');
+        assert.containsOnce(list.el, 'div.o_control_panel .o_cp_action_menus');
 
         assert.verifySteps(['/web/dataset/search_read']);
-        testUtils.dom.click(list.sidebar.$('.o_dropdown_toggler_btn:contains(Action)'));
-        await testUtils.dom.click(list.sidebar.$('a:contains(Archive)'));
+        await cpHelpers.toggleActionMenu(list);
+        await cpHelpers.toggleMenuItem(list, "Archive");
         assert.strictEqual($('.modal').length, 1, 'a confirm modal should be displayed');
-        testUtils.dom.click($('.modal-footer .btn-secondary'));
+        await testUtils.dom.click($('.modal-footer .btn-secondary'));
         assert.containsN(list, 'tbody td.o_list_record_selector', 4, "still should have 4 records");
 
-        testUtils.dom.click(list.sidebar.$('.o_dropdown_toggler_btn:contains(Action)'));
-        await testUtils.dom.click(list.sidebar.$('a:contains(Archive)'));
+        await cpHelpers.toggleActionMenu(list);
+        await cpHelpers.toggleMenuItem(list, "Archive");
         assert.strictEqual($('.modal').length, 1, 'a confirm modal should be displayed');
         await testUtils.dom.click($('.modal-footer .btn-primary'));
         assert.containsN(list, 'tbody td.o_list_record_selector', 3, "should have 3 records");
         assert.verifySteps(['/web/dataset/call_kw/foo/action_archive', '/web/dataset/search_read']);
+        list.destroy();
+    });
+
+    QUnit.test('archive all records matching the domain', async function (assert) {
+        assert.expect(6);
+
+        // add active field on foo model and make all records active
+        this.data.foo.fields.active = {string: 'Active', type: 'boolean', default: true};
+        this.data.foo.records.push({id: 5, bar: true, foo: "xxx"});
+
+        var list = await createView({
+            View: ListView,
+            model: 'foo',
+            data: this.data,
+            arch: '<tree limit="2"><field name="foo"/></tree>',
+            domain: [['bar', '=', true]],
+            mockRPC: function (route, args) {
+                if (args.method === 'action_archive') {
+                    assert.deepEqual(args.args[0], [1, 2, 3, 5]);
+                    return Promise.resolve();
+                }
+                return this._super.apply(this, arguments);
+            },
+            services: {
+                notification: NotificationService.extend({
+                    notify: function () {
+                        throw new Error('should not display a notification');
+                    },
+                }),
+            },
+            viewOptions: {
+                hasActionMenus: true,
+            },
+        });
+
+        assert.containsNone(list, 'div.o_control_panel .o_cp_action_menus');
+        assert.containsN(list, 'tbody td.o_list_record_selector', 2, "should have 2 records");
+
+        await testUtils.dom.click(list.$('thead .o_list_record_selector input'));
+
+        assert.containsOnce(list, 'div.o_control_panel .o_cp_action_menus');
+        assert.containsOnce(list, '.o_list_selection_box .o_list_select_domain');
+
+        await testUtils.dom.click(list.$('.o_list_selection_box .o_list_select_domain'));
+        await cpHelpers.toggleActionMenu(list);
+        await cpHelpers.toggleMenuItem(list, "Archive");
+
+        assert.strictEqual($('.modal').length, 1, 'a confirm modal should be displayed');
+        await testUtils.dom.click($('.modal-footer .btn-primary'));
+
+        list.destroy();
+    });
+
+    QUnit.test('archive all records matching the domain (limit reached)', async function (assert) {
+        assert.expect(8);
+
+        // add active field on foo model and make all records active
+        this.data.foo.fields.active = {string: 'Active', type: 'boolean', default: true};
+        this.data.foo.records.push({id: 5, bar: true, foo: "xxx"});
+        this.data.foo.records.push({id: 6, bar: true, foo: "yyy"});
+
+        var list = await createView({
+            View: ListView,
+            model: 'foo',
+            data: this.data,
+            arch: '<tree limit="2"><field name="foo"/></tree>',
+            domain: [['bar', '=', true]],
+            mockRPC: function (route, args) {
+                if (args.method === 'action_archive') {
+                    assert.deepEqual(args.args[0], [1, 2, 3, 5]);
+                    return Promise.resolve();
+                }
+                return this._super.apply(this, arguments);
+            },
+            services: {
+                notification: NotificationService.extend({
+                    notify: function () {
+                        assert.step('notify');
+                    },
+                }),
+            },
+            session: {
+                active_ids_limit: 4,
+            },
+            viewOptions: {
+                hasActionMenus: true,
+            },
+        });
+
+
+        assert.containsNone(list, 'div.o_control_panel .o_cp_action_menus');
+        assert.containsN(list, 'tbody td.o_list_record_selector', 2, "should have 2 records");
+
+        await testUtils.dom.click(list.$('thead .o_list_record_selector input'));
+
+        assert.containsOnce(list, 'div.o_control_panel .o_cp_action_menus');
+        assert.containsOnce(list, '.o_list_selection_box .o_list_select_domain');
+
+        await testUtils.dom.click(list.$('.o_list_selection_box .o_list_select_domain'));
+        await cpHelpers.toggleActionMenu(list);
+        await cpHelpers.toggleMenuItem(list, "Archive");
+
+        assert.strictEqual($('.modal').length, 1, 'a confirm modal should be displayed');
+        await testUtils.dom.click($('.modal-footer .btn-primary'));
+
+        assert.verifySteps(['notify']);
+
         list.destroy();
     });
 
@@ -2559,10 +2879,10 @@ QUnit.module('Views', {
             },
         });
 
-        assert.isVisible(list.pager.$el, "pager should be visible");
-        assert.strictEqual(list.pager.state.size, 4, "pager's size should be 4");
+        assert.containsOnce(list.el, 'div.o_control_panel .o_cp_pager');
+        assert.strictEqual(cpHelpers.getPagerSize(list), "4", "pager's size should be 4");
         await list.update({ groupBy: ['bar']});
-        assert.strictEqual(list.pager.state.size, 2, "pager's size should be 2");
+        assert.strictEqual(cpHelpers.getPagerSize(list), "2", "pager's size should be 2");
         list.destroy();
     });
 
@@ -2803,8 +3123,7 @@ QUnit.module('Views', {
             res_id: 1,
         });
 
-        // Change page
-        await testUtils.dom.click(form.$('.o_field_widget[name=o2m] .o_pager_next'));
+        await cpHelpers.pagerNext('.o_field_widget[name=o2m]');
         assert.strictEqual(form.$('tbody tr:first').text(), 'Value 44',
             "record 44 should be first");
         assert.strictEqual(form.$('tbody tr:eq(4)').text(), 'Value 48',
@@ -2857,7 +3176,7 @@ QUnit.module('Views', {
         list.destroy();
     });
 
-    QUnit.test('list without import button', async function (assert) {
+    QUnit.test('list with group_by_no_leaf flag in context', async function (assert) {
         assert.expect(1);
 
         var list = await createView({
@@ -2870,7 +3189,7 @@ QUnit.module('Views', {
             }
         });
 
-        assert.ok(!list.$buttons, "should not have any buttons");
+        assert.containsNone(list, '.o_list_buttons', "should not have any buttons");
         list.destroy();
     });
 
@@ -3819,23 +4138,23 @@ QUnit.module('Views', {
                 limit: 3,
             },
         });
-
         var headerHeight = list.$('.o_group_header').css('height');
 
         // basic rendering checks
         await testUtils.dom.click(list.$('.o_group_header'));
         assert.strictEqual(list.$('.o_group_header').css('height'), headerHeight,
             "height of group header shouldn't have changed");
-        assert.hasClass(list.$('.o_group_header th:eq(1) > div'), 'o_pager',
+        assert.hasClass(list.$('.o_group_header th:eq(1) > nav'), 'o_pager',
             "last cell of open group header should have classname 'o_pager'");
-        assert.strictEqual(list.$('.o_group_header .o_pager_value').text(), '1-3',
+
+        assert.strictEqual(cpHelpers.getPagerValue('.o_group_header'), '1-3',
             "pager's value should be correct");
         assert.containsN(list, '.o_data_row', 3,
             "open group should display 3 records");
 
         // go to next page
-        await testUtils.dom.click(list.$('.o_group_header .o_pager_next'));
-        assert.strictEqual(list.$('.o_group_header .o_pager_value').text(), '4-4',
+        await cpHelpers.pagerNext('.o_group_header');
+        assert.strictEqual(cpHelpers.getPagerValue('.o_group_header'), '4-4',
             "pager's value should be correct");
         assert.containsOnce(list, '.o_data_row',
             "open group should display 1 record");
@@ -4109,14 +4428,14 @@ QUnit.module('Views', {
             "3rd row should be selected");
 
         // press enter in input
-        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row input'), 'enter');
+        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row input[name="foo"]'), 'enter');
         assert.hasClass(list.$('tr.o_data_row:eq(3)'),'o_selected_row',
             "4rd row should be selected");
         assert.doesNotHaveClass(list.$('tr.o_data_row:eq(2)'), 'o_selected_row',
             "3rd row should no longer be selected");
 
         // press enter on last row
-        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row input'), 'enter');
+        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row input[name="foo"]'), 'enter');
         assert.containsN(list, 'tr.o_data_row', 5, "should have created a 5th row");
 
         assert.verifySteps(['/web/dataset/search_read', '/web/dataset/call_kw/foo/default_get']);
@@ -4220,7 +4539,7 @@ QUnit.module('Views', {
     });
 
     QUnit.test('display toolbar', async function (assert) {
-        assert.expect(6);
+        assert.expect(2);
 
         var list = await createView({
             View: ListView,
@@ -4237,26 +4556,154 @@ QUnit.module('Views', {
                 print: [],
             },
             viewOptions: {
-                hasSidebar: true,
+                hasActionMenus: true,
             },
         });
 
-        var $printMenu = list.$('.o_cp_sidebar .o_dropdown:contains(Print)');
-        assert.isNotVisible($printMenu);
-        var $actionMenu = list.$('.o_cp_sidebar .o_dropdown:contains(Action)');
-        assert.isNotVisible($actionMenu);
 
-        testUtils.dom.click(list.$('.o_list_record_selector:first input'));
+        assert.containsNone(list.el, 'div.o_control_panel .o_cp_action_menus');
 
-        assert.isNotVisible($printMenu);
-        assert.isVisible($actionMenu);
+        await testUtils.dom.click(list.$('.o_list_record_selector:first input'));
 
-        testUtils.dom.click($actionMenu.find('button')); // open Action menu
-        assert.strictEqual($actionMenu.find('.dropdown-item').length, 3,
-            "there should be 3 actions");
-        var $customAction = $actionMenu.find('.dropdown-item:last');
-        assert.strictEqual($customAction.text().trim(), 'Action event',
-            "the custom action should have 'Action event' as name");
+        await cpHelpers.toggleActionMenu(list);
+        assert.deepEqual(cpHelpers.getMenuItemTexts(list), ['Delete', 'Action event']);
+
+        list.destroy();
+    });
+
+    QUnit.test('execute ActionMenus actions with correct params (single page)', async function (assert) {
+        assert.expect(12);
+
+        const list = await createView({
+            View: ListView,
+            model: 'foo',
+            data: this.data,
+            arch: '<tree><field name="foo"/></tree>',
+            toolbar: {
+                action: [{
+                    id: 44,
+                    name: 'Custom Action',
+                    type: 'ir.actions.server',
+                }],
+                print: [],
+            },
+            mockRPC: function (route, args) {
+                if (route === '/web/action/load') {
+                    assert.step(JSON.stringify(args));
+                    return Promise.resolve({});
+                }
+                return this._super(...arguments);
+            },
+            viewOptions: {
+                hasActionMenus: true,
+            },
+        });
+
+        assert.containsNone(list.el, 'div.o_control_panel .o_cp_action_menus');
+
+        assert.containsN(list, '.o_data_row', 4);
+
+        // select all records
+        await testUtils.dom.click(list.$('thead .o_list_record_selector input'));
+        assert.containsN(list, '.o_list_record_selector input:checked', 5);
+
+        assert.containsOnce(list.el, 'div.o_control_panel .o_cp_action_menus');
+
+        await cpHelpers.toggleActionMenu(list);
+        await cpHelpers.toggleMenuItem(list, "Custom Action");
+
+        // unselect first record (will unselect the thead checkbox as well)
+        await testUtils.dom.click(list.$('tbody .o_list_record_selector:first input'));
+        assert.containsN(list, '.o_list_record_selector input:checked', 3);
+        await cpHelpers.toggleActionMenu(list);
+        await cpHelpers.toggleMenuItem(list, "Custom Action");
+
+        // add a domain and select first two records
+        await list.reload({ domain: [['bar', '=', true]] });
+        assert.containsN(list, '.o_data_row', 3);
+        assert.containsNone(list, '.o_list_record_selector input:checked');
+
+        await testUtils.dom.click(list.$('tbody .o_list_record_selector:nth(0) input'));
+        await testUtils.dom.click(list.$('tbody .o_list_record_selector:nth(1) input'));
+        assert.containsN(list, '.o_list_record_selector input:checked', 2);
+
+        await cpHelpers.toggleActionMenu(list);
+        await cpHelpers.toggleMenuItem(list, "Custom Action");
+
+        assert.verifySteps([
+            '{"action_id":44,"context":{"active_id":1,"active_ids":[1,2,3,4],"active_model":"foo","active_domain":[]}}',
+            '{"action_id":44,"context":{"active_id":2,"active_ids":[2,3,4],"active_model":"foo","active_domain":[]}}',
+            '{"action_id":44,"context":{"active_id":1,"active_ids":[1,2],"active_model":"foo","active_domain":[["bar","=",true]]}}',
+        ]);
+
+        list.destroy();
+    });
+
+    QUnit.test('execute ActionMenus actions with correct params (multi pages)', async function (assert) {
+        assert.expect(13);
+
+        const list = await createView({
+            View: ListView,
+            model: 'foo',
+            data: this.data,
+            arch: '<tree limit="2"><field name="foo"/></tree>',
+            toolbar: {
+                action: [{
+                    id: 44,
+                    name: 'Custom Action',
+                    type: 'ir.actions.server',
+                }],
+                print: [],
+            },
+            mockRPC: function (route, args) {
+                if (route === '/web/action/load') {
+                    assert.step(JSON.stringify(args));
+                    return Promise.resolve({});
+                }
+                return this._super(...arguments);
+            },
+            viewOptions: {
+                hasActionMenus: true,
+            },
+        });
+
+        assert.containsNone(list.el, 'div.o_control_panel .o_cp_action_menus');
+        assert.containsN(list, '.o_data_row', 2);
+
+        // select all records
+        await testUtils.dom.click(list.$('thead .o_list_record_selector input'));
+        assert.containsN(list, '.o_list_record_selector input:checked', 3);
+        assert.containsOnce(list, '.o_list_selection_box .o_list_select_domain');
+        assert.containsOnce(list.el, 'div.o_control_panel .o_cp_action_menus');
+
+        await cpHelpers.toggleActionMenu(list);
+        await cpHelpers.toggleMenuItem(list, "Custom Action");
+
+        // select all domain
+        await testUtils.dom.click(list.$('.o_list_selection_box .o_list_select_domain'));
+        assert.containsN(list, '.o_list_record_selector input:checked', 3);
+
+        await cpHelpers.toggleActionMenu(list);
+        await cpHelpers.toggleMenuItem(list, "Custom Action");
+
+        // add a domain
+        await list.reload({ domain: [['bar', '=', true]] });
+        assert.containsNone(list, '.o_list_selection_box .o_list_select_domain');
+
+        // select all domain
+        await testUtils.dom.click(list.$('thead .o_list_record_selector input'));
+        await testUtils.dom.click(list.$('.o_list_selection_box .o_list_select_domain'));
+        assert.containsN(list, '.o_list_record_selector input:checked', 3);
+        assert.containsNone(list, '.o_list_selection_box .o_list_select_domain');
+
+        await cpHelpers.toggleActionMenu(list);
+        await cpHelpers.toggleMenuItem(list, "Custom Action");
+
+        assert.verifySteps([
+            '{"action_id":44,"context":{"active_id":1,"active_ids":[1,2],"active_model":"foo","active_domain":[]}}',
+            '{"action_id":44,"context":{"active_id":1,"active_ids":[1,2,3,4],"active_model":"foo","active_domain":[]}}',
+            '{"action_id":44,"context":{"active_id":1,"active_ids":[1,2,3],"active_model":"foo","active_domain":[["bar","=",true]]}}',
+        ]);
 
         list.destroy();
     });
@@ -4307,13 +4754,13 @@ QUnit.module('Views', {
         assert.hasClass(list.$('.o_data_row:first'), 'o_selected_row');
         assert.strictEqual(document.activeElement, list.$('.o_data_row:first .o_data_cell:first input')[0]);
 
-        // Press 'Tab' -> should go to next cell (still in first row)
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        // // Press 'Tab' -> should go to next cell (still in first row)
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input[name="foo"]'), 'tab');
         assert.hasClass(list.$('.o_data_row:first'), 'o_selected_row');
         assert.strictEqual(document.activeElement, list.$('.o_data_row:first .o_data_cell:last input')[0]);
 
-        // Press 'Tab' -> should go to next line (first cell)
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        // // Press 'Tab' -> should go to next line (first cell)
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input[name="int_field"]'), 'tab');
         assert.hasClass(list.$('.o_data_row:nth(1)'), 'o_selected_row');
         assert.strictEqual(document.activeElement, list.$('.o_data_row:nth(1) .o_data_cell:first input')[0]);
 
@@ -4440,13 +4887,13 @@ QUnit.module('Views', {
         // Press 'Tab' -> should go to next line
         // add a value in the cell because the Tab on an empty first cell would activate the next widget in the view
         await testUtils.fields.editInput(list.$('.o_selected_row input').eq(1), 11);
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input[name="display_name"]'), 'tab');
         assert.hasClass(list.$('.o_data_row:nth(3)'),'o_selected_row',
             "fourth row should be in edition");
 
         // Press 'Tab' -> should go back to first line as the create action isn't available
         await testUtils.fields.editInput(list.$('.o_selected_row input').eq(1), 11);
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input[name="display_name"]'), 'tab');
         assert.hasClass(list.$('.o_data_row:first'),'o_selected_row',
             "first row should be in edition");
 
@@ -4914,11 +5361,9 @@ QUnit.module('Views', {
 
         await list.update({groupBy: []});
 
-        await testUtils.dom.click(list.$('.o_data_cell:eq(0)'));
+        await testUtils.dom.clickFirst(list.$('.o_data_cell'));
 
-        await testUtils.dom.click(list.$('.o_selected_row .o_data_cell .o_field_many2one input'));
-        await testUtils.dom.triggerEvents($('.ui-autocomplete a:contains(Search More)'),
-            ['mouseenter', 'click']);
+        await testUtils.fields.many2one.searchAndClickItem('m2o', { item: 'Search More' });
 
         assert.containsOnce($('body'), '.modal-content');
 
@@ -5603,7 +6048,7 @@ QUnit.module('Views', {
     });
 
     QUnit.test('editable list view: multi edition', async function (assert) {
-        assert.expect(24);
+        assert.expect(26);
 
         var list = await createView({
             View: ListView,
@@ -5657,6 +6102,8 @@ QUnit.module('Views', {
         await testUtils.dom.click(list.$('.o_data_row:eq(0) .o_data_cell:eq(0)'));
         assert.containsOnce(document.body, '.modal', "modal appears when switching cells");
         await testUtils.dom.click($('.modal .btn:contains(Cancel)'));
+        assert.containsN(list, '.o_list_record_selector input:checked', 2,
+            "Selection should remain unchanged");
         assert.strictEqual(list.$('.o_data_row:eq(0) .o_data_cell').text(), 'yop10',
             "changes have been discarded and row is back to readonly");
         assert.strictEqual(document.activeElement, list.$('.o_data_row:eq(0) .o_data_cell:eq(1)')[0],
@@ -5667,6 +6114,7 @@ QUnit.module('Views', {
         assert.ok($('.modal').text().includes('those 2 records'), "the number of records should be correctly displayed");
         await testUtils.dom.click($('.modal .btn-primary'));
         assert.containsNone(list, '.o_data_cell input.o_field_widget', "no field should be editable anymore");
+        assert.containsNone(list, '.o_list_record_selector input:checked', "no record should be selected anymore");
         assert.verifySteps(['write', 'read']);
         assert.strictEqual(list.$('.o_data_row:eq(0) .o_data_cell').text(), "yop666",
             "the first row should be updated");
@@ -5734,18 +6182,16 @@ QUnit.module('Views', {
         await testUtils.dom.click(list.$('.o_data_row:eq(0) .o_list_record_selector input'));
         await testUtils.dom.click(list.$('.o_data_row:eq(0) .o_data_cell:eq(0)'));
         await testUtils.fields.editInput(list.$('.o_field_widget[name=foo]'), 'hi');
-        await testUtils.dom.click(list.$('.o_data_row:eq(0) .o_data_cell:eq(1)'));
 
-        assert.containsOnce(document.body, '.modal'); // save dialog
-        await testUtils.dom.click($('.modal .btn-primary'));
-
+        assert.containsNone(document.body, '.modal');
         assert.strictEqual(list.$('.o_data_row:eq(0) .o_data_cell').text(), "hi2");
         assert.strictEqual(list.$('.o_data_row:eq(1) .o_data_cell').text(), "blip9");
 
         assert.verifySteps(['write', 'read']);
 
         // select the second record (the first one is still selected)
-        assert.ok(list.$('.o_data_row:eq(0) .o_list_record_selector input').is(':checked'));
+        assert.containsNone(list, '.o_list_record_selector input:checked');
+        await testUtils.dom.click(list.$('.o_data_row:eq(0) .o_list_record_selector input'));
         await testUtils.dom.click(list.$('.o_data_row:eq(1) .o_list_record_selector input'));
 
         // edit foo, first row
@@ -5967,6 +6413,33 @@ QUnit.module('Views', {
         list.destroy();
     });
 
+    QUnit.test('editable list view: multi edition when the domain is selected', async function (assert) {
+        assert.expect(1);
+
+        const list = await createView({
+            View: ListView,
+            model: 'foo',
+            data: this.data,
+            arch: `
+                <tree multi_edit="1" limit="2">
+                    <field name="id"/>
+                    <field name="int_field"/>
+                </tree>`,
+        });
+
+        // select all records, and then select all domain
+        await testUtils.dom.click(list.$('th.o_list_record_selector input'));
+        await testUtils.dom.click(list.$('.o_list_selection_box .o_list_select_domain'));
+
+        // edit a field
+        await testUtils.dom.click(list.$('.o_data_row:eq(0) .o_data_cell:eq(1)'));
+        await testUtils.fields.editInput(list.$('.o_field_widget[name=int_field]'), 666);
+
+        assert.ok($('.modal-body').text().includes('This update will only consider the records of the current page.'));
+
+        list.destroy();
+    });
+
     QUnit.test('editable list view: many2one with readonly modifier', async function (assert) {
         assert.expect(2);
 
@@ -6059,7 +6532,7 @@ QUnit.module('Views', {
             "the second row should be selected");
 
         // Keyboard navigation only interracts with selected elements
-        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row input.o_field_widget'), 'enter');
+        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row input.o_field_widget[name="int_field"]'), 'enter');
         assert.hasClass(list.$('.o_data_row:eq(3)'), 'o_selected_row',
             "the fourth row should be selected");
 
@@ -6173,7 +6646,7 @@ QUnit.module('Views', {
         list.destroy();
     });
 
-    QUnit.test('editable readonly list view: single edition behaves like a multi-edition', async function (assert) {
+    QUnit.test('editable readonly list view: single edition does not behave like a multi-edition', async function (assert) {
         assert.expect(3);
 
         const list = await createView({
@@ -6193,17 +6666,14 @@ QUnit.module('Views', {
         await testUtils.dom.click(list.$('.o_data_row:eq(0) .o_data_cell:eq(0)'));
         await testUtils.fields.editInput(list.$('.o_field_widget[name=foo]'), "");
 
-        assert.containsOnce($('body'),'.modal', "should have a modal");
+        assert.containsOnce($('body'),'.modal', "should have a modal (invalid fields)");
         await testUtils.dom.click($('.modal button.btn'));
 
         // edit a field
         await testUtils.dom.click(list.$('.o_data_row:eq(0) .o_data_cell:eq(0)'));
         await testUtils.fields.editInput(list.$('.o_field_widget[name=foo]'), "bar");
 
-        assert.containsOnce($('body'),'.modal', "should have a modal");
-        await testUtils.dom.click($('.modal button.btn.btn-primary'));
-
-
+        assert.containsNone($('body'),'.modal', "should not have a modal");
         assert.strictEqual(list.$('.o_data_row:eq(0) .o_data_cell').text(), "bar",
             "the first row should be updated");
 
@@ -6352,6 +6822,42 @@ QUnit.module('Views', {
         list.destroy();
     });
 
+    QUnit.test('editable list with fields with readonly modifier', async function (assert) {
+        assert.expect(8);
+
+        const list = await createView({
+            View: ListView,
+            model: 'foo',
+            data: this.data,
+            arch: `
+                <tree editable="top">
+                    <field name="bar"/>
+                    <field name="foo" attrs="{'readonly': [['bar','=',True]]}"/>
+                    <field name="m2o" attrs="{'readonly': [['bar','=',False]]}"/>
+                    <field name="int_field"/>
+                </tree>`,
+        });
+
+        await testUtils.dom.click(list.$('.o_list_button_add'));
+
+        assert.containsOnce(list, '.o_selected_row');
+        assert.notOk(list.$('.o_selected_row .o_field_boolean input').is(':checked'));
+        assert.doesNotHaveClass(list.$('.o_selected_row .o_list_char'), 'o_readonly_modifier');
+        assert.hasClass(list.$('.o_selected_row .o_list_many2one'), 'o_readonly_modifier');
+
+        await testUtils.dom.click(list.$('.o_selected_row .o_field_boolean input'));
+
+        assert.ok(list.$('.o_selected_row .o_field_boolean input').is(':checked'));
+        assert.hasClass(list.$('.o_selected_row .o_list_char'), 'o_readonly_modifier');
+        assert.doesNotHaveClass(list.$('.o_selected_row .o_list_many2one'), 'o_readonly_modifier');
+
+        await testUtils.dom.click(list.$('.o_selected_row .o_field_many2one input'));
+
+        assert.strictEqual(document.activeElement, list.$('.o_selected_row .o_field_many2one input')[0]);
+
+        list.destroy();
+    });
+
     QUnit.test('list grouped by date:month', async function (assert) {
         assert.expect(1);
 
@@ -6475,7 +6981,7 @@ QUnit.module('Views', {
     });
 
     QUnit.test('use the limit attribute in arch', async function (assert) {
-        assert.expect(3);
+        assert.expect(4);
 
         var list = await createView({
             View: ListView,
@@ -6489,8 +6995,9 @@ QUnit.module('Views', {
             },
         });
 
-        assert.strictEqual(list.pager.$el.text().trim(), '1-2 / 4',
-            "pager should be correct");
+
+        assert.strictEqual(cpHelpers.getPagerValue(list), '1-2');
+        assert.strictEqual(cpHelpers.getPagerSize(list), '4');
 
         assert.containsN(list, '.o_data_row', 2,
             'should display 2 data rows');
@@ -6623,7 +7130,7 @@ QUnit.module('Views', {
                 return this._super.apply(this, arguments);
             },
             viewOptions: {
-                hasSidebar: true,
+                hasActionMenus: true,
             },
         });
         core.bus.on('clear_cache', list, assert.step.bind(assert, 'clear_cache'));
@@ -6640,8 +7147,8 @@ QUnit.module('Views', {
 
         // delete a record
         await testUtils.dom.click(list.$('.o_data_row:first .o_list_record_selector input'));
-        await testUtils.dom.click(list.sidebar.$('.o_dropdown_toggler_btn:contains(Action)'));
-        await testUtils.dom.click(list.sidebar.$('a:contains(Delete)'));
+        await cpHelpers.toggleActionMenu(list);
+        await cpHelpers.toggleMenuItem(list, "Delete");
         await testUtils.dom.click($('.modal-footer .btn-primary'));
 
         assert.verifySteps([
@@ -6678,23 +7185,21 @@ QUnit.module('Views', {
             },
         });
 
+
         // switch pages (should ask to scroll)
-        await testUtils.dom.click(list.pager.$('.o_pager_next'));
-        await testUtils.dom.click(list.pager.$('.o_pager_previous'));
+        await cpHelpers.pagerNext(list);
+        await cpHelpers.pagerPrevious(list);
         assert.verifySteps(['scroll', 'scroll'],
             "should ask to scroll when switching pages");
 
         // change the limit (should not ask to scroll)
-        await testUtils.dom.click(list.pager.$('.o_pager_value'));
-        await testUtils.fields.editAndTrigger(list.pager.$('.o_pager_value input'),
-            '1-2', ['blur']);
-        assert.strictEqual(list.pager.$('.o_pager_value').text(), '1-2',
-            "should have changed the limit");
-
+        await cpHelpers.setPagerValue(list, '1-2');
+        await testUtils.nextTick();
+        assert.strictEqual(cpHelpers.getPagerValue(list), '1-2');
         assert.verifySteps([], "should not ask to scroll when changing the limit");
 
         // switch pages again (should still ask to scroll)
-        await testUtils.dom.click(list.pager.$('.o_pager_next'));
+        await cpHelpers.pagerNext(list);
 
         assert.verifySteps(['scroll'], "this is still working after a limit change");
 
@@ -6877,9 +7382,9 @@ QUnit.module('Views', {
 
         assert.containsN(list, '.o_group_header', 3); // page 1
         assert.containsNone(list, '.o_data_row');
-        assert.containsOnce(list, '.o_pager_counter'); // has a pager
+        assert.containsOnce(list, '.o_pager'); // has a pager
 
-        await testUtils.dom.click(list.$('.o_pager_next')); // switch to page 2
+        await cpHelpers.pagerNext(list); // switch to page 2
 
         assert.containsN(list, '.o_group_header', 1); // page 2
         assert.containsNone(list, '.o_data_row');
@@ -6968,9 +7473,9 @@ QUnit.module('Views', {
 
         assert.containsN(list, '.o_group_header', 10); // page 1
         assert.containsN(list, '.o_data_row', 11); // one group contains two records
-        assert.containsOnce(list, '.o_pager_counter'); // has a pager
+        assert.containsOnce(list, '.o_pager'); // has a pager
 
-        await testUtils.dom.click(list.$('.o_pager_next')); // switch to page 2
+        await cpHelpers.pagerNext(list); // switch to page 2
 
         assert.containsN(list, '.o_group_header', 7); // page 2
         assert.containsN(list, '.o_data_row', 7);
@@ -7026,8 +7531,13 @@ QUnit.module('Views', {
         assert.containsN(actionManager, '.o_group_header', 1); // page 2
 
         // toggle a filter -> there should be only one group left (on page 1)
+<<<<<<< HEAD
         await testUtils.dom.click(actionManager.$('.o_control_panel .o_search_options .o_filters_menu_button'));
         await testUtils.dom.click(actionManager.$('.o_control_panel .o_search_options .o_filters_menu .o_menu_item:first'));
+=======
+        await cpHelpers.toggleFilterMenu(actionManager);
+        await cpHelpers.toggleMenuItem(actionManager, 0);
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
         assert.strictEqual(actionManager.$('.o_pager_counter').text().trim(), '1-1 / 1');
         assert.containsN(actionManager, '.o_group_header', 1); // page 1
@@ -7296,19 +7806,19 @@ QUnit.module('Views', {
         assert.hasClass(list.$('.o_data_row:first'), 'o_selected_row');
 
         // Press 'Tab' -> should go to next line (still in first group)
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
         assert.hasClass(list.$('.o_data_row:nth(1)'), 'o_selected_row');
 
         // Press 'Tab' -> should go to next line (still in first group)
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
         assert.hasClass(list.$('.o_data_row:nth(2)'), 'o_selected_row');
 
         // Press 'Tab' -> should go to first line of next group
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
         assert.hasClass(list.$('.o_data_row:nth(3)'), 'o_selected_row');
 
         // Press 'Tab' -> should go back to first line of first group
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
         assert.hasClass(list.$('.o_data_row:first'), 'o_selected_row');
 
         list.destroy();
@@ -7336,19 +7846,19 @@ QUnit.module('Views', {
         assert.hasClass(list.$('.o_data_row:first'), 'o_selected_row');
 
         // Press 'Tab' -> should go to next line (still in first group)
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
         assert.hasClass(list.$('.o_data_row:nth(1)'), 'o_selected_row');
 
         // Press 'Tab' -> should go to next line (still in first group)
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
         assert.hasClass(list.$('.o_data_row:nth(2)'), 'o_selected_row');
 
         // Press 'Tab' -> should go to first line of next group
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
         assert.hasClass(list.$('.o_data_row:nth(3)'), 'o_selected_row');
 
         // Press 'Tab' -> should go back to first line of first group
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
         assert.hasClass(list.$('.o_data_row:first'), 'o_selected_row');
 
         list.destroy();
@@ -7376,19 +7886,19 @@ QUnit.module('Views', {
         assert.hasClass(list.$('.o_data_row:first'), 'o_selected_row');
 
         // Press 'Tab' -> should go to next line (still in first group)
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
         assert.hasClass(list.$('.o_data_row:nth(1)'), 'o_selected_row');
 
         // Press 'Tab' -> should go to next line (still in first group)
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
         assert.hasClass(list.$('.o_data_row:nth(2)'), 'o_selected_row');
 
         // Press 'Tab' -> should go to first line of next group
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
         assert.hasClass(list.$('.o_data_row:nth(3)'), 'o_selected_row');
 
         // Press 'Tab' -> should go back to first line of first group
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
         assert.hasClass(list.$('.o_data_row:first'), 'o_selected_row');
 
         list.destroy();
@@ -7532,20 +8042,20 @@ QUnit.module('Views', {
         await testUtils.fields.editInput(list.$('.o_selected_row input[name="foo"]'), 'new value');
 
         // Press 'Tab' -> should create a new record as we edited the previous one
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
         assert.containsN(list, '.o_data_row', 5);
         assert.hasClass(list.$('.o_data_row:nth(3)'), 'o_selected_row');
 
         // fill foo field for the new record and press 'tab' -> should create another record
         await testUtils.fields.editInput(list.$('.o_selected_row input[name="foo"]'), 'new record');
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
 
         assert.containsN(list, '.o_data_row', 6);
         assert.hasClass(list.$('.o_data_row:nth(4)'), 'o_selected_row');
 
         // leave this new row empty and press tab -> should discard the new record and move to the
         // next group
-        await testUtils.fields.triggerKeydown(list.$('.o_selected_row input'), 'tab');
+        await testUtils.fields.triggerKeydown(list.$('.o_selected_row .o_input'), 'tab');
         assert.containsN(list, '.o_data_row', 5);
         assert.hasClass(list.$('.o_data_row:nth(4)'), 'o_selected_row');
 
@@ -7619,13 +8129,13 @@ QUnit.module('Views', {
         assert.hasClass(list.$('tr.o_data_row:eq(1)'), 'o_selected_row');
 
         // press enter in input should move to next record
-        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row input'), 'enter');
+        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row .o_input'), 'enter');
 
         assert.hasClass(list.$('tr.o_data_row:eq(2)'), 'o_selected_row');
         assert.doesNotHaveClass(list.$('tr.o_data_row:eq(1)'), 'o_selected_row');
 
         // press enter on last row should create a new record
-        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row input'), 'enter');
+        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row .o_input'), 'enter');
 
         assert.containsN(list, 'tr.o_data_row', 5);
         assert.hasClass(list.$('tr.o_data_row:eq(3)'), 'o_selected_row');
@@ -7662,13 +8172,13 @@ QUnit.module('Views', {
         assert.hasClass(list.$('tr.o_data_row:eq(1)'), 'o_selected_row');
 
         // press enter in input should move to next record
-        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row input'), 'enter');
+        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row .o_input'), 'enter');
 
         assert.hasClass(list.$('tr.o_data_row:eq(2)'), 'o_selected_row');
         assert.doesNotHaveClass(list.$('tr.o_data_row:eq(1)'), 'o_selected_row');
 
         // press enter on last row should move to first record of next group
-        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row input'), 'enter');
+        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row .o_input'), 'enter');
 
         assert.hasClass(list.$('tr.o_data_row:eq(3)'), 'o_selected_row');
         assert.doesNotHaveClass(list.$('tr.o_data_row:eq(2)'), 'o_selected_row');
@@ -7704,13 +8214,13 @@ QUnit.module('Views', {
         assert.hasClass(list.$('tr.o_data_row:eq(1)'), 'o_selected_row');
 
         // press enter in input should move to next record
-        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row input'), 'enter');
+        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row .o_input'), 'enter');
 
         assert.hasClass(list.$('tr.o_data_row:eq(2)'), 'o_selected_row');
         assert.doesNotHaveClass(list.$('tr.o_data_row:eq(1)'), 'o_selected_row');
 
         // press enter on last row should move to first record of next group
-        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row input'), 'enter');
+        await testUtils.fields.triggerKeydown(list.$('tr.o_selected_row .o_input'), 'enter');
 
         assert.hasClass(list.$('tr.o_data_row:eq(3)'), 'o_selected_row');
         assert.doesNotHaveClass(list.$('tr.o_data_row:eq(2)'), 'o_selected_row');
@@ -8403,6 +8913,55 @@ QUnit.module('Views', {
 
         await testUtils.dom.click(list.$('table .o_optional_columns_dropdown_toggle'));
         assert.ok(list.$('div.o_optional_columns div.dropdown-item [name="m2o"]').is(":checked"));
+
+        list.destroy();
+    });
+
+    QUnit.test('selection is kept when optional fields are toggled', async function (assert) {
+        assert.expect(7);
+
+        var RamStorageService = AbstractStorageService.extend({
+            storage: new RamStorage(),
+        });
+
+        var list = await createView({
+            View: ListView,
+            model: 'foo',
+            data: this.data,
+            arch: '<tree>' +
+                    '<field name="foo"/>' +
+                    '<field name="m2o" optional="hide"/>' +
+                '</tree>',
+            services: {
+                local_storage: RamStorageService,
+            },
+        });
+
+        assert.containsN(list, 'th', 2);
+
+        // select a record
+        await testUtils.dom.click(list.$('.o_data_row .o_list_record_selector input:first'));
+
+        assert.containsOnce(list, '.o_list_record_selector input:checked');
+
+        // add an optional field
+        await testUtils.dom.click(list.$('table .o_optional_columns_dropdown_toggle'));
+        await testUtils.dom.click(list.$('div.o_optional_columns div.dropdown-item:first input'));
+        assert.containsN(list, 'th', 3);
+
+        assert.containsOnce(list, '.o_list_record_selector input:checked');
+
+        // select all records
+        await testUtils.dom.click(list.$('thead .o_list_record_selector input'));
+
+        assert.containsN(list, '.o_list_record_selector input:checked', 5);
+
+        // remove an optional field
+        await testUtils.dom.click(list.$('table .o_optional_columns_dropdown_toggle'));
+        await testUtils.dom.click(list.$('div.o_optional_columns div.dropdown-item:first input'));
+        assert.containsN(list, 'th', 2);
+
+        assert.containsN(list, '.o_list_record_selector input:checked', 5);
 
         list.destroy();
     });

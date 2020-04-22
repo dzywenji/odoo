@@ -32,7 +32,7 @@ class Pricelist(models.Model):
     discount_policy = fields.Selection([
         ('with_discount', 'Discount included in the price'),
         ('without_discount', 'Show public price & discount to the customer')],
-        default='with_discount')
+        default='with_discount', required=True)
 
     def name_get(self):
         return [(pricelist.id, '%s (%s)' % (pricelist.name, pricelist.currency_id.name)) for pricelist in self]
@@ -131,8 +131,7 @@ class Pricelist(models.Model):
         """
         self.ensure_one()
         if not date:
-            date = self._context.get('date') or fields.Date.today()
-        date = fields.Date.to_date(date)  # boundary conditions differ if we have a datetime
+            date = self._context.get('date') or fields.Datetime.now()
         if not uom_id and self._context.get('uom'):
             uom_id = self._context['uom']
         if uom_id:
@@ -336,7 +335,11 @@ class Pricelist(models.Model):
         Partner = self.env['res.partner'].with_context(active_test=False)
         company_id = company_id or self.env.company.id
 
+<<<<<<< HEAD
         Property = self.env['ir.property'].with_context(force_company=company_id)
+=======
+        Property = self.env['ir.property'].with_company(company_id)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
         Pricelist = self.env['product.pricelist']
         pl_domain = self._get_partner_pricelist_multi_search_domain_hook(company_id)
 
@@ -402,8 +405,8 @@ class PricelistItem(models.Model):
     categ_id = fields.Many2one(
         'product.category', 'Product Category', ondelete='cascade',
         help="Specify a product category if this rule only applies to products belonging to this category or its children categories. Keep empty otherwise.")
-    min_quantity = fields.Integer(
-        'Min. Quantity', default=0,
+    min_quantity = fields.Float(
+        'Min. Quantity', default=0, digits="Product Unit Of Measure",
         help="For the rule to apply, bought/sold quantity must be greater "
              "than or equal to the minimum quantity specified in this field.\n"
              "Expressed in the default unit of measure of the product.")
@@ -448,8 +451,10 @@ class PricelistItem(models.Model):
         readonly=True, related='pricelist_id.currency_id', store=True)
     active = fields.Boolean(
         readonly=True, related="pricelist_id.active", store=True)
-    date_start = fields.Date('Start Date', help="Starting date for the pricelist item validation")
-    date_end = fields.Date('End Date', help="Ending valid for the pricelist item validation")
+    date_start = fields.Datetime('Start Date', help="Starting datetime for the pricelist item validation\n"
+                                                "The displayed value depends on the timezone set in your preferences.")
+    date_end = fields.Datetime('End Date', help="Ending datetime for the pricelist item validation\n"
+                                                "The displayed value depends on the timezone set in your preferences.")
     compute_price = fields.Selection([
         ('fixed', 'Fixed Price'),
         ('percentage', 'Percentage (discount)'),

@@ -119,7 +119,10 @@ ActionManager.include({
             return this.doAction(action, options);
         }
         return _super.apply(this, arguments);
+<<<<<<< HEAD
 
+=======
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     },
 
     //--------------------------------------------------------------------------
@@ -547,6 +550,7 @@ ActionManager.include({
                     return Promise.resolve(controller.widget.willRestore()).then(function () {
                         viewOptions = _.extend({}, viewOptions, {
                             breadcrumbs: self._getBreadcrumbs(self.controllerStack.slice(0, index)),
+                            shouldUpdateControlPanel: true,
                         });
                         return controller.widget.reload(viewOptions).then(function () {
                             return controller;
@@ -709,15 +713,15 @@ ActionManager.include({
      */
     _onSwitchView: function (ev) {
         ev.stopPropagation();
-        var viewType = ev.data.view_type;
-        var currentController = this.getCurrentController();
+        const viewType = ev.data.view_type;
+        const currentController = this.getCurrentController();
         if (currentController.jsID === ev.data.controllerID) {
             // only switch to the requested view if the controller that
             // triggered the request is the current controller
-            var action = this.actions[currentController.actionID];
-            var currentControllerState = currentController.widget.exportState();
+            const action = this.actions[currentController.actionID];
+            const currentControllerState = currentController.widget.exportState();
             action.controllerState = _.extend({}, action.controllerState, currentControllerState);
-            var options = {
+            const options = {
                 controllerState: action.controllerState,
                 currentId: ev.data.res_id,
             };

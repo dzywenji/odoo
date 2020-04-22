@@ -3,18 +3,18 @@
 
 import time
 
-from odoo.addons.account.tests.account_test_classes import AccountingTestCase
+from odoo.addons.account.tests.common import AccountTestCommon
 from odoo.exceptions import ValidationError
 from odoo.tests import tagged
 
 
 @tagged('post_install', '-at_install')
-class ISRTest(AccountingTestCase):
+class ISRTest(AccountTestCommon):
 
     def create_invoice(self, currency_to_use='base.CHF'):
         """ Generates a test invoice """
-        invoice = self.env['account.move'].with_context(default_type='out_invoice').create({
-            'type': 'out_invoice',
+        invoice = self.env['account.move'].with_context(default_move_type='out_invoice').create({
+            'move_type': 'out_invoice',
             'partner_id': self.env.ref("base.res_partner_2").id,
             'currency_id': self.env.ref(currency_to_use).id,
             'invoice_date': time.strftime('%Y') + '-12-22',

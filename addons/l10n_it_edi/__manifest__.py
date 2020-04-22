@@ -4,12 +4,15 @@
 {
     'name': 'Italy - E-invoicing',
     'version': '0.3',
-    'depends': ['l10n_it'],
+    'depends': [
+        'l10n_it',
+        'fetchmail',
+    ],
     'author': 'Odoo',
     'description': """
 E-invoice implementation
     """,
-    'category': 'Localization',
+    'category': 'Accounting/Localizations',
     'website': 'http://www.odoo.com/',
     'data': [
         'security/ir.model.access.csv',

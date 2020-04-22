@@ -29,4 +29,8 @@ Getting started with Odoo
 For a standard installation please follow the <a href="https://www.odoo.com/documentation/13.0/setup/install.html">Setup instructions</a>
 from the documentation.
 
+<<<<<<< HEAD
 To learn the software, we recommend the <a href="https://www.odoo.com/slides">Odoo eLearning</a>, or <a href="https://www.odoo.com/page/scale-up-business-game">Scale-up</a>, the <a href="https://www.odoo.com/page/scale-up-business-game">business game</a>. Developers can start with <a href="https://www.odoo.com/documentation/13.0/tutorials.html">the developer tutorials</a>
+=======
+To learn the software, we recommend the <a href="https://www.odoo.com/slides">Odoo eLearning</a>, or <a href="https://www.odoo.com/page/scale-up-business-game">Scale-up</a>, the <a href="https://www.odoo.com/page/scale-up-business-game">business game</a>. Developers can start with <a href="https://www.odoo.com/documentation/master/tutorials.html">the developer tutorials</a>
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8

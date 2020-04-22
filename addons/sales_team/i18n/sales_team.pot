@@ -4,10 +4,15 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Odoo Server 13.0\n"
+"Project-Id-Version: Odoo Server saas~13.2\n"
 "Report-Msgid-Bugs-To: \n"
+<<<<<<< HEAD
 "POT-Creation-Date: 2019-12-05 12:33+0000\n"
 "PO-Revision-Date: 2019-12-05 12:33+0000\n"
+=======
+"POT-Creation-Date: 2020-02-13 08:34+0000\n"
+"PO-Revision-Date: 2020-02-13 08:34+0000\n"
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 "Last-Translator: \n"
 "Language-Team: \n"
 "MIME-Version: 1.0\n"
@@ -60,11 +65,6 @@ msgstr ""
 #. module: sales_team
 #: model:res.groups,name:sales_team.group_sale_manager
 msgid "Administrator"
-msgstr ""
-
-#. module: sales_team
-#: model:crm.team,name:sales_team.crm_team_1
-msgid "America"
 msgstr ""
 
 #. module: sales_team
@@ -155,11 +155,6 @@ msgstr ""
 #. module: sales_team
 #: model:ir.model.fields,field_description:sales_team.field_crm_team__display_name
 msgid "Display Name"
-msgstr ""
-
-#. module: sales_team
-#: model:crm.team,name:sales_team.team_sales_department
-msgid "Europe"
 msgstr ""
 
 #. module: sales_team
@@ -294,6 +289,11 @@ msgstr ""
 #. module: sales_team
 #: model:crm.team,name:sales_team.pos_sales_team
 msgid "Point of Sale"
+msgstr ""
+
+#. module: sales_team
+#: model:crm.team,name:sales_team.team_sales_department
+msgid "Sales"
 msgstr ""
 
 #. module: sales_team

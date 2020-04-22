@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 India, 2019-11-08
+=======
+India, 2019-09-10
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
 I hereby agree to the terms of the Odoo Individual Contributor License
 Agreement v1.0.

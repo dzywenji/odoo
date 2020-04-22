@@ -30,7 +30,7 @@ class ProductPricelist(models.Model):
         domain = [('company_id', '=', company_id)]
         return self.env['website'].search(domain, limit=1)
 
-    website_id = fields.Many2one('website', string="Website", ondelete='restrict', default=_default_website)
+    website_id = fields.Many2one('website', string="Website", ondelete='restrict', default=_default_website, domain="[('company_id', '=?', company_id)]")
     code = fields.Char(string='E-commerce Promotional Code', groups="base.group_user")
     selectable = fields.Boolean(help="Allow the end user to choose this price list")
 
@@ -119,12 +119,6 @@ class ProductPricelist(models.Model):
             company_id = website.company_id.id
         return super(ProductPricelist, self)._get_partner_pricelist_multi(partner_ids, company_id)
 
-    @api.onchange('company_id')
-    def _onchange_company_id(self):
-        ''' Show only the company's website '''
-        domain = self.company_id and [('company_id', '=', self.company_id.id)] or []
-        return {'domain': {'website_id': domain}}
-
     @api.constrains('company_id', 'website_id')
     def _check_websites_in_company(self):
         '''Prevent misconfiguration multi-website/multi-companies.
@@ -141,15 +135,21 @@ class ProductPublicCategory(models.Model):
     _inherit = ["website.seo.metadata", "website.multi.mixin", 'image.mixin']
     _description = "Website Product Category"
     _parent_store = True
-    _order = "sequence, name"
+    _order = "sequence, name, id"
+
+    def _default_sequence(self):
+        cat = self.search([], limit=1, order="sequence DESC")
+        if cat:
+            return cat.sequence + 5
+        return 10000
 
     name = fields.Char(required=True, translate=True)
-    parent_id = fields.Many2one('product.public.category', string='Parent Category', index=True)
+    parent_id = fields.Many2one('product.public.category', string='Parent Category', index=True, ondelete="cascade")
     parent_path = fields.Char(index=True)
     child_id = fields.One2many('product.public.category', 'parent_id', string='Children Categories')
     parents_and_self = fields.Many2many('product.public.category', compute='_compute_parents_and_self')
-    sequence = fields.Integer(help="Gives the sequence order when displaying a list of product categories.", index=True)
-    website_description = fields.Html('Category Description', sanitize_attributes=False, translate=html_translate)
+    sequence = fields.Integer(help="Gives the sequence order when displaying a list of product categories.", index=True, default=_default_sequence)
+    website_description = fields.Html('Category Description', sanitize_attributes=False, translate=html_translate, sanitize_form=False)
     product_tmpl_ids = fields.Many2many('product.template', relation='product_public_category_product_template_rel')
 
     @api.constrains('parent_id')
@@ -181,7 +181,11 @@ class ProductTemplate(models.Model):
     _mail_post_access = 'read'
     _check_company_auto = True
 
+<<<<<<< HEAD
     website_description = fields.Html('Description for the website', sanitize_attributes=False, translate=html_translate)
+=======
+    website_description = fields.Html('Description for the website', sanitize_attributes=False, translate=html_translate, sanitize_form=False)
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
     alternative_product_ids = fields.Many2many(
         'product.template', 'product_alternative_rel', 'src_id', 'dest_id', check_company=True,
         string='Alternative Products', help='Suggest alternatives to your customer (upsell strategy). '
@@ -285,8 +289,9 @@ class ProductTemplate(models.Model):
             company_id = current_website.company_id
             product = self.env['product.product'].browse(combination_info['product_id']) or self
 
-            tax_display = self.env.user.has_group('account.group_show_line_subtotals_tax_excluded') and 'total_excluded' or 'total_included'
-            taxes = partner.property_account_position_id.map_tax(product.sudo().taxes_id.filtered(lambda x: x.company_id == company_id), product, partner)
+            tax_display = self.user_has_groups('account.group_show_line_subtotals_tax_excluded') and 'total_excluded' or 'total_included'
+            fpos = self.env['account.fiscal.position'].get_fiscal_position(partner.id)
+            taxes = fpos.map_tax(product.sudo().taxes_id.filtered(lambda x: x.company_id == company_id), product, partner)
 
             # The list_price is always the price of one.
             quantity_1 = 1
@@ -385,7 +390,7 @@ class ProductTemplate(models.Model):
     def _rating_domain(self):
         """ Only take the published rating into account to compute avg and count """
         domain = super(ProductTemplate, self)._rating_domain()
-        return expression.AND([domain, [('website_published', '=', True)]])
+        return expression.AND([domain, [('is_internal', '=', False)]])
 
     def _get_images(self):
         """Return a list of records implementing `image.mixin` to

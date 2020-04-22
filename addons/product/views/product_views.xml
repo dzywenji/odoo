@@ -82,7 +82,6 @@
                         </page>
                         <page string="Sales" attrs="{'invisible':[('sale_ok','=',False)]}" name="sales" invisible="1">
                             <group name="sale">
-                                <group name="email_template_and_project" invisible="1"/>
                             </group>
                             <group string="Sales Description" name="description">
                                 <field name="description_sale" nolabel="1" placeholder="This note is added to sales orders and invoices."/>
@@ -305,7 +304,7 @@
                     <field name="product_template_attribute_value_ids" widget="many2many_tags" groups="product.group_product_variant" readonly="1"/>
                     <field name="company_id" groups="base.group_multi_company" optional="hide" readonly="1"/>
                     <field name="lst_price" optional="show" string="Sales Price"/>
-                    <field name="standard_price" optional="show" readonly="1"/>
+                    <field name="standard_price" optional="show"/>
                     <field name="categ_id" optional="hide"/>
                     <field name="type" optional="hide" readonly="1"/>
                     <field name="price" invisible="not context.get('pricelist',False)"/>
@@ -496,7 +495,7 @@
                     <field name="name" string="Packaging"/>
                     <field name="qty"/>
                     <field name="product_uom_id" options="{'no_open': True, 'no_create': True}" groups="uom.group_uom"/>
-                    <field name="company_id" group="base.group_multi_company"/>
+                    <field name="company_id" groups="base.group_multi_company"/>
                 </tree>
             </field>
         </record>
@@ -534,7 +533,7 @@
                                     <field name="product_uom_id" options="{'no_open': True, 'no_create': True}" groups="uom.group_uom"/>
                                 </div>
                                 <field name="barcode"/>
-                                <field name="company_id" group="base.group_multi_company"/>
+                                <field name="company_id" groups="base.group_multi_company"/>
                             </group>
                         </group>
                     </sheet>
@@ -567,36 +566,36 @@
             <field name="model">product.supplierinfo</field>
             <field name="arch" type="xml">
                 <form string="Vendor Information">
-                    <group>
-                        <group name="vendor" string="Vendor">
-                            <field name="product_variant_count" invisible="1"/>
-                            <field name="name" context="{'res_partner_search_mode': 'supplier'}"/>
-                            <field name="product_name"/>
-                            <field name="product_code"/>
-                            <field name="product_id" groups="product.group_product_variant" domain="[('product_tmpl_id', '=', product_tmpl_id)]" options="{'no_create_edit': True}"/>
-                            <label for="delay"/>
-                            <div>
-                                <field name="delay" class="oe_inline"/> days
-                            </div>
+                    <sheet>
+                        <group>
+                            <group name="vendor" string="Vendor">
+                                <field name="product_variant_count" invisible="1"/>
+                                <field name="name" context="{'res_partner_search_mode': 'supplier'}"/>
+                                <field name="product_name"/>
+                                <field name="product_code"/>
+                                <label for="delay"/>
+                                <div>
+                                    <field name="delay" class="oe_inline"/> days
+                                </div>
+                            </group>
+                            <group string="Pricelist">
+                                <field name="product_tmpl_id" string="Product" invisible="context.get('visible_product_tmpl_id', True)"/>
+                                <field name="product_id" groups="product.group_product_variant" domain="[('product_tmpl_id', '=', product_tmpl_id)]" options="{'no_create_edit': True}"/>
+                                <label for="min_qty"/>
+                                <div class="o_row">
+                                    <field name="min_qty"/>
+                                    <field name="product_uom" groups="uom.group_uom"/>
+                                </div>
+                                <label for="price" string="Unit Price"/>
+                                <div class="o_row">
+                                    <field name="price"/><field name="currency_id" groups="base.group_multi_currency"/>
+                                </div>
+                                <label for="date_start" string="Validity"/>
+                                <div class="o_row"><field name="date_start"/> to <field name="date_end"/></div>
+                                <field name="company_id" options="{'no_create': True}"/>
+                            </group>
                         </group>
-                        <group string="Price List">
-                            <field name="product_tmpl_id" string="Product" invisible="context.get('visible_product_tmpl_id', True)"/>
-                            <label for="min_qty"/>
-                            <div class="o_row">
-                                <field name="min_qty"/>
-                                <field name="product_uom" groups="uom.group_uom"/>
-                            </div>
-                            <label for="price"/>
-                            <div class="o_row">
-                                <field name="price"/><field name="currency_id" groups="base.group_multi_currency"/>
-                            </div>
-                            <label for="date_start" string="Validity"/>
-                            <div class="o_row"><field name="date_start"/> to <field name="date_end"/></div>
-                        </group>
-                        <group string="Other Information" groups="base.group_multi_company">
-                            <field name="company_id" options="{'no_create': True}"/>
-                        </group>
-                    </group>
+                    </sheet>
                 </form>
             </field>
         </record>
@@ -671,6 +670,7 @@
                     <field name="min_qty"/>
                     <field name="product_uom" groups="uom.group_uom"/>
                     <field name="price" string="Price"/>
+                    <field name="delay" optional="hide"/>
                 </tree>
             </field>
         </record>
@@ -681,6 +681,24 @@
         <field name="res_model">product.supplierinfo</field>
         <field name="view_mode">tree,form,kanban</field>
         <field name="context">{'visible_product_tmpl_id':False}</field>
+    </record>
+
+    <record id="action_product_price_list_report" model="ir.actions.server">
+        <field name="name">Generate Pricelist</field>
+        <field name="groups_id" eval="[(4, ref('group_product_pricelist'))]"/>
+        <field name="model_id" ref="product.model_product_product"/>
+        <field name="binding_model_id" ref="product.model_product_product"/>
+        <field name="state">code</field>
+        <field name="code">
+ctx = env.context
+ctx.update({'default_pricelist': env['product.pricelist'].search([], limit=1).id})
+action = {
+    'name': 'Pricelist Report',
+    'type': 'ir.actions.client',
+    'tag': 'generate_pricelist',
+    'context': ctx,
+}
+        </field>
     </record>
 
     </data>

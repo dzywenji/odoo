@@ -76,7 +76,11 @@ class AccountMove(models.Model):
             codes = self.journal_id._get_journal_codes()
             if codes:
                 domain.append(('code', 'in', codes))
+<<<<<<< HEAD
             if self.type == 'in_refund':
+=======
+            if self.move_type == 'in_refund':
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
                 domain = ['|', ('code', 'in', ['99'])] + domain
         return domain
 
@@ -86,7 +90,7 @@ class AccountMove(models.Model):
         for inv in self.filtered(lambda x: x.company_id.l10n_ar_company_requires_vat):
             purchase_aliquots = 'not_zero'
             # we require a single vat on each invoice line except from some purchase documents
-            if inv.type in ['in_invoice', 'in_refund'] and inv.l10n_latam_document_type_id.purchase_aliquots == 'zero':
+            if inv.move_type in ['in_invoice', 'in_refund'] and inv.l10n_latam_document_type_id.purchase_aliquots == 'zero':
                 purchase_aliquots = 'zero'
             for line in inv.mapped('invoice_line_ids').filtered(lambda x: x.display_type not in ('line_section', 'line_note')):
                 vat_taxes = line.tax_ids.filtered(lambda x: x.tax_group_id.l10n_ar_vat_afip_code)
@@ -112,18 +116,6 @@ class AccountMove(models.Model):
                 'title': _('Missing Partner Configuration'),
                 'message': _('Please configure the AFIP Responsibility for "%s" in order to continue') % (
                     self.partner_id.name)}}
-
-    def _get_document_type_sequence(self):
-        """ Return the match sequences for the given journal and invoice """
-        self.ensure_one()
-        if self.journal_id.l10n_latam_use_documents and self.l10n_latam_country_code == 'AR':
-            if self.journal_id.l10n_ar_share_sequences:
-                return self.journal_id.l10n_ar_sequence_ids.filtered(
-                    lambda x: x.l10n_ar_letter == self.l10n_latam_document_type_id.l10n_ar_letter)
-            res = self.journal_id.l10n_ar_sequence_ids.filtered(
-                lambda x: x.l10n_latam_document_type_id == self.l10n_latam_document_type_id)
-            return res
-        return super()._get_document_type_sequence()
 
     @api.onchange('partner_id')
     def _onchange_partner_journal(self):
@@ -179,3 +171,43 @@ class AccountMove(models.Model):
                 'l10n_ar_afip_service_end': move.l10n_ar_afip_service_end,
             })
         return super()._reverse_moves(default_values_list=default_values_list, cancel=cancel)
+
+    @api.onchange('l10n_latam_document_type_id', 'l10n_latam_document_number')
+    def _inverse_l10n_latam_document_number(self):
+        super()._inverse_l10n_latam_document_number()
+
+        # Avoid that user change the POS number (x.l10n_latam_document_number), Rhe POS number configure in journal it
+        # will always be used
+        to_review = self.filtered(
+            lambda x: x.journal_id.type == 'sale' and x.l10n_latam_document_type_id and x.l10n_latam_document_number and
+            (x.l10n_latam_manual_document_number or not x.highest_name))
+        for rec in to_review:
+            number = rec.l10n_latam_document_type_id._format_document_number(rec.l10n_latam_document_number)
+            current_pos = int(number.split("-")[0])
+            if current_pos != rec.journal_id.l10n_ar_afip_pos_number:
+                raise UserError(_('Can not change the POS number, you can only change the first number for document'
+                                  ' type that you are creating in odoo'))
+
+    def _get_formatted_sequence(self, number=0):
+        return "%s %05d-%08d" % (self.l10n_latam_document_type_id.doc_code_prefix,
+                                 self.journal_id.l10n_ar_afip_pos_number, number)
+
+    def _get_starting_sequence(self):
+        """ If use documents then will create a new starting sequence using the document type code prefix and the
+        journal document number with a 8 padding number """
+        if self.journal_id.l10n_latam_use_documents and self.env.company.country_id == self.env.ref('base.ar'):
+            if self.l10n_latam_document_type_id:
+                return self._get_formatted_sequence()
+        return super()._get_starting_sequence()
+
+    def _get_last_sequence_domain(self, relaxed=False):
+        where_string, param = super(AccountMove, self)._get_last_sequence_domain(relaxed)
+        if self.company_id.country_id == self.env.ref('base.ar') and self.l10n_latam_use_documents:
+            if not self.journal_id.l10n_ar_share_sequences:
+                where_string += " AND l10n_latam_document_type_id = %(l10n_latam_document_type_id)s"
+                param['l10n_latam_document_type_id'] = self.l10n_latam_document_type_id.id or 0
+            elif self.journal_id.l10n_ar_share_sequences:
+                where_string += " AND l10n_latam_document_type_id in %(l10n_latam_document_type_ids)s"
+                param['l10n_latam_document_type_ids'] = tuple(self.l10n_latam_document_type_id.search(
+                    [('l10n_ar_letter', '=', self.l10n_latam_document_type_id.l10n_ar_letter)]).ids)
+        return where_string, param

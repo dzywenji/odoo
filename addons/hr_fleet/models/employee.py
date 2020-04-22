@@ -8,6 +8,7 @@ class Employee(models.Model):
     _inherit = 'hr.employee'
 
     employee_cars_count = fields.Integer(compute="_compute_employee_cars_count", string="Cars", groups="fleet.fleet_group_manager")
+    mobility_card = fields.Char(groups="fleet.fleet_group_user")
 
     def action_open_employee_cars(self):
         self.ensure_one()
@@ -42,3 +43,8 @@ class Employee(models.Model):
             'type': 'ir.actions.act_url',
             'url': '/fleet/print_claim_report/%(employee_id)s' % {'employee_id': self.id},
         }
+
+class EmployeePublic(models.Model):
+    _inherit = 'hr.employee.public'
+
+    mobility_card = fields.Char(readonly=True)

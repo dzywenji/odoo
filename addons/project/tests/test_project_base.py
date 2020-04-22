@@ -3,11 +3,15 @@
 from odoo.tests.common import SavepointCase
 from odoo.exceptions import UserError
 
+<<<<<<< HEAD
 class TestProjectBase(SavepointCase):
+=======
+class TestProjectCommon(SavepointCase):
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
 
     @classmethod
     def setUpClass(cls):
-        super(TestProjectBase, cls).setUpClass()
+        super(TestProjectCommon, cls).setUpClass()
 
         user_group_employee = cls.env.ref('base.group_user')
         user_group_project_user = cls.env.ref('project.group_project_user')

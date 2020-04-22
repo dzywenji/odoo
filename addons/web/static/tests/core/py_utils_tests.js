@@ -528,6 +528,18 @@ QUnit.module('core', function () {
         assert.strictEqual(result, "2012-02-15 00:00:00");
     });
 
+    QUnit.test('conditional expressions', function (assert) {
+        assert.expect(2);
+        assert.strictEqual(
+            py.eval('1 if a else 2', {a: true}),
+            1
+        );
+        assert.strictEqual(
+            py.eval('1 if a else 2', {a: false}),
+            2
+        );
+    });
+
     QUnit.module('py_utils (eval domain contexts)', {
         beforeEach: function() {
             this.user_context = {
@@ -881,7 +893,7 @@ QUnit.module('core', function () {
         var result = pyUtils.eval('contexts', [{
             "__ref": "compound_context",
             "__contexts": [
-                {"__ref": "context", "__debug": "{'type':parent.type}",
+                {"__ref": "context", "__debug": "{'type':parent.move_type}",
                     "__id": "462b9dbed42f"}
             ],
             "__eval_context": {
@@ -889,7 +901,7 @@ QUnit.module('core', function () {
                 "__contexts": [{
                         "__ref": "compound_context",
                         "__contexts": [
-                            {"__ref": "context", "__debug": "{'type': type}",
+                            {"__ref": "context", "__debug": "{'type': move_type}",
                                 "__id": "16a04ed5a194"}
                         ],
                         "__eval_context": {
@@ -897,10 +909,10 @@ QUnit.module('core', function () {
                             "__contexts": [
                                 {"lang": "en_US", "tz": false, "uid": 1,
                                     "journal_type": "sale", "section_id": false,
-                                    "default_type": "out_invoice",
-                                    "type": "out_invoice", "department_id": false},
+                                    "default_move_type": "out_invoice",
+                                    "move_type": "out_invoice", "department_id": false},
                                 {"id": false, "journal_id": 10,
-                                    "number": false, "type": "out_invoice",
+                                    "number": false, "move_type": "out_invoice",
                                     "currency_id": 1, "partner_id": 4,
                                     "fiscal_position_id": false,
                                     "invoice_date": false, "date": false,
@@ -937,7 +949,7 @@ QUnit.module('core', function () {
                     "active_model": "account.move.line",
                     "parent": {
                         "id": false, "journal_id": 10, "number": false,
-                        "type": "out_invoice", "currency_id": 1,
+                        "move_type": "out_invoice", "currency_id": 1,
                         "partner_id": 4, "fiscal_position_id": false,
                         "invoice_date": false, "date": false,
                         "payment_term_id": false,
@@ -1206,6 +1218,13 @@ QUnit.module('core', function () {
         assert.checkAST("not False", "not prefix");
         assert.checkAST("not foo", "not prefix with variable");
         assert.checkAST("not a in b", "not prefix with expression");
+    });
+
+    QUnit.test("conditional expression", function (assert) {
+        assert.expect(2);
+
+        assert.checkAST("1 if a else 2");
+        assert.checkAST("[] if a else 2");
     });
 
     QUnit.test("other operators", function (assert) {

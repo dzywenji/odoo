@@ -1,16 +1,11 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
-from collections import namedtuple
-from datetime import datetime
-from dateutil import relativedelta
-
-from odoo import api, fields, models, _
-from odoo.exceptions import UserError, ValidationError
-from odoo.tools import DEFAULT_SERVER_DATETIME_FORMAT
-from odoo.osv import expression
-
 import logging
+from collections import namedtuple
+
+from odoo import _, api, fields, models
+from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
@@ -137,10 +132,6 @@ class Warehouse(models.Model):
 
         Route = self.env['stock.location.route']
         warehouses = self.with_context(active_test=False)
-
-        if vals.get('code') or vals.get('name'):
-            warehouses._update_name_and_code(vals.get('name'), vals.get('code'))
-
         warehouses._create_missing_locations(vals)
 
         if vals.get('reception_steps'):
@@ -151,8 +142,9 @@ class Warehouse(models.Model):
             warehouses._update_reception_delivery_resupply(vals.get('reception_steps'), vals.get('delivery_steps'))
 
         if vals.get('resupply_wh_ids') and not vals.get('resupply_route_ids'):
-            resupply_whs = self.resolve_2many_commands('resupply_wh_ids', vals['resupply_wh_ids'])
-            new_resupply_whs = self.browse([wh['id'] for wh in resupply_whs])
+            new_resupply_whs = self.new({
+                'resupply_wh_ids': vals['resupply_wh_ids']
+            }).resupply_wh_ids._origin
             old_resupply_whs = {warehouse.id: warehouse.resupply_wh_ids for warehouse in warehouses}
 
         # If another partner assigned
@@ -161,13 +153,17 @@ class Warehouse(models.Model):
 
         res = super(Warehouse, self).write(vals)
 
+        if vals.get('code') or vals.get('name'):
+            warehouses._update_name_and_code(vals.get('name'), vals.get('code'))
+
         for warehouse in warehouses:
             # check if we need to delete and recreate route
             depends = [depend for depends in [value.get('depends', []) for value in warehouse._get_routes_values().values()] for depend in depends]
-            if any(depend in vals for depend in depends):
+            if 'code' in vals or any(depend in vals for depend in depends):
                 picking_type_vals = warehouse._create_or_update_sequences_and_picking_types()
                 if picking_type_vals:
                     warehouse.write(picking_type_vals)
+            if any(depend in vals for depend in depends):
                 route_vals = warehouse._create_or_update_route()
                 if route_vals:
                     warehouse.write(route_vals)
@@ -238,13 +234,16 @@ class Warehouse(models.Model):
                         ('active', '=', False)
                     ])
                     if existing_route:
-                        existing_route.write({'active': True})
+                        existing_route.toggle_active()
                     else:
                         warehouse.create_resupply_routes(to_add)
                 if to_remove:
-                    Route.search([('supplied_wh_id', '=', warehouse.id), ('supplier_wh_id', 'in', to_remove.ids)]).write({'active': False})
-                    # TDE FIXME: shouldn't we remove stock rules also ? because this could make them global (not sure)
-
+                    to_disable_route_ids = Route.search([
+                        ('supplied_wh_id', '=', warehouse.id),
+                        ('supplier_wh_id', 'in', to_remove.ids),
+                        ('active', '=', True)
+                    ])
+                    to_disable_route_ids.toggle_active()
         return res
 
     @api.model
@@ -254,7 +253,7 @@ class Warehouse(models.Model):
         ResCompany = self.env['res.company']
         if company_id:
             transit_loc = ResCompany.browse(company_id).internal_transit_location_id.id
-            self.env['res.partner'].browse(partner_id).with_context(force_company=company_id).write({'property_stock_customer': transit_loc, 'property_stock_supplier': transit_loc})
+            self.env['res.partner'].browse(partner_id).with_company(company_id).write({'property_stock_customer': transit_loc, 'property_stock_supplier': transit_loc})
         else:
             transit_loc = self.env.company.internal_transit_location_id.id
             self.env['res.partner'].browse(partner_id).write({'property_stock_customer': transit_loc, 'property_stock_supplier': transit_loc})
@@ -586,6 +585,7 @@ class Warehouse(models.Model):
             transit_location = internal_transit_location if supplier_wh.company_id == self.company_id else external_transit_location
             if not transit_location:
                 continue
+            transit_location.active = True
             output_location = supplier_wh.lot_stock_id if supplier_wh.delivery_steps == 'ship_only' else supplier_wh.wh_output_stock_loc_id
             # Create extra MTO rule (only for 'ship only' because in the other cases MTO rules already exists)
             if supplier_wh.delivery_steps == 'ship_only':
@@ -799,16 +799,6 @@ class Warehouse(models.Model):
         self.mapped('wh_pack_stock_loc_id').write({'active': new_delivery_step == 'pick_pack_ship'})
         self.mapped('wh_output_stock_loc_id').write({'active': new_delivery_step != 'ship_only'})
 
-    def _location_used(self, location):
-        rules = self.env['stock.rule'].search_count([
-            '&',
-            ('route_id', 'not in', [x.id for x in self.route_ids]),
-            '|', ('location_src_id', '=', location.id),
-            ('location_id', '=', location.id)])
-        if rules:
-            return True
-        return False
-
     # Misc
     # ------------------------------------------------------------
 
@@ -818,13 +808,26 @@ class Warehouse(models.Model):
         """
         input_loc, output_loc = self._get_input_output_locations(self.reception_steps, self.delivery_steps)
         return {
-            'in_type_id': {'default_location_dest_id': input_loc.id},
-            'out_type_id': {'default_location_src_id': output_loc.id},
+            'in_type_id': {
+                'default_location_dest_id': input_loc.id,
+                'barcode': self.code.replace(" ", "").upper() + "-RECEIPTS",
+            },
+            'out_type_id': {
+                'default_location_src_id': output_loc.id,
+                'barcode': self.code.replace(" ", "").upper() + "-DELIVERY",
+            },
             'pick_type_id': {
                 'active': self.delivery_steps != 'ship_only',
-                'default_location_dest_id': output_loc.id if self.delivery_steps == 'pick_ship' else self.wh_pack_stock_loc_id.id},
-            'pack_type_id': {'active': self.delivery_steps == 'pick_pack_ship'},
-            'int_type_id': {},
+                'default_location_dest_id': output_loc.id if self.delivery_steps == 'pick_ship' else self.wh_pack_stock_loc_id.id,
+                'barcode': self.code.replace(" ", "").upper() + "-PICK",
+            },
+            'pack_type_id': {
+                'active': self.delivery_steps == 'pick_pack_ship',
+                'barcode': self.code.replace(" ", "").upper() + "-PACK",
+            },
+            'int_type_id': {
+                'barcode': self.code.replace(" ", "").upper() + "-INTERNAL",
+            },
         }
 
     def _get_picking_type_create_values(self, max_sequence):
@@ -842,7 +845,6 @@ class Warehouse(models.Model):
                 'use_existing_lots': False,
                 'default_location_src_id': False,
                 'sequence': max_sequence + 1,
-                'barcode': self.code.replace(" ", "").upper() + "-RECEIPTS",
                 'show_reserved': False,
                 'sequence_code': 'IN',
                 'company_id': self.company_id.id,
@@ -853,7 +855,6 @@ class Warehouse(models.Model):
                 'use_existing_lots': True,
                 'default_location_dest_id': False,
                 'sequence': max_sequence + 5,
-                'barcode': self.code.replace(" ", "").upper() + "-DELIVERY",
                 'sequence_code': 'OUT',
                 'company_id': self.company_id.id,
             }, 'pack_type_id': {
@@ -864,7 +865,6 @@ class Warehouse(models.Model):
                 'default_location_src_id': self.wh_pack_stock_loc_id.id,
                 'default_location_dest_id': output_loc.id,
                 'sequence': max_sequence + 4,
-                'barcode': self.code.replace(" ", "").upper() + "-PACK",
                 'sequence_code': 'PACK',
                 'company_id': self.company_id.id,
             }, 'pick_type_id': {
@@ -874,7 +874,6 @@ class Warehouse(models.Model):
                 'use_existing_lots': True,
                 'default_location_src_id': self.lot_stock_id.id,
                 'sequence': max_sequence + 3,
-                'barcode': self.code.replace(" ", "").upper() + "-PICK",
                 'sequence_code': 'PICK',
                 'company_id': self.company_id.id,
             }, 'int_type_id': {
@@ -886,7 +885,6 @@ class Warehouse(models.Model):
                 'default_location_dest_id': self.lot_stock_id.id,
                 'active': self.reception_steps != 'one_step' or self.delivery_steps != 'ship_only' or self.user_has_groups('stock.group_stock_multi_locations'),
                 'sequence': max_sequence + 2,
-                'barcode': self.code.replace(" ", "").upper() + "-INTERNAL",
                 'sequence_code': 'INT',
                 'company_id': self.company_id.id,
             },
@@ -942,7 +940,6 @@ class Warehouse(models.Model):
         routes = self.mapped('route_ids') | self.mapped('mto_pull_id').mapped('route_id')
         routes |= self.env["stock.location.route"].search([('supplied_wh_id', 'in', self.ids)])
         return routes
-    get_all_routes_for_wh = _get_all_routes
 
     def action_view_all_routes(self):
         routes = self._get_all_routes()
@@ -956,146 +953,3 @@ class Warehouse(models.Model):
             'limit': 20,
             'context': dict(self._context, default_warehouse_selectable=True, default_warehouse_ids=self.ids)
         }
-
-
-class Orderpoint(models.Model):
-    """ Defines Minimum stock rules. """
-    _name = "stock.warehouse.orderpoint"
-    _description = "Minimum Inventory Rule"
-    _check_company_auto = True
-
-    @api.model
-    def default_get(self, fields):
-        res = super(Orderpoint, self).default_get(fields)
-        warehouse = None
-        if 'warehouse_id' not in res and res.get('company_id'):
-            warehouse = self.env['stock.warehouse'].search([('company_id', '=', res['company_id'])], limit=1)
-        if warehouse:
-            res['warehouse_id'] = warehouse.id
-            res['location_id'] = warehouse.lot_stock_id.id
-        return res
-
-    name = fields.Char(
-        'Name', copy=False, required=True, readonly=True,
-        default=lambda self: self.env['ir.sequence'].next_by_code('stock.orderpoint'))
-    active = fields.Boolean(
-        'Active', default=True,
-        help="If the active field is set to False, it will allow you to hide the orderpoint without removing it.")
-    warehouse_id = fields.Many2one(
-        'stock.warehouse', 'Warehouse',
-        check_company=True, ondelete="cascade", required=True)
-    location_id = fields.Many2one(
-        'stock.location', 'Location',
-        ondelete="cascade", required=True, check_company=True)
-    product_id = fields.Many2one(
-        'product.product', 'Product',
-        domain="[('type', '=', 'product'), '|', ('company_id', '=', False), ('company_id', '=', company_id)]", ondelete='cascade', required=True, check_company=True)
-    product_uom = fields.Many2one(
-        'uom.uom', 'Unit of Measure', related='product_id.uom_id',
-        readonly=True, required=True,
-        default=lambda self: self._context.get('product_uom', False))
-    product_uom_name = fields.Char(string='Product unit of measure label', related='product_uom.display_name', readonly=True)
-    product_min_qty = fields.Float(
-        'Minimum Quantity', digits='Product Unit of Measure', required=True,
-        help="When the virtual stock equals to or goes below the Min Quantity specified for this field, Odoo generates "
-             "a procurement to bring the forecasted quantity to the Max Quantity.")
-    product_max_qty = fields.Float(
-        'Maximum Quantity', digits='Product Unit of Measure', required=True,
-        help="When the virtual stock goes below the Min Quantity, Odoo generates "
-             "a procurement to bring the forecasted quantity to the Quantity specified as Max Quantity.")
-    qty_multiple = fields.Float(
-        'Qty Multiple', digits='Product Unit of Measure',
-        default=1, required=True,
-        help="The procurement quantity will be rounded up to this multiple.  If it is 0, the exact quantity will be used.")
-    group_id = fields.Many2one(
-        'procurement.group', 'Procurement Group', copy=False,
-        help="Moves created through this orderpoint will be put in this procurement group. If none is given, the moves generated by stock rules will be grouped into one big picking.")
-    company_id = fields.Many2one(
-        'res.company', 'Company', required=True, index=True,
-        default=lambda self: self.env.company)
-    lead_days = fields.Integer(
-        'Lead Time', default=1,
-        help="Number of days after the orderpoint is triggered to receive the products or to order to the vendor")
-    lead_type = fields.Selection(
-        [('net', 'Days to get the products'), ('supplier', 'Days to purchase')], 'Lead Type',
-        required=True, default='supplier')
-    allowed_location_ids = fields.One2many(comodel_name='stock.location', compute='_compute_allowed_location_ids')
-
-    _sql_constraints = [
-        ('qty_multiple_check', 'CHECK( qty_multiple >= 0 )', 'Qty Multiple must be greater than or equal to zero.'),
-    ]
-
-    @api.depends('warehouse_id')
-    def _compute_allowed_location_ids(self):
-        loc_domain = [('usage', 'in', ('internal', 'view'))]
-        # We want to keep only the locations
-        #  - strictly belonging to our warehouse
-        #  - not belonging to any warehouses
-        for orderpoint in self:
-            other_warehouses = self.env['stock.warehouse'].search([('id', '!=', orderpoint.warehouse_id.id)])
-            for view_location_id in other_warehouses.mapped('view_location_id'):
-                loc_domain = expression.AND([loc_domain, ['!', ('id', 'child_of', view_location_id.id)]])
-                loc_domain = expression.AND([loc_domain, ['|', ('company_id', '=', False), ('company_id', '=', orderpoint.company_id.id)]])
-            orderpoint.allowed_location_ids = self.env['stock.location'].search(loc_domain)
-
-    def _quantity_in_progress(self):
-        """Return Quantities that are not yet in virtual stock but should be deduced from orderpoint rule
-        (example: purchases created from orderpoints)"""
-        return dict(self.mapped(lambda x: (x.id, 0.0)))
-
-    @api.constrains('product_id')
-    def _check_product_uom(self):
-        ''' Check if the UoM has the same category as the product standard UoM '''
-        if any(orderpoint.product_id.uom_id.category_id != orderpoint.product_uom.category_id for orderpoint in self):
-            raise ValidationError(_('You have to select a product unit of measure that is in the same category than the default unit of measure of the product'))
-
-    @api.onchange('warehouse_id')
-    def onchange_warehouse_id(self):
-        """ Finds location id for changed warehouse. """
-        if self.warehouse_id:
-            self.location_id = self.warehouse_id.lot_stock_id.id
-
-    @api.onchange('product_id')
-    def _onchange_product_id(self):
-        if self.product_id:
-            self.product_uom = self.product_id.uom_id.id
-            return {'domain':  {'product_uom': [('category_id', '=', self.product_id.uom_id.category_id.id)]}}
-        return {'domain': {'product_uom': []}}
-
-    @api.onchange('company_id')
-    def _onchange_company_id(self):
-        if self.company_id:
-            self.warehouse_id = self.env['stock.warehouse'].search([
-                ('company_id', '=', self.company_id.id)
-            ], limit=1)
-
-    def write(self, vals):
-        if 'company_id' in vals:
-            for orderpoint in self:
-                if orderpoint.company_id.id != vals['company_id']:
-                    raise UserError(_("Changing the company of this record is forbidden at this point, you should rather archive it and create a new one."))
-        return super(Orderpoint, self).write(vals)
-
-    def _get_date_planned(self, product_qty, start_date):
-        days = self.lead_days or 0.0
-        if self.lead_type == 'supplier':
-            # These days will be substracted when creating the PO
-            days += self.product_id._select_seller(
-                quantity=product_qty,
-                date=fields.Date.context_today(self,start_date),
-                uom_id=self.product_uom).delay or 0.0
-        date_planned = start_date + relativedelta.relativedelta(days=days)
-        return date_planned.strftime(DEFAULT_SERVER_DATETIME_FORMAT)
-
-    def _prepare_procurement_values(self, product_qty, date=False, group=False):
-        """ Prepare specific key for moves or other components that will be created from a stock rule
-        comming from an orderpoint. This method could be override in order to add other custom key that could
-        be used in move/po creation.
-        """
-        return {
-            'date_planned': date or self._get_date_planned(product_qty, datetime.today()),
-            'warehouse_id': self.warehouse_id,
-            'orderpoint_id': self,
-            'group_id': group or self.group_id,
-        }
-

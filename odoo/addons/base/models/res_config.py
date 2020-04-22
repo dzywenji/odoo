@@ -375,6 +375,13 @@ class ResConfigSettings(models.TransientModel, ResConfigModuleInstallationMixin)
     _name = 'res.config.settings'
     _description = 'Config Settings'
 
+    def _valid_field_parameter(self, field, name):
+        return (
+            name in ('default_model', 'config_parameter')
+            or field.type in ('boolean', 'selection') and name in ('group', 'implied_group')
+            or super()._valid_field_parameter(field, name)
+        )
+
     def copy(self, values):
         raise UserError(_("Cannot duplicate configuration!"), "")
 
@@ -627,9 +634,15 @@ class ResConfigSettings(models.TransientModel, ResConfigModuleInstallationMixin)
         if to_uninstall_modules:
             to_uninstall_modules.button_immediate_uninstall()
 
+<<<<<<< HEAD
         result = self._install_modules(to_install)
 
         if result or to_uninstall_modules:
+=======
+        installation_status = self._install_modules(to_install)
+
+        if installation_status or to_uninstall_modules:
+>>>>>>> f0a66d05e70e432d35dc68c9fb1e1cc6e51b40b8
             # After the uninstall/install calls, the registry and environments
             # are no longer valid. So we reset the environment.
             self.env.reset()
